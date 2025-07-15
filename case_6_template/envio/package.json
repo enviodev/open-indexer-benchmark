@@ -21,11 +21,7 @@
     "typescript": "5.2.2"
   },
   "dependencies": {
-    "@urql/core": "^5.1.1",
-    "apache-arrow": "^19.0.1",
-    "envio": "2.22.0",
-    "parquet-wasm": "^0.6.1",
-    "parquetjs": "^0.11.2"
+    "envio": "2.25.1"
   },
   "optionalDependencies": {
     "generated": "./generated"
