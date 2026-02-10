@@ -25,12 +25,14 @@ We are open to contributions! If you want to add a new use case, please open an 
 
 ## Historical Backfill Cases `evm`
 
-### [USDC Transfer Events](./cases/backfill/usdc-transfer-events/README.md)
+Run every benchmark for 3 minutes and measure how much data was indexed.
 
-A basic indexing case of a contract with densely populated events. Write decoded event logs + aggregate account balances in a database.
+### [ERC20 Transfer Events](./cases/backfill/erc20-transfer-events/README.md)
+
+Results of indexing the Rocket Pool ERC20 token contract on mainnet from block 18,600,000. Write decoded event logs + aggregate account balances in a database.
 
 | Envio | Ponder |
 | ----- | ------ |
 | 8m    | 8m     |
 
-See the full breakdown in [cases/backfill/usdc-transfer-events/README.md](./cases/backfill/usdc-transfer-events/README.md).
+See the full breakdown in [cases/backfill/erc20-transfer-events/README.md](./cases/backfill/erc20-transfer-events/README.md).
