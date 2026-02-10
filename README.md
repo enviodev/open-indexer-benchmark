@@ -31,9 +31,9 @@ Run every benchmark for 3 minutes and measure how much data was indexed.
 
 Results of indexing the Rocket Pool ERC20 token contract on mainnet from block 18,600,000. Write decoded event logs + aggregate account balances in a database.
 
-|          | Ponder |
-| -------- | ------ |
-| blocks/s | 464.3  |
-| events/s | 41.0   |
+|          | Envio   | Ponder |
+| -------- | ------- | ------ |
+| blocks/s | 61428.7 | 480.4  |
+| events/s | 8033.0  | 41.9   |
 
 See the full breakdown in [cases/backfill/erc20-transfer-events/README.md](./cases/backfill/erc20-transfer-events/README.md).
