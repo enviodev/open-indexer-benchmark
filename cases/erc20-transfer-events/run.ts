@@ -9,6 +9,7 @@ import { rmSync } from "node:fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PONDER_DIR = resolve(__dirname, "ponder");
 const ENVIO_DIR = resolve(__dirname, "envio");
+const RINDEXER_DIR = resolve(__dirname, "rindexer");
 const START_BLOCK = 18_600_000;
 
 const DURATION_S = (() => {
@@ -267,6 +268,97 @@ async function benchmarkEnvio(
   };
 }
 
+// ── Rindexer Benchmark ────────────────────────────────────────────────
+
+async function benchmarkRindexer(
+  childEnv: NodeJS.ProcessEnv
+): Promise<BenchmarkResult> {
+  const GRAPHQL_URL = "http://localhost:3001/graphql";
+  // PostGraphile exposes allTransfers / allApprovals from the auto-generated schema.
+  // rindexer names tables as <project>_<contract>.<event>, exposed via PostGraphile
+  // as allErc20IndexerRocketTokenRethTransfers etc. We query the totalCount to get
+  // event counts, and use the health endpoint to get block progress.
+  const READY_QUERY = `{
+    allErc20IndexerRocketTokenRethTransfers(first: 1) {
+      totalCount
+    }
+  }`;
+
+  console.log("\n--- Rindexer ---\n");
+
+  // Start PostgreSQL via docker compose
+  console.log("Starting PostgreSQL via docker compose...");
+  await exec("docker", ["compose", "up", "-d"], RINDEXER_DIR, childEnv);
+  await sleep(3_000); // Wait for PostgreSQL to be ready
+
+  const durationPromise = sleep(DURATION_S * 1_000);
+
+  // Start rindexer (indexer + graphql)
+  console.log(`\nStarting rindexer for ${DURATION_S}s...\n`);
+  const dev = start(
+    "rindexer",
+    ["start", "all"],
+    RINDEXER_DIR,
+    childEnv
+  );
+  activeProc = dev;
+
+  // Wait for GraphQL to become ready, sleep concurrently
+  await Promise.all([
+    waitReady(GRAPHQL_URL, READY_QUERY, 60_000),
+    durationPromise,
+  ]);
+
+  // Snapshot results — query event counts
+  let totalEvents = 0;
+  let totalBlocks = 0;
+  try {
+    const eventsQuery = `{
+      allErc20IndexerRocketTokenRethTransfers {
+        totalCount
+      }
+      allErc20IndexerRocketTokenRethApprovals {
+        totalCount
+      }
+    }`;
+    const data: any = await gql(GRAPHQL_URL, eventsQuery);
+    const transfers: number =
+      data.allErc20IndexerRocketTokenRethTransfers?.totalCount ?? 0;
+    const approvals: number =
+      data.allErc20IndexerRocketTokenRethApprovals?.totalCount ?? 0;
+    totalEvents = transfers + approvals;
+  } catch {
+    // If PostGraphile schema differs, try simpler query patterns
+    console.log("  Warning: Could not query event counts from GraphQL");
+  }
+
+  // Get block progress from health endpoint
+  try {
+    const healthRes = await fetch("http://localhost:8082/health");
+    if (healthRes.ok) {
+      const health: any = await healthRes.json();
+      // rindexer health response includes indexing progress
+      if (health?.last_synced_block != null) {
+        totalBlocks = health.last_synced_block - START_BLOCK;
+      }
+    }
+  } catch {
+    console.log("  Warning: Could not query block progress from health endpoint");
+  }
+
+  await kill(dev);
+  activeProc = null;
+
+  // Stop PostgreSQL
+  await exec("docker", ["compose", "down"], RINDEXER_DIR, childEnv);
+
+  return {
+    name: "Rindexer",
+    totalEvents,
+    totalBlocks,
+  };
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 
 function formatInt(n: number): string {
@@ -285,6 +377,9 @@ async function main() {
     ...process.env,
     PONDER_RPC_URL_1: rpcUrl,
     ENVIO_API_TOKEN: apiToken,
+    ETHEREUM_RPC: rpcUrl,
+    DATABASE_URL: "postgresql://postgres:rindexer@localhost:5440/postgres",
+    POSTGRES_PASSWORD: "rindexer",
   };
 
   console.log("=== ERC20 Transfer Events Benchmark ===");
@@ -308,6 +403,15 @@ async function main() {
     `\nSummary — Ponder: ${formatInt(
       results[1].totalBlocks
     )} blocks, ${formatInt(results[1].totalEvents)} events\n`
+  );
+  await sleep(SUMMARY_DELAY_MS);
+
+  results.push(await benchmarkRindexer(childEnv));
+  await sleep(SUMMARY_DELAY_MS);
+  console.log(
+    `\nSummary — Rindexer: ${formatInt(
+      results[2].totalBlocks
+    )} blocks, ${formatInt(results[2].totalEvents)} events\n`
   );
   await sleep(SUMMARY_DELAY_MS);
 

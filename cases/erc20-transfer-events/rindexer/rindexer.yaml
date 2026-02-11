@@ -1,0 +1,70 @@
+name: erc20-indexer
+description: ERC-20 Transfer and Approval event indexer for RocketTokenRETH
+project_type: no-code
+timestamps: true
+
+networks:
+  - name: ethereum
+    chain_id: 1
+    rpc: ${ETHEREUM_RPC}
+
+storage:
+  postgres:
+    enabled: true
+    drop_each_run: true
+
+contracts:
+  - name: RocketTokenRETH
+    details:
+      - network: ethereum
+        address: "0xae78736cd615f374d3085123a210448e74fc6393"
+        start_block: "18600000"
+    abi: ./abis/ERC20.abi.json
+    include_events:
+      - Transfer
+      - Approval
+    tables:
+      - name: accounts
+        columns:
+          - name: holder
+          - name: balance
+            default: "0"
+        events:
+          - event: Transfer
+            operations:
+              - type: upsert
+                where:
+                  holder: $to
+                set:
+                  - column: balance
+                    action: add
+                    value: $value
+              - type: upsert
+                where:
+                  holder: $from
+                set:
+                  - column: balance
+                    action: subtract
+                    value: $value
+      - name: allowances
+        columns:
+          - name: owner
+          - name: spender
+          - name: amount
+            default: "0"
+        events:
+          - event: Approval
+            operations:
+              - type: upsert
+                where:
+                  owner: $owner
+                  spender: $spender
+                set:
+                  - column: amount
+                    value: $value
+
+graphql:
+  port: 3001
+
+global:
+  health_port: 8082
