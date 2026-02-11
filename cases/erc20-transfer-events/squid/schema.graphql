@@ -1,0 +1,27 @@
+type Account @entity {
+  id: ID!
+  balance: BigInt!
+}
+
+type TransferEvent @entity {
+  id: ID!
+  amount: BigInt!
+  timestamp: Int!
+  from: String! @index
+  to: String! @index
+}
+
+type Allowance @entity {
+  id: ID!
+  amount: BigInt!
+  owner: String! @index
+  spender: String! @index
+}
+
+type ApprovalEvent @entity {
+  id: ID!
+  amount: BigInt!
+  timestamp: Int!
+  owner: String! @index
+  spender: String! @index
+}
