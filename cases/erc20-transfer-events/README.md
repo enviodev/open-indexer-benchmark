@@ -29,11 +29,11 @@ For each **Approval** event:
 Requires Node 23.6+ and an [Envio](https://envio.dev) API token for the RPC endpoint.
 
 ```bash
-ENVIO_API_TOKEN=your-token node cases/backfill/erc20-transfer-events/run.ts
+ENVIO_API_TOKEN=your-token node cases/erc20-transfer-events/run.ts
 ```
 
-By default the benchmark runs for 3 minutes. Pass a custom duration (in seconds) with `--duration`:
+By default the benchmark runs for 60 seconds. Pass a custom duration (in seconds) with `--duration`:
 
 ```bash
-ENVIO_API_TOKEN=your-token node cases/backfill/erc20-transfer-events/run.ts --duration=60
+ENVIO_API_TOKEN=your-token node cases/erc20-transfer-events/run.ts --duration=60
 ```

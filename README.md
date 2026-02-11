@@ -23,17 +23,25 @@ We are open to contributions! If you want to add a new use case, please open an 
 - [SubQuery](https://subquery.network/)
 - [TheGraph](https://thegraph.com/)
 
-## Historical Backfill Cases `evm`
+## Cases
 
-Run every benchmark for 3 minutes and measure how much data was indexed.
+For every case we run the following benchmarks:
 
-### [ERC20 Transfer Events](./cases/backfill/erc20-transfer-events/README.md)
+- Backfill speed - we run every indexer for exactly 1 minute and measure how many blocks and events were indexed per second
+
+The results are sorted by the most efficient indexer in each category.
+
+You can enter the cases directory to see a detailed breakdown of each case, see code and run benchmarks yourself.
+
+### [ERC20 Transfer Events](./cases/erc20-transfer-events/README.md)
 
 Results of indexing the Rocket Pool ERC20 token contract on mainnet from block 18,600,000. Write decoded event logs + aggregate account balances in a database.
 
-|          | Envio   | Ponder |
-| -------- | ------- | ------ |
-| blocks/s | 61428.7 | 480.4  |
-| events/s | 8033.0  | 41.9   |
+This benchmark is inspired by the one used on the [Ponder landing page](https://ponder.sh/). And is a basic indexing case of a contract with densely populated events.
 
-See the full breakdown in [cases/backfill/erc20-transfer-events/README.md](./cases/backfill/erc20-transfer-events/README.md).
+|        | Envio                 | Ponder           |
+| ------ | --------------------- | ---------------- |
+| blocks | 3,683,689 (61394.8/s) | 30,145 (502.4/s) |
+| events | 481,773 (8029.6/s)    | 2,679 (44.6/s)   |
+
+See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).

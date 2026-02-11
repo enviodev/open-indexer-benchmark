@@ -13,16 +13,17 @@ const START_BLOCK = 18_600_000;
 
 const DURATION_S = (() => {
   const flag = process.argv.find((a) => a.startsWith("--duration="));
-  return flag ? parseInt(flag.split("=")[1], 10) : 180;
+  return flag ? parseInt(flag.split("=")[1], 10) : 60;
 })();
+
+const SUMMARY_DELAY_MS = 3_000;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface BenchmarkResult {
   name: string;
   totalEvents: number;
-  eventsPerSec: number;
-  blocksPerSec: number | null;
+  totalBlocks: number;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -191,15 +192,13 @@ async function benchmarkPonder(
   const approvals: number = data.approvalEvents?.totalCount ?? 0;
   const transfers: number = data.transferEvents?.totalCount ?? 0;
   const totalEvents = approvals + transfers;
-  const eventsPerSec = totalEvents / DURATION_S;
 
-  let blocksPerSec: number | null = null;
+  let totalBlocks = 0;
   const chains = data._meta?.status;
   if (chains && typeof chains === "object") {
     for (const chain of Object.values(chains) as any[]) {
       if (chain?.block?.number != null) {
-        const blocksProcessed = chain.block.number - START_BLOCK;
-        blocksPerSec = blocksProcessed / DURATION_S;
+        totalBlocks = chain.block.number - START_BLOCK;
         break;
       }
     }
@@ -208,8 +207,7 @@ async function benchmarkPonder(
   return {
     name: "Ponder",
     totalEvents,
-    eventsPerSec,
-    blocksPerSec,
+    totalBlocks,
   };
 }
 
@@ -256,23 +254,21 @@ async function benchmarkEnvio(
   // Compute metrics
   const meta = data._meta[0];
   const totalEvents: number = meta?.eventsProcessed ?? 0;
-  const eventsPerSec = totalEvents / DURATION_S;
-
-  let blocksPerSec: number | null = null;
-  if (meta?.progressBlock != null) {
-    const blocksProcessed = meta.progressBlock - START_BLOCK;
-    blocksPerSec = blocksProcessed / DURATION_S;
-  }
+  const totalBlocks =
+    meta?.progressBlock != null ? meta.progressBlock - START_BLOCK : 0;
 
   return {
     name: "Envio",
     totalEvents,
-    eventsPerSec,
-    blocksPerSec,
+    totalBlocks,
   };
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
+
+function formatInt(n: number): string {
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
 
 async function main() {
   // Validate ENVIO_API_TOKEN
@@ -295,32 +291,60 @@ async function main() {
 
   // Run benchmarks sequentially to avoid resource contention
   results.push(await benchmarkEnvio(childEnv));
+  await sleep(SUMMARY_DELAY_MS);
+  console.log(
+    `\nSummary — Envio: ${formatInt(
+      results[0].totalBlocks
+    )} blocks, ${formatInt(results[0].totalEvents)} events\n`
+  );
+  await sleep(SUMMARY_DELAY_MS);
+
   results.push(await benchmarkPonder(childEnv));
+  await sleep(SUMMARY_DELAY_MS);
+  console.log(
+    `\nSummary — Ponder: ${formatInt(
+      results[1].totalBlocks
+    )} blocks, ${formatInt(results[1].totalEvents)} events\n`
+  );
+  await sleep(SUMMARY_DELAY_MS);
 
-  // Sort by events/s descending (best performance first)
-  results.sort((a, b) => b.eventsPerSec - a.eventsPerSec);
+  // Compute per-second rates for sorting and table
+  const withRates = results.map((r) => ({
+    ...r,
+    eventsPerSec: r.totalEvents / DURATION_S,
+    blocksPerSec: r.totalBlocks / DURATION_S,
+  }));
+  withRates.sort((a, b) => b.eventsPerSec - a.eventsPerSec);
 
-  // Print summary
+  // Print final results table
   console.log(`\n=== Results (sorted by events/s) ===\n`);
-  for (const r of results) {
+  for (const r of withRates) {
     console.log(`  ${r.name}:`);
-    console.log(`    Total events    : ${r.totalEvents}`);
-    console.log(`    Events/s        : ${r.eventsPerSec.toFixed(1)}`);
-    if (r.blocksPerSec != null)
-      console.log(`    Blocks/s        : ${r.blocksPerSec.toFixed(1)}`);
+    console.log(
+      `    Blocks : ${formatInt(r.totalBlocks)} (${r.blocksPerSec.toFixed(
+        1
+      )}/s)`
+    );
+    console.log(
+      `    Events : ${formatInt(r.totalEvents)} (${r.eventsPerSec.toFixed(
+        1
+      )}/s)`
+    );
   }
 
-  // Markdown comparison table
-  const header = ["| |", ...results.map((r) => ` ${r.name} |`)].join("");
-  const sep = ["| --- |", ...results.map(() => " --- |")].join("");
-  const eventsRow = [
-    "| events/s |",
-    ...results.map((r) => ` ${r.eventsPerSec.toFixed(1)} |`),
-  ].join("");
+  // Markdown comparison table: whole numbers with per-second in parentheses
+  const header = ["| |", ...withRates.map((r) => ` ${r.name} |`)].join("");
+  const sep = ["| --- |", ...withRates.map(() => " --- |")].join("");
   const blocksRow = [
-    "| blocks/s |",
-    ...results.map((r) =>
-      r.blocksPerSec != null ? ` ${r.blocksPerSec.toFixed(1)} |` : " — |"
+    "| blocks |",
+    ...withRates.map(
+      (r) => ` ${formatInt(r.totalBlocks)} (${r.blocksPerSec.toFixed(1)}/s) |`
+    ),
+  ].join("");
+  const eventsRow = [
+    "| events |",
+    ...withRates.map(
+      (r) => ` ${formatInt(r.totalEvents)} (${r.eventsPerSec.toFixed(1)}/s) |`
     ),
   ].join("");
 
