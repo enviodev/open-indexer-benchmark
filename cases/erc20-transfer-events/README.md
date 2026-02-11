@@ -24,9 +24,15 @@ For each **Approval** event:
 1. Upsert the allowance record keyed by (owner, spender): if it exists, update the amount; otherwise, create it with the approved value.
 2. Insert an approval event record with the event id, amount, timestamp, owner, and spender.
 
+## Implementations
+
+- **Envio** — [envio/](./envio/)
+- **Ponder** — [ponder/](./ponder/)
+- **SubQuery** — [subquery/](./subquery/) (requires Docker)
+
 ## Running the Benchmark
 
-Requires Node 23.6+ and an [Envio](https://envio.dev) API token for the RPC endpoint.
+Requires Node 23.6+, Docker, and an [Envio](https://envio.dev) API token for the RPC endpoint.
 
 ```bash
 ENVIO_API_TOKEN=your-token node cases/erc20-transfer-events/run.ts

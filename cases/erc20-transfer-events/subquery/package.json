@@ -1,0 +1,31 @@
+{
+  "name": "subquery-erc20-transfer-events",
+  "version": "0.0.1",
+  "description": "SubQuery indexer for ERC20 Transfer and Approval events benchmark",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "subql build",
+    "codegen": "subql codegen",
+    "start:docker": "docker compose pull && docker compose up --remove-orphans",
+    "dev": "subql codegen && subql build && docker compose pull && docker compose up --remove-orphans",
+    "prepack": "rm -rf dist && npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ethersproject/abi": "^5.7.0",
+    "@ethersproject/providers": "^5.7.0",
+    "@subql/types-core": "latest",
+    "@subql/types-ethereum": "^3.0.0",
+    "assert": "^2.0.0",
+    "tslib": "^2.6.0"
+  },
+  "devDependencies": {
+    "@subql/cli": "^5.0.0",
+    "@subql/node-ethereum": "^5.0.0",
+    "ethers": "^5.7.2",
+    "typescript": "^5.3.2"
+  },
+  "engines": {
+    "node": ">=18.14"
+  }
+}
