@@ -2,7 +2,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { rmSync, existsSync } from "node:fs";
+import { rmSync, existsSync, writeFileSync } from "node:fs";
 
 // ── Config ─────────────────────────────────────────────────────────────
 
@@ -11,6 +11,7 @@ const PONDER_DIR = resolve(__dirname, "ponder");
 const ENVIO_DIR = resolve(__dirname, "envio");
 const RINDEXER_DIR = resolve(__dirname, "rindexer");
 const SQUID_DIR = resolve(__dirname, "sqd");
+const SUBQUERY_DIR = resolve(__dirname, "subquery");
 const START_BLOCK = 18_600_000;
 
 const DURATION_S = (() => {
@@ -501,6 +502,99 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
   };
 }
 
+// ── SubQuery Benchmark ────────────────────────────────────────────────
+
+async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
+  const GRAPHQL_URL = "http://localhost:3000";
+  const QUERY = `{
+    _metadata {
+      lastProcessedHeight
+    }
+    transferEvents {
+      totalCount
+    }
+    approvalEvents {
+      totalCount
+    }
+  }`;
+
+  console.log("\n--- SubQuery ---\n");
+
+  // Clean previous state
+  console.log("Cleaning subquery cache...");
+  rmSync(resolve(SUBQUERY_DIR, ".data"), { recursive: true, force: true });
+  rmSync(resolve(SUBQUERY_DIR, "dist"), { recursive: true, force: true });
+  rmSync(resolve(SUBQUERY_DIR, "src/types"), { recursive: true, force: true });
+
+  // Install deps
+  console.log("Installing dependencies...\n");
+  await exec("pnpm", ["install", "--frozen-lockfile"], SUBQUERY_DIR);
+
+  // Codegen and build
+  console.log("Running codegen and build...\n");
+  await exec("pnpm", ["codegen"], SUBQUERY_DIR);
+  await exec("pnpm", ["build"], SUBQUERY_DIR);
+
+  // Write .env file for docker-compose
+  writeFileSync(
+    resolve(SUBQUERY_DIR, ".env"),
+    `ETHEREUM_RPC_URL=${rpcUrl}\n`
+  );
+
+  const subqueryEnv = { ...process.env, ETHEREUM_RPC_URL: rpcUrl };
+
+  // Start docker-compose (down -v first so we get a clean DB)
+  console.log("Cleaning previous docker state...");
+  await exec(
+    "docker",
+    ["compose", "down", "-v"],
+    SUBQUERY_DIR,
+    subqueryEnv
+  ).catch(() => {});
+
+  const durationPromise = sleep(DURATION_S * 1_000);
+
+  console.log(`\nStarting SubQuery via docker compose for ${DURATION_S}s...\n`);
+  await exec("docker", ["compose", "pull"], SUBQUERY_DIR, subqueryEnv);
+  const dev = start(
+    "docker",
+    ["compose", "up", "--remove-orphans"],
+    SUBQUERY_DIR,
+    subqueryEnv
+  );
+  activeProcs = [dev];
+
+  // Wait for GraphQL to become ready, sleep concurrently
+  await Promise.all([
+    waitReady(GRAPHQL_URL, QUERY, DURATION_S * 1_000),
+    durationPromise,
+  ]);
+
+  // Snapshot results
+  const data: any = await gql(GRAPHQL_URL, QUERY);
+
+  // Tear down docker-compose
+  await kill(dev);
+  activeProcs = [];
+  try {
+    await exec("docker", ["compose", "down", "-v"], SUBQUERY_DIR, subqueryEnv);
+  } catch {}
+
+  // Compute metrics
+  const transfers: number = data.transferEvents?.totalCount ?? 0;
+  const approvals: number = data.approvalEvents?.totalCount ?? 0;
+  const totalEvents = transfers + approvals;
+
+  const lastHeight: number = data._metadata?.lastProcessedHeight ?? 0;
+  const totalBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
+
+  return {
+    name: "SubQuery",
+    totalEvents,
+    totalBlocks,
+  };
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
 
 const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
@@ -509,6 +603,7 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
     ponder: benchmarkPonder,
     rindexer: benchmarkRindexer,
     sqd: benchmarkSqd,
+    subquery: benchmarkSubQuery,
   };
 
 function formatInt(n: number): string {
