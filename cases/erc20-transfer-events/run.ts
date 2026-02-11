@@ -317,12 +317,21 @@ async function main() {
     eventsPerSec: r.totalEvents / DURATION_S,
     blocksPerSec: r.totalBlocks / DURATION_S,
   }));
-  withRates.sort((a, b) => b.eventsPerSec - a.eventsPerSec);
+  withRates.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
+
+  const firstRate = withRates[0].blocksPerSec;
+  const nameWithSlower = (r: (typeof withRates)[0], i: number) => {
+    if (i === 0) return r.name;
+    const ratio = firstRate / r.blocksPerSec;
+    const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
+    return `${r.name} (${n}x slower)`;
+  };
 
   // Print final results table
-  console.log(`\n=== Results (sorted by events/s) ===\n`);
-  for (const r of withRates) {
-    console.log(`  ${r.name}:`);
+  console.log(`\n=== Results (sorted by blocks/s) ===\n`);
+  for (let i = 0; i < withRates.length; i++) {
+    const r = withRates[i];
+    console.log(`  ${nameWithSlower(r, i)}:`);
     console.log(
       `    Blocks : ${formatInt(r.totalBlocks)} (${r.blocksPerSec.toFixed(
         1
@@ -336,7 +345,8 @@ async function main() {
   }
 
   // Markdown comparison table: whole numbers with per-second in parentheses
-  const header = ["| |", ...withRates.map((r) => ` ${r.name} |`)].join("");
+  const headerNames = withRates.map((r, i) => nameWithSlower(r, i));
+  const header = ["| |", ...headerNames.map((name) => ` ${name} |`)].join("");
   const sep = ["| --- |", ...withRates.map(() => " --- |")].join("");
   const blocksRow = [
     "| blocks |",

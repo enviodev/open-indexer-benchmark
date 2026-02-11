@@ -17,6 +17,7 @@ We are open to contributions! If you want to add a new use case, please open an 
 > In alphabetical order
 
 - [Envio](https://envio.dev)
+- [Goldsky](https://goldsky.com/)
 - [Ponder](https://ponder.sh/)
 - [Sentio](https://sentio.xyz/)
 - [SQD](https://www.sqd.ai)
@@ -35,13 +36,26 @@ You can enter the cases directory to see a detailed breakdown of each case, see 
 
 ### [ERC20 Transfer Events](./cases/erc20-transfer-events/README.md)
 
-Results of indexing the Rocket Pool ERC20 token contract on mainnet from block 18,600,000. Write decoded event logs + aggregate account balances in a database.
+Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Store decoded event logs + aggregate account balances.
 
-This benchmark is inspired by the one used on the [Ponder landing page](https://ponder.sh/). And is a basic indexing case of a contract with densely populated events.
+This benchmark is inspired by the one used on the [Ponder landing page](https://ponder.sh/). It's the most basic indexing case of a single contract.
 
-|        | Envio                 | Ponder           |
-| ------ | --------------------- | ---------------- |
-| blocks | 3,683,689 (61394.8/s) | 30,145 (502.4/s) |
-| events | 481,773 (8029.6/s)    | 2,679 (44.6/s)   |
+|        | Envio                 | Ponder (126.4x slower) |
+| ------ | --------------------- | ---------------------- |
+| blocks | 3,750,289 (62504.8/s) | 29,666 (494.4/s)       |
+| events | 491,889 (8198.1/s)    | 2,596 (43.3/s)         |
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
+
+### 2025 Sentio Benchmarks
+
+| Case                   | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio_Subgraph | Goldsky_Subgraph |
+| ---------------------- | ------ | --------------- | ---------------- | ------ | -------- | -------- | --------------- | ---------------- |
+| case_1_lbtc_event_only | 8m     |                 | 3m               | 1h40m  | 10m      | 3h9m     | 2h36m           |                  |
+| case_2_lbtc_full       | 6m     |                 | 1m               | 45m    | 34m      | 1h3m     | 56m             |                  |
+| case_3_ethereum_block  | 18m    | 7.9s            |                  | 33m    | 1m‡      | 10m      | 15m             |                  |
+| case_4_on_transaction  | 17m    | 1m26s           |                  | 33m    | 7m       | N/A      |                 |                  |
+| case_5_on_trace        | 16m    | 41s             |                  | N/A§   | 2m       | 8m       | 1h21m           |                  |
+| case_6_template        | 19m    |                 | 8s               | 21m    | 2m       | 19m      | 10m             | 20h24m           |
+
+See the full breakdown in [./sentio-benchmarks-april-2025/README.md](./sentio-benchmarks-april-2025/README.md).
