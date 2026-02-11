@@ -237,7 +237,10 @@ async function benchmarkEnvio(
   const durationPromise = sleep(DURATION_S * 1_000);
 
   // Start envio dev with TUI disabled
-  const envioEnv = { ...childEnv, TUI_OFF: "true" };
+  const envioEnv = {
+    ...childEnv,
+    TUI_OFF: "true",
+  };
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);

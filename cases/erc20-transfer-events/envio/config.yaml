@@ -12,6 +12,3 @@ chains:
     contracts:
       - name: ERC20
         address: 0xae78736cd615f374d3085123a210448e74fc6393 # RocketTokenRETH
-# Address format for Ethereum addresses: 'checksum' or 'lowercase'
-# using lowercase addresses is slightly faster
-address_format: lowercase
