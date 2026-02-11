@@ -47,7 +47,7 @@ This benchmark is inspired by the one used on the [Ponder landing page](https://
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
 
-### 2025 Sentio Benchmarks
+### [2025 Sentio Benchmarks](./sentio-benchmarks-april-2025/README.md)
 
 | Case                   | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio_Subgraph | Goldsky_Subgraph |
 | ---------------------- | ------ | --------------- | ---------------- | ------ | -------- | -------- | --------------- | ---------------- |
