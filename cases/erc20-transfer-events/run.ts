@@ -324,41 +324,44 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
     durationPromise,
   ]);
 
-  // Snapshot results — query event counts
+  // Snapshot results — event counts and max block in one query
   let totalEvents = 0;
   let totalBlocks = 0;
   try {
-    const eventsQuery = `{
+    const resultsQuery = `{
       allTransfers {
         totalCount
       }
       allApprovals {
         totalCount
       }
+      lastTransfer: allTransfers(last: 1, orderBy: BLOCK_NUMBER_ASC) {
+        nodes {
+          blockNumber
+        }
+      }
+      lastApproval: allApprovals(last: 1, orderBy: BLOCK_NUMBER_ASC) {
+        nodes {
+          blockNumber
+        }
+      }
     }`;
-    const data: any = await gql(GRAPHQL_URL, eventsQuery);
+    const data: any = await gql(GRAPHQL_URL, resultsQuery);
     const transfers: number = data.allTransfers?.totalCount ?? 0;
     const approvals: number = data.allApprovals?.totalCount ?? 0;
     totalEvents = transfers + approvals;
-  } catch {
-    // If PostGraphile schema differs, try simpler query patterns
-    console.log("  Warning: Could not query event counts from GraphQL");
-  }
-
-  // Get block progress from health endpoint
-  try {
-    const healthRes = await fetch("http://localhost:8082/health");
-    if (healthRes.ok) {
-      const health: any = await healthRes.json();
-      // rindexer health response includes indexing progress
-      if (health?.last_synced_block != null) {
-        totalBlocks = health.last_synced_block - START_BLOCK;
-      }
+    const transferBlock = Number(
+      data.lastTransfer?.nodes?.[0]?.blockNumber ?? 0
+    );
+    const approvalBlock = Number(
+      data.lastApproval?.nodes?.[0]?.blockNumber ?? 0
+    );
+    const maxBlock = Math.max(transferBlock, approvalBlock);
+    if (maxBlock > START_BLOCK) {
+      totalBlocks = maxBlock - START_BLOCK;
     }
   } catch {
-    console.log(
-      "  Warning: Could not query block progress from health endpoint"
-    );
+    console.log("  Warning: Could not query results from GraphQL");
   }
 
   await kill(dev);
