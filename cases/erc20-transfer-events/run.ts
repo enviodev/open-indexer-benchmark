@@ -143,9 +143,7 @@ process.on("SIGTERM", async () => {
 
 // ── Ponder Benchmark ───────────────────────────────────────────────────
 
-async function benchmarkPonder(
-  childEnv: NodeJS.ProcessEnv
-): Promise<BenchmarkResult> {
+async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   const GRAPHQL_URL = "http://localhost:42069/graphql";
   const QUERY = `{
     _meta {
@@ -173,11 +171,12 @@ async function benchmarkPonder(
 
   // Start ponder dev
   console.log(`\nStarting ponder dev for ${DURATION_S}s...\n`);
+  const ponderEnv = { ...process.env, PONDER_RPC_URL_1: rpcUrl };
   const dev = start(
     "pnpm",
     ["ponder", "dev", "--disable-ui"],
     PONDER_DIR,
-    childEnv
+    ponderEnv
   );
   activeProc = dev;
 
@@ -214,9 +213,7 @@ async function benchmarkPonder(
 
 // ── Envio Benchmark ────────────────────────────────────────────────────
 
-async function benchmarkEnvio(
-  childEnv: NodeJS.ProcessEnv
-): Promise<BenchmarkResult> {
+async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   const GRAPHQL_URL = "http://localhost:8080/v1/graphql";
   const QUERY = `{
     _meta {
@@ -238,10 +235,7 @@ async function benchmarkEnvio(
   const durationPromise = sleep(DURATION_S * 1_000);
 
   // Start envio dev with TUI disabled
-  const envioEnv = {
-    ...childEnv,
-    TUI_OFF: "true",
-  };
+  const envioEnv = { ...process.env, TUI_OFF: "true" };
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
@@ -270,16 +264,19 @@ async function benchmarkEnvio(
 
 // ── Rindexer Benchmark ────────────────────────────────────────────────
 
-async function benchmarkRindexer(
-  childEnv: NodeJS.ProcessEnv
-): Promise<BenchmarkResult> {
+async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
   const GRAPHQL_URL = "http://localhost:3001/graphql";
-  // PostGraphile exposes allTransfers / allApprovals from the auto-generated schema.
-  // rindexer names tables as <project>_<contract>.<event>, exposed via PostGraphile
-  // as allErc20IndexerRocketTokenRethTransfers etc. We query the totalCount to get
-  // event counts, and use the health endpoint to get block progress.
+  const rindexerEnv = {
+    ...process.env,
+    ETHEREUM_RPC: rpcUrl,
+    DATABASE_URL: "postgresql://postgres:rindexer@localhost:5440/postgres",
+    POSTGRES_PASSWORD: "rindexer",
+  };
+  // PostGraphile exposes allTransfers / allApprovals from the auto-generated schema
+  // (table names transfer, approval in schema erc_20indexer_rocket_token_reth).
+  // We query totalCount for event counts and use the health endpoint for block progress.
   const READY_QUERY = `{
-    allErc20IndexerRocketTokenRethTransfers(first: 1) {
+    allTransfers(first: 1) {
       totalCount
     }
   }`;
@@ -287,27 +284,38 @@ async function benchmarkRindexer(
   console.log("\n--- Rindexer ---\n");
 
   // Install rindexer CLI if not already present
-  const rindexerBin = resolve(process.env.HOME ?? "~", ".rindexer", "bin", "rindexer");
+  const rindexerBin = resolve(
+    process.env.HOME ?? "~",
+    ".rindexer",
+    "bin",
+    "rindexer"
+  );
   if (!existsSync(rindexerBin)) {
     console.log("Installing rindexer CLI...\n");
-    await exec("bash", ["-c", "curl -L https://rindexer.xyz/install.sh | bash"], RINDEXER_DIR, childEnv);
+    await exec(
+      "bash",
+      ["-c", "curl -L https://rindexer.xyz/install.sh | bash"],
+      RINDEXER_DIR,
+      rindexerEnv
+    );
   }
 
-  // Start PostgreSQL via docker compose
+  // Start PostgreSQL via docker compose (down -v first so we get a clean DB and avoid schema-change prompts)
   console.log("Starting PostgreSQL via docker compose...");
-  await exec("docker", ["compose", "up", "-d"], RINDEXER_DIR, childEnv);
+  await exec(
+    "docker",
+    ["compose", "down", "-v"],
+    RINDEXER_DIR,
+    rindexerEnv
+  ).catch(() => {});
+  await exec("docker", ["compose", "up", "-d"], RINDEXER_DIR, rindexerEnv);
   await sleep(3_000); // Wait for PostgreSQL to be ready
 
   const durationPromise = sleep(DURATION_S * 1_000);
 
   // Start rindexer (indexer + graphql)
   console.log(`\nStarting rindexer for ${DURATION_S}s...\n`);
-  const dev = start(
-    rindexerBin,
-    ["start", "all"],
-    RINDEXER_DIR,
-    childEnv
-  );
+  const dev = start(rindexerBin, ["start", "all"], RINDEXER_DIR, rindexerEnv);
   activeProc = dev;
 
   // Wait for GraphQL to become ready, sleep concurrently
@@ -321,18 +329,16 @@ async function benchmarkRindexer(
   let totalBlocks = 0;
   try {
     const eventsQuery = `{
-      allErc20IndexerRocketTokenRethTransfers {
+      allTransfers {
         totalCount
       }
-      allErc20IndexerRocketTokenRethApprovals {
+      allApprovals {
         totalCount
       }
     }`;
     const data: any = await gql(GRAPHQL_URL, eventsQuery);
-    const transfers: number =
-      data.allErc20IndexerRocketTokenRethTransfers?.totalCount ?? 0;
-    const approvals: number =
-      data.allErc20IndexerRocketTokenRethApprovals?.totalCount ?? 0;
+    const transfers: number = data.allTransfers?.totalCount ?? 0;
+    const approvals: number = data.allApprovals?.totalCount ?? 0;
     totalEvents = transfers + approvals;
   } catch {
     // If PostGraphile schema differs, try simpler query patterns
@@ -350,14 +356,16 @@ async function benchmarkRindexer(
       }
     }
   } catch {
-    console.log("  Warning: Could not query block progress from health endpoint");
+    console.log(
+      "  Warning: Could not query block progress from health endpoint"
+    );
   }
 
   await kill(dev);
   activeProc = null;
 
   // Stop PostgreSQL
-  await exec("docker", ["compose", "down"], RINDEXER_DIR, childEnv);
+  await exec("docker", ["compose", "down"], RINDEXER_DIR, rindexerEnv);
 
   return {
     name: "Rindexer",
@@ -368,14 +376,12 @@ async function benchmarkRindexer(
 
 // ── Main ───────────────────────────────────────────────────────────────
 
-const BENCHMARKS: Record<
-  string,
-  (env: NodeJS.ProcessEnv) => Promise<BenchmarkResult>
-> = {
-  envio: benchmarkEnvio,
-  ponder: benchmarkPonder,
-  rindexer: benchmarkRindexer,
-};
+const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
+  {
+    envio: benchmarkEnvio,
+    ponder: benchmarkPonder,
+    rindexer: benchmarkRindexer,
+  };
 
 function formatInt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -390,7 +396,9 @@ async function main() {
   for (const name of selected) {
     if (!BENCHMARKS[name]) {
       console.error(
-        `Unknown benchmark "${name}". Available: ${Object.keys(BENCHMARKS).join(", ")}`
+        `Unknown benchmark "${name}". Available: ${Object.keys(BENCHMARKS).join(
+          ", "
+        )}`
       );
       process.exit(1);
     }
@@ -403,14 +411,6 @@ async function main() {
     process.exit(1);
   }
   const rpcUrl = `https://1.rpc.hypersync.xyz/${apiToken}`;
-  const childEnv = {
-    ...process.env,
-    PONDER_RPC_URL_1: rpcUrl,
-    ENVIO_API_TOKEN: apiToken,
-    ETHEREUM_RPC: rpcUrl,
-    DATABASE_URL: "postgresql://postgres:rindexer@localhost:5440/postgres",
-    POSTGRES_PASSWORD: "rindexer",
-  };
 
   console.log("=== ERC20 Transfer Events Benchmark ===");
   console.log(`Duration: ${DURATION_S}s · Start block: ${START_BLOCK}`);
@@ -420,7 +420,7 @@ async function main() {
 
   // Run selected benchmarks sequentially to avoid resource contention
   for (const name of selected) {
-    const result = await BENCHMARKS[name](childEnv);
+    const result = await BENCHMARKS[name](rpcUrl);
     results.push(result);
     await sleep(SUMMARY_DELAY_MS);
     console.log(
