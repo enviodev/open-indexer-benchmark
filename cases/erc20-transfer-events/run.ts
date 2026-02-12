@@ -2,7 +2,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { rmSync } from "node:fs";
+import { rmSync, existsSync } from "node:fs";
 
 // ── Config ─────────────────────────────────────────────────────────────
 
@@ -287,9 +287,11 @@ async function benchmarkRindexer(
   console.log("\n--- Rindexer ---\n");
 
   // Install rindexer CLI if not already present
-  console.log("Installing rindexer CLI...\n");
-  await exec("bash", ["-c", "curl -L https://rindexer.xyz/install.sh | bash"], RINDEXER_DIR, childEnv);
   const rindexerBin = resolve(process.env.HOME ?? "~", ".rindexer", "bin", "rindexer");
+  if (!existsSync(rindexerBin)) {
+    console.log("Installing rindexer CLI...\n");
+    await exec("bash", ["-c", "curl -L https://rindexer.xyz/install.sh | bash"], RINDEXER_DIR, childEnv);
+  }
 
   // Start PostgreSQL via docker compose
   console.log("Starting PostgreSQL via docker compose...");
