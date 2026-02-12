@@ -366,11 +366,34 @@ async function benchmarkRindexer(
 
 // ── Main ───────────────────────────────────────────────────────────────
 
+const BENCHMARKS: Record<
+  string,
+  (env: NodeJS.ProcessEnv) => Promise<BenchmarkResult>
+> = {
+  envio: benchmarkEnvio,
+  ponder: benchmarkPonder,
+  rindexer: benchmarkRindexer,
+};
+
 function formatInt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
 async function main() {
+  // Parse positional args (benchmark names) — anything that isn't a flag
+  const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const selected = positional.length > 0 ? positional : Object.keys(BENCHMARKS);
+
+  // Validate names
+  for (const name of selected) {
+    if (!BENCHMARKS[name]) {
+      console.error(
+        `Unknown benchmark "${name}". Available: ${Object.keys(BENCHMARKS).join(", ")}`
+      );
+      process.exit(1);
+    }
+  }
+
   // Validate ENVIO_API_TOKEN
   const apiToken = process.env.ENVIO_API_TOKEN;
   if (!apiToken) {
@@ -388,37 +411,23 @@ async function main() {
   };
 
   console.log("=== ERC20 Transfer Events Benchmark ===");
-  console.log(`Duration: ${DURATION_S}s · Start block: ${START_BLOCK}\n`);
+  console.log(`Duration: ${DURATION_S}s · Start block: ${START_BLOCK}`);
+  console.log(`Running: ${selected.join(", ")}\n`);
 
   const results: BenchmarkResult[] = [];
 
-  // Run benchmarks sequentially to avoid resource contention
-  results.push(await benchmarkEnvio(childEnv));
-  await sleep(SUMMARY_DELAY_MS);
-  console.log(
-    `\nSummary — Envio: ${formatInt(
-      results[0].totalBlocks
-    )} blocks, ${formatInt(results[0].totalEvents)} events\n`
-  );
-  await sleep(SUMMARY_DELAY_MS);
-
-  results.push(await benchmarkPonder(childEnv));
-  await sleep(SUMMARY_DELAY_MS);
-  console.log(
-    `\nSummary — Ponder: ${formatInt(
-      results[1].totalBlocks
-    )} blocks, ${formatInt(results[1].totalEvents)} events\n`
-  );
-  await sleep(SUMMARY_DELAY_MS);
-
-  results.push(await benchmarkRindexer(childEnv));
-  await sleep(SUMMARY_DELAY_MS);
-  console.log(
-    `\nSummary — Rindexer: ${formatInt(
-      results[2].totalBlocks
-    )} blocks, ${formatInt(results[2].totalEvents)} events\n`
-  );
-  await sleep(SUMMARY_DELAY_MS);
+  // Run selected benchmarks sequentially to avoid resource contention
+  for (const name of selected) {
+    const result = await BENCHMARKS[name](childEnv);
+    results.push(result);
+    await sleep(SUMMARY_DELAY_MS);
+    console.log(
+      `\nSummary — ${result.name}: ${formatInt(
+        result.totalBlocks
+      )} blocks, ${formatInt(result.totalEvents)} events\n`
+    );
+    await sleep(SUMMARY_DELAY_MS);
+  }
 
   // Compute per-second rates for sorting and table
   const withRates = results.map((r) => ({
@@ -430,7 +439,7 @@ async function main() {
 
   const firstRate = withRates[0].blocksPerSec;
   const nameWithSlower = (r: (typeof withRates)[0], i: number) => {
-    if (i === 0) return r.name;
+    if (i === 0 || withRates.length === 1) return r.name;
     const ratio = firstRate / r.blocksPerSec;
     const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
     return `${r.name} (${n}x slower)`;
