@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PONDER_DIR = resolve(__dirname, "ponder");
 const ENVIO_DIR = resolve(__dirname, "envio");
 const RINDEXER_DIR = resolve(__dirname, "rindexer");
-const SQUID_DIR = resolve(__dirname, "squid");
+const SQUID_DIR = resolve(__dirname, "sqd");
 const START_BLOCK = 18_600_000;
 
 const DURATION_S = (() => {
@@ -507,7 +507,7 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
     envio: benchmarkEnvio,
     ponder: benchmarkPonder,
     rindexer: benchmarkRindexer,
-    squid: benchmarkSquid,
+    sqd: benchmarkSquid,
   };
 
 function formatInt(n: number): string {

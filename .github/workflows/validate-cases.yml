@@ -34,12 +34,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-  squid-erc20-transfer-events:
-    name: "Squid: ERC20 Transfer Events"
+  sqd-erc20-transfer-events:
+    name: "Sqd: ERC20 Transfer Events"
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: cases/erc20-transfer-events/squid
+        working-directory: cases/erc20-transfer-events/sqd
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: cases/erc20-transfer-events/squid/pnpm-lock.yaml
+          cache-dependency-path: cases/erc20-transfer-events/sqd/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
