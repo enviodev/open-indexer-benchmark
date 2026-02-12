@@ -286,6 +286,11 @@ async function benchmarkRindexer(
 
   console.log("\n--- Rindexer ---\n");
 
+  // Install rindexer CLI if not already present
+  console.log("Installing rindexer CLI...\n");
+  await exec("bash", ["-c", "curl -L https://rindexer.xyz/install.sh | bash"], RINDEXER_DIR, childEnv);
+  const rindexerBin = resolve(process.env.HOME ?? "~", ".rindexer", "bin", "rindexer");
+
   // Start PostgreSQL via docker compose
   console.log("Starting PostgreSQL via docker compose...");
   await exec("docker", ["compose", "up", "-d"], RINDEXER_DIR, childEnv);
@@ -296,7 +301,7 @@ async function benchmarkRindexer(
   // Start rindexer (indexer + graphql)
   console.log(`\nStarting rindexer for ${DURATION_S}s...\n`);
   const dev = start(
-    "rindexer",
+    rindexerBin,
     ["start", "all"],
     RINDEXER_DIR,
     childEnv
