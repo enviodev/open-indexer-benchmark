@@ -2,13 +2,14 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { rmSync } from "node:fs";
+import { rmSync, existsSync } from "node:fs";
 
 // ── Config ─────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PONDER_DIR = resolve(__dirname, "ponder");
 const ENVIO_DIR = resolve(__dirname, "envio");
+const RINDEXER_DIR = resolve(__dirname, "rindexer");
 const START_BLOCK = 18_600_000;
 
 const DURATION_S = (() => {
@@ -142,9 +143,7 @@ process.on("SIGTERM", async () => {
 
 // ── Ponder Benchmark ───────────────────────────────────────────────────
 
-async function benchmarkPonder(
-  childEnv: NodeJS.ProcessEnv
-): Promise<BenchmarkResult> {
+async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   const GRAPHQL_URL = "http://localhost:42069/graphql";
   const QUERY = `{
     _meta {
@@ -172,11 +171,12 @@ async function benchmarkPonder(
 
   // Start ponder dev
   console.log(`\nStarting ponder dev for ${DURATION_S}s...\n`);
+  const ponderEnv = { ...process.env, PONDER_RPC_URL_1: rpcUrl };
   const dev = start(
     "pnpm",
     ["ponder", "dev", "--disable-ui"],
     PONDER_DIR,
-    childEnv
+    ponderEnv
   );
   activeProc = dev;
 
@@ -213,9 +213,7 @@ async function benchmarkPonder(
 
 // ── Envio Benchmark ────────────────────────────────────────────────────
 
-async function benchmarkEnvio(
-  childEnv: NodeJS.ProcessEnv
-): Promise<BenchmarkResult> {
+async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   const GRAPHQL_URL = "http://localhost:8080/v1/graphql";
   const QUERY = `{
     _meta {
@@ -237,10 +235,7 @@ async function benchmarkEnvio(
   const durationPromise = sleep(DURATION_S * 1_000);
 
   // Start envio dev with TUI disabled
-  const envioEnv = {
-    ...childEnv,
-    TUI_OFF: "true",
-  };
+  const envioEnv = { ...process.env, TUI_OFF: "true" };
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
@@ -267,13 +262,151 @@ async function benchmarkEnvio(
   };
 }
 
+// ── Rindexer Benchmark ────────────────────────────────────────────────
+
+async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
+  const GRAPHQL_URL = "http://localhost:3001/graphql";
+  const rindexerEnv = {
+    ...process.env,
+    ETHEREUM_RPC: rpcUrl,
+    DATABASE_URL: "postgresql://postgres:rindexer@localhost:5440/postgres",
+    POSTGRES_PASSWORD: "rindexer",
+  };
+  // PostGraphile exposes allTransfers / allApprovals from the auto-generated schema
+  // (table names transfer, approval in schema erc_20indexer_rocket_token_reth).
+  // We query totalCount for event counts and use the health endpoint for block progress.
+  const READY_QUERY = `{
+    allTransfers(first: 1) {
+      totalCount
+    }
+  }`;
+
+  console.log("\n--- Rindexer ---\n");
+
+  // Install rindexer CLI if not already present
+  const rindexerBin = resolve(
+    process.env.HOME ?? "~",
+    ".rindexer",
+    "bin",
+    "rindexer"
+  );
+  if (!existsSync(rindexerBin)) {
+    console.log("Installing rindexer CLI...\n");
+    await exec(
+      "bash",
+      ["-c", "curl -L https://rindexer.xyz/install.sh | bash"],
+      RINDEXER_DIR,
+      rindexerEnv
+    );
+  }
+
+  // Start PostgreSQL via docker compose (down -v first so we get a clean DB and avoid schema-change prompts)
+  console.log("Starting PostgreSQL via docker compose...");
+  await exec(
+    "docker",
+    ["compose", "down", "-v"],
+    RINDEXER_DIR,
+    rindexerEnv
+  ).catch(() => {});
+  await exec("docker", ["compose", "up", "-d"], RINDEXER_DIR, rindexerEnv);
+  await sleep(3_000); // Wait for PostgreSQL to be ready
+
+  const durationPromise = sleep(DURATION_S * 1_000);
+
+  // Start rindexer (indexer + graphql)
+  console.log(`\nStarting rindexer for ${DURATION_S}s...\n`);
+  const dev = start(rindexerBin, ["start", "all"], RINDEXER_DIR, rindexerEnv);
+  activeProc = dev;
+
+  // Wait for GraphQL to become ready, sleep concurrently
+  await Promise.all([
+    waitReady(GRAPHQL_URL, READY_QUERY, DURATION_S * 1_000),
+    durationPromise,
+  ]);
+
+  // Snapshot results — event counts and max block in one query
+  let totalEvents = 0;
+  let totalBlocks = 0;
+  try {
+    const resultsQuery = `{
+      allTransfers {
+        totalCount
+      }
+      allApprovals {
+        totalCount
+      }
+      lastTransfer: allTransfers(last: 1, orderBy: BLOCK_NUMBER_ASC) {
+        nodes {
+          blockNumber
+        }
+      }
+      lastApproval: allApprovals(last: 1, orderBy: BLOCK_NUMBER_ASC) {
+        nodes {
+          blockNumber
+        }
+      }
+    }`;
+    const data: any = await gql(GRAPHQL_URL, resultsQuery);
+    const transfers: number = data.allTransfers?.totalCount ?? 0;
+    const approvals: number = data.allApprovals?.totalCount ?? 0;
+    totalEvents = transfers + approvals;
+    const transferBlock = Number(
+      data.lastTransfer?.nodes?.[0]?.blockNumber ?? 0
+    );
+    const approvalBlock = Number(
+      data.lastApproval?.nodes?.[0]?.blockNumber ?? 0
+    );
+    const maxBlock = Math.max(transferBlock, approvalBlock);
+    if (maxBlock > START_BLOCK) {
+      totalBlocks = maxBlock - START_BLOCK;
+    }
+  } catch {
+    console.log("  Warning: Could not query results from GraphQL");
+  }
+
+  await kill(dev);
+  activeProc = null;
+
+  // Stop PostgreSQL
+  await exec("docker", ["compose", "down"], RINDEXER_DIR, rindexerEnv);
+
+  return {
+    name: "Rindexer",
+    totalEvents,
+    totalBlocks,
+  };
+}
+
 // ── Main ───────────────────────────────────────────────────────────────
+
+const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
+  {
+    envio: benchmarkEnvio,
+    ponder: benchmarkPonder,
+    rindexer: benchmarkRindexer,
+  };
 
 function formatInt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
 async function main() {
+  // Parse positional args (benchmark names) — anything that isn't a flag
+  const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const selected = positional.length > 0 ? positional : Object.keys(BENCHMARKS);
+
+  // Validate names
+  for (const name of selected) {
+    if (!BENCHMARKS[name]) {
+      console.error(
+        `Unknown benchmark "${name}". Available: ${Object.keys(BENCHMARKS).join(
+          ", "
+        )}`
+      );
+      process.exit(1);
+    }
+  }
+
   // Validate ENVIO_API_TOKEN
   const apiToken = process.env.ENVIO_API_TOKEN;
   if (!apiToken) {
@@ -281,35 +414,25 @@ async function main() {
     process.exit(1);
   }
   const rpcUrl = `https://1.rpc.hypersync.xyz/${apiToken}`;
-  const childEnv = {
-    ...process.env,
-    PONDER_RPC_URL_1: rpcUrl,
-    ENVIO_API_TOKEN: apiToken,
-  };
 
   console.log("=== ERC20 Transfer Events Benchmark ===");
-  console.log(`Duration: ${DURATION_S}s · Start block: ${START_BLOCK}\n`);
+  console.log(`Duration: ${DURATION_S}s · Start block: ${START_BLOCK}`);
+  console.log(`Running: ${selected.join(", ")}\n`);
 
   const results: BenchmarkResult[] = [];
 
-  // Run benchmarks sequentially to avoid resource contention
-  results.push(await benchmarkEnvio(childEnv));
-  await sleep(SUMMARY_DELAY_MS);
-  console.log(
-    `\nSummary — Envio: ${formatInt(
-      results[0].totalBlocks
-    )} blocks, ${formatInt(results[0].totalEvents)} events\n`
-  );
-  await sleep(SUMMARY_DELAY_MS);
-
-  results.push(await benchmarkPonder(childEnv));
-  await sleep(SUMMARY_DELAY_MS);
-  console.log(
-    `\nSummary — Ponder: ${formatInt(
-      results[1].totalBlocks
-    )} blocks, ${formatInt(results[1].totalEvents)} events\n`
-  );
-  await sleep(SUMMARY_DELAY_MS);
+  // Run selected benchmarks sequentially to avoid resource contention
+  for (const name of selected) {
+    const result = await BENCHMARKS[name](rpcUrl);
+    results.push(result);
+    await sleep(SUMMARY_DELAY_MS);
+    console.log(
+      `\nSummary — ${result.name}: ${formatInt(
+        result.totalBlocks
+      )} blocks, ${formatInt(result.totalEvents)} events\n`
+    );
+    await sleep(SUMMARY_DELAY_MS);
+  }
 
   // Compute per-second rates for sorting and table
   const withRates = results.map((r) => ({
@@ -321,7 +444,7 @@ async function main() {
 
   const firstRate = withRates[0].blocksPerSec;
   const nameWithSlower = (r: (typeof withRates)[0], i: number) => {
-    if (i === 0) return r.name;
+    if (i === 0 || withRates.length === 1) return r.name;
     const ratio = firstRate / r.blocksPerSec;
     const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
     return `${r.name} (${n}x slower)`;
