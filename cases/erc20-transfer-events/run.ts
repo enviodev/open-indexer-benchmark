@@ -312,7 +312,7 @@ async function benchmarkRindexer(
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([
-    waitReady(GRAPHQL_URL, READY_QUERY, 60_000),
+    waitReady(GRAPHQL_URL, READY_QUERY, DURATION_S * 1_000),
     durationPromise,
   ]);
 
