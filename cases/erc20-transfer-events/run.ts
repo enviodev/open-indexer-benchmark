@@ -10,6 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PONDER_DIR = resolve(__dirname, "ponder");
 const ENVIO_DIR = resolve(__dirname, "envio");
 const RINDEXER_DIR = resolve(__dirname, "rindexer");
+const SQUID_DIR = resolve(__dirname, "sqd");
 const START_BLOCK = 18_600_000;
 
 const DURATION_S = (() => {
@@ -124,13 +125,11 @@ async function waitReady(url: string, query: string, timeoutMs = 30_000) {
 
 // ── Cleanup on unexpected exit ─────────────────────────────────────────
 
-let activeProc: ChildProcess | null = null;
+let activeProcs: ChildProcess[] = [];
 
 async function cleanup() {
-  if (activeProc) {
-    await kill(activeProc);
-    activeProc = null;
-  }
+  await Promise.all(activeProcs.map((p) => kill(p)));
+  activeProcs = [];
 }
 process.on("SIGINT", async () => {
   await cleanup();
@@ -178,7 +177,7 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
     PONDER_DIR,
     ponderEnv
   );
-  activeProc = dev;
+  activeProcs = [dev];
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([waitReady(GRAPHQL_URL, QUERY), delayPromise]);
@@ -186,7 +185,7 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   // Snapshot results
   const data: any = await gql(GRAPHQL_URL, QUERY);
   await kill(dev);
-  activeProc = null;
+  activeProcs = [];
 
   // Compute metrics
   const approvals: number = data.approvalEvents?.totalCount ?? 0;
@@ -239,7 +238,7 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
-  activeProc = dev;
+  activeProcs = [dev];
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([waitReady(GRAPHQL_URL, QUERY), durationPromise]);
@@ -247,7 +246,7 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   // Snapshot results
   const data: any = await gql(GRAPHQL_URL, QUERY);
   await kill(dev);
-  activeProc = null;
+  activeProcs = [];
 
   // Compute metrics
   const meta = data._meta[0];
@@ -316,7 +315,7 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
   // Start rindexer (indexer + graphql)
   console.log(`\nStarting rindexer for ${DURATION_S}s...\n`);
   const dev = start(rindexerBin, ["start", "all"], RINDEXER_DIR, rindexerEnv);
-  activeProc = dev;
+  activeProcs = [dev];
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([
@@ -365,13 +364,138 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
   }
 
   await kill(dev);
-  activeProc = null;
+  activeProcs = [];
 
   // Stop PostgreSQL
   await exec("docker", ["compose", "down"], RINDEXER_DIR, rindexerEnv);
 
   return {
     name: "Rindexer",
+    totalEvents,
+    totalBlocks,
+  };
+}
+
+// ── Sqd Benchmark ───────────────────────────────────────────────────
+
+async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
+  const GRAPHQL_URL = "http://localhost:4350/graphql";
+  const QUERY = `{
+    transferEventsConnection(orderBy: id_ASC) {
+      totalCount
+    }
+    approvalEventsConnection(orderBy: id_ASC) {
+      totalCount
+    }
+    accounts(orderBy: id_ASC, limit: 1) {
+      id
+    }
+  }`;
+
+  // Query to detect the highest indexed block via the last transfer event
+  const BLOCK_QUERY = `{
+    transferEvents(orderBy: id_DESC, limit: 1) {
+      id
+    }
+  }`;
+
+  console.log("\n--- Sqd ---\n");
+
+  // Clean previous state
+  console.log("Cleaning squid build artifacts...");
+  rmSync(resolve(SQUID_DIR, "lib"), { recursive: true, force: true });
+  rmSync(resolve(SQUID_DIR, "db/migrations"), { recursive: true, force: true });
+
+  // Install deps
+  console.log("Installing dependencies...\n");
+  await exec("pnpm", ["install", "--frozen-lockfile"], SQUID_DIR);
+
+  // Generate models from schema.graphql
+  console.log("Generating models from schema...\n");
+  await exec("pnpm", ["codegen"], SQUID_DIR);
+
+  // Build TypeScript
+  console.log("Building squid project...\n");
+  await exec("pnpm", ["build"], SQUID_DIR);
+
+  // Start Postgres via Docker
+  console.log("Starting PostgreSQL database...\n");
+  const squidEnv = {
+    ...process.env,
+    RPC_ENDPOINT: rpcUrl,
+    DB_PORT: "23798",
+    DB_HOST: "localhost",
+    DB_NAME: "squid",
+    DB_PASS: "postgres",
+    GQL_PORT: "4350",
+  };
+  await exec("docker", ["compose", "down", "-v"], SQUID_DIR, squidEnv).catch(
+    () => {}
+  );
+  await exec("docker", ["compose", "up", "-d"], SQUID_DIR, squidEnv);
+  // Wait for Postgres to be ready
+  await sleep(3_000);
+
+  // Generate and apply migrations
+  console.log("Generating migrations...\n");
+  await exec(
+    "npx",
+    ["squid-typeorm-migration", "generate"],
+    SQUID_DIR,
+    squidEnv
+  );
+  console.log("Applying migrations...\n");
+  await exec("npx", ["squid-typeorm-migration", "apply"], SQUID_DIR, squidEnv);
+
+  const durationPromise = sleep(DURATION_S * 1_000);
+
+  // Start the GraphQL server and processor as separate processes
+  console.log(`\nStarting squid for ${DURATION_S}s...\n`);
+  const gqlServer = start("npx", ["squid-graphql-server"], SQUID_DIR, squidEnv);
+  const processor = start(
+    "node",
+    ["--require=dotenv/config", "lib/main.js"],
+    SQUID_DIR,
+    squidEnv
+  );
+  activeProcs = [gqlServer, processor];
+
+  // Wait for GraphQL to become ready, sleep concurrently
+  await Promise.all([waitReady(GRAPHQL_URL, QUERY, 60_000), durationPromise]);
+
+  // Snapshot results
+  const data: any = await gql(GRAPHQL_URL, QUERY);
+  let blockData: any;
+  try {
+    blockData = await gql(GRAPHQL_URL, BLOCK_QUERY);
+  } catch {}
+
+  await kill(processor);
+  await kill(gqlServer);
+  activeProcs = [];
+
+  // Tear down Postgres
+  try {
+    await exec("docker", ["compose", "down"], SQUID_DIR, squidEnv);
+  } catch {}
+
+  // Compute metrics
+  const approvals: number = data.approvalEventsConnection?.totalCount ?? 0;
+  const transfers: number = data.transferEventsConnection?.totalCount ?? 0;
+  const totalEvents = approvals + transfers;
+
+  // Extract the highest block number from the last transfer event ID (format: "blockHeight-logIndex")
+  let totalBlocks = 0;
+  const lastId = blockData?.transferEvents?.[0]?.id;
+  if (lastId) {
+    const blockHeight = parseInt(lastId.split("-")[0], 10);
+    if (!isNaN(blockHeight)) {
+      totalBlocks = blockHeight - START_BLOCK;
+    }
+  }
+
+  return {
+    name: "Sqd",
     totalEvents,
     totalBlocks,
   };
@@ -384,6 +508,7 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
     envio: benchmarkEnvio,
     ponder: benchmarkPonder,
     rindexer: benchmarkRindexer,
+    sqd: benchmarkSqd,
   };
 
 function formatInt(n: number): string {
