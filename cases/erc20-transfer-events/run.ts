@@ -409,6 +409,10 @@ async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
   console.log("Installing dependencies...\n");
   await exec("pnpm", ["install", "--frozen-lockfile"], SQUID_DIR);
 
+  // Generate models from schema.graphql
+  console.log("Generating models from schema...\n");
+  await exec("pnpm", ["codegen"], SQUID_DIR);
+
   // Build TypeScript
   console.log("Building squid project...\n");
   await exec("pnpm", ["build"], SQUID_DIR);
@@ -432,7 +436,14 @@ async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
   // Wait for Postgres to be ready
   await sleep(3_000);
 
-  // Apply migrations
+  // Generate and apply migrations
+  console.log("Generating migrations...\n");
+  await exec(
+    "npx",
+    ["squid-typeorm-migration", "generate"],
+    SQUID_DIR,
+    squidEnv
+  );
   console.log("Applying migrations...\n");
   await exec(
     "npx",

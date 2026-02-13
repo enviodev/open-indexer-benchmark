@@ -3,3 +3,4 @@ lib
 .env
 generated
 src/model/generated
+db/migrations
