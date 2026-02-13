@@ -376,15 +376,15 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
   };
 }
 
-// ── Squid Benchmark ───────────────────────────────────────────────────
+// ── Sqd Benchmark ───────────────────────────────────────────────────
 
-async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
+async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
   const GRAPHQL_URL = "http://localhost:4350/graphql";
   const QUERY = `{
-    transferEvents(orderBy: id_ASC, limit: 0) {
+    transferEventsConnection(orderBy: id_ASC) {
       totalCount
     }
-    approvalEvents(orderBy: id_ASC, limit: 0) {
+    approvalEventsConnection(orderBy: id_ASC) {
       totalCount
     }
     accounts(orderBy: id_ASC, limit: 1) {
@@ -399,11 +399,12 @@ async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
     }
   }`;
 
-  console.log("\n--- Squid ---\n");
+  console.log("\n--- Sqd ---\n");
 
   // Clean previous state
   console.log("Cleaning squid build artifacts...");
   rmSync(resolve(SQUID_DIR, "lib"), { recursive: true, force: true });
+  rmSync(resolve(SQUID_DIR, "db/migrations"), { recursive: true, force: true });
 
   // Install deps
   console.log("Installing dependencies...\n");
@@ -426,13 +427,12 @@ async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
     DB_HOST: "localhost",
     DB_NAME: "squid",
     DB_PASS: "postgres",
+    GQL_PORT: "4350",
   };
-  await exec(
-    "docker",
-    ["compose", "up", "-d"],
-    SQUID_DIR,
-    squidEnv
+  await exec("docker", ["compose", "down", "-v"], SQUID_DIR, squidEnv).catch(
+    () => {}
   );
+  await exec("docker", ["compose", "up", "-d"], SQUID_DIR, squidEnv);
   // Wait for Postgres to be ready
   await sleep(3_000);
 
@@ -445,23 +445,13 @@ async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
     squidEnv
   );
   console.log("Applying migrations...\n");
-  await exec(
-    "npx",
-    ["squid-typeorm-migration", "apply"],
-    SQUID_DIR,
-    squidEnv
-  );
+  await exec("npx", ["squid-typeorm-migration", "apply"], SQUID_DIR, squidEnv);
 
   const durationPromise = sleep(DURATION_S * 1_000);
 
   // Start the GraphQL server and processor as separate processes
   console.log(`\nStarting squid for ${DURATION_S}s...\n`);
-  const gqlServer = start(
-    "npx",
-    ["squid-graphql-server"],
-    SQUID_DIR,
-    squidEnv
-  );
+  const gqlServer = start("npx", ["squid-graphql-server"], SQUID_DIR, squidEnv);
   const processor = start(
     "node",
     ["--require=dotenv/config", "lib/main.js"],
@@ -490,8 +480,8 @@ async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
   } catch {}
 
   // Compute metrics
-  const approvals: number = data.approvalEvents?.totalCount ?? 0;
-  const transfers: number = data.transferEvents?.totalCount ?? 0;
+  const approvals: number = data.approvalEventsConnection?.totalCount ?? 0;
+  const transfers: number = data.transferEventsConnection?.totalCount ?? 0;
   const totalEvents = approvals + transfers;
 
   // Extract the highest block number from the last transfer event ID (format: "blockHeight-logIndex")
@@ -505,7 +495,7 @@ async function benchmarkSquid(rpcUrl: string): Promise<BenchmarkResult> {
   }
 
   return {
-    name: "Squid",
+    name: "Sqd",
     totalEvents,
     totalBlocks,
   };
@@ -518,7 +508,7 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
     envio: benchmarkEnvio,
     ponder: benchmarkPonder,
     rindexer: benchmarkRindexer,
-    sqd: benchmarkSquid,
+    sqd: benchmarkSqd,
   };
 
 function formatInt(n: number): string {

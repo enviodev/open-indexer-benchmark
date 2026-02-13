@@ -1,4 +1,4 @@
-# Squid: ERC20 Transfer Events
+# Sqd: ERC20 Transfer Events
 
 [Subsquid](https://docs.sqd.ai/) implementation of the ERC20 Transfer Events benchmark.
 

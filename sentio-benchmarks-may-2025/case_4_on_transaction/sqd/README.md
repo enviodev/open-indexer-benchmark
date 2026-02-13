@@ -6,10 +6,10 @@ This directory contains a Subsquid implementation for indexing LBTC token transf
 
 ## Prerequisites
 
-* **Node.js:** v18 or newer
-* **Git**
-* **Docker** (for running Postgres)
-* **Squid CLI:** `npm i -g @subsquid/cli`
+- **Node.js:** v18 or newer
+- **Git**
+- **Docker** (for running Postgres)
+- **Sqd CLI:** `npm i -g @subsquid/cli`
 
 ## Setup & Running Instructions
 
@@ -27,7 +27,7 @@ sqd up
 
 This starts a local PostgreSQL database in a Docker container for storing indexed data.
 
-### 3. Build the Squid
+### 3. Build the Sqd
 
 ```bash
 sqd build
@@ -40,7 +40,7 @@ sqd migration generate
 sqd migration apply
 ```
 
-### 5. Start the Squid
+### 5. Start the Sqd
 
 Run both the processor and GraphQL server:
 
@@ -61,6 +61,7 @@ sqd serve
 ### 6. Access the GraphQL API
 
 Once running, access the GraphQL playground at:
+
 ```
 http://localhost:4350/graphql
 ```
@@ -72,11 +73,12 @@ http://localhost:4350/graphql
 - `abi/` - ABI definitions for the LBTC contract
 - `schema.graphql` - GraphQL schema defining the database structure
 - `db/migrations/` - Database migration files
-- `squid.yaml` - Squid configuration
+- `squid.yaml` - Sqd configuration
 
 ## Implementation Details
 
 This implementation:
+
 1. Uses `EvmBatchProcessor` to fetch LBTC token Transfer events
 2. Uses SQD Network as the primary data source for optimized data retrieval
 3. Decodes event data and saves it to a local Postgres database
@@ -86,14 +88,14 @@ The main processor configuration is in `src/processor.ts`:
 
 ```typescript
 const processor = new EvmBatchProcessor()
-  .setGateway('https://v2.archive.subsquid.io/network/ethereum-mainnet')
-  .setRpcEndpoint('https://rpc.ankr.com/eth')
+  .setGateway("https://v2.archive.subsquid.io/network/ethereum-mainnet")
+  .setRpcEndpoint("https://rpc.ankr.com/eth")
   .setFinalityConfirmation(75)
   .addLog({
     range: { from: 20016816 },
     address: [LBTC_CONTRACT_ADDRESS],
     topic0: [erc20abi.events.Transfer.topic],
-  })
+  });
 ```
 
 ## Performance Results
@@ -136,10 +138,9 @@ PGPASSWORD="kbr06QnqfXX66cb7Bm9Qdovvx6TvU8C~" psql -h pg.squid.subsquid.io -d 16
 ```
 
 Example query:
+
 ```sql
 SELECT COUNT(*) FROM transfer;
 ```
 
 For more details on Subsquid SDK, refer to the [official documentation](https://docs.sqd.ai/sdk/quickstart/).
-
-
