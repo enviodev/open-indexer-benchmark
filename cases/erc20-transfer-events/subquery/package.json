@@ -20,8 +20,8 @@
     "tslib": "^2.6.0"
   },
   "devDependencies": {
-    "@subql/cli": "^5.0.0",
-    "@subql/node-ethereum": "^5.0.0",
+    "@subql/cli": "^6.4.1",
+    "@subql/node-ethereum": "^6.2.1",
     "ethers": "^5.7.2",
     "typescript": "^5.3.2"
   },
