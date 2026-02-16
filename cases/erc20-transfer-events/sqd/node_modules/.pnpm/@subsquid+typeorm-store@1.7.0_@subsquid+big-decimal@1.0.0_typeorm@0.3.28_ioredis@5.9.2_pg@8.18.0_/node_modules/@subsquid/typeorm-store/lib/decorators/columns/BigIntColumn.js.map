@@ -1,0 +1,1 @@
+{"version":3,"file":"BigIntColumn.js","sourceRoot":"","sources":["../../../src/decorators/columns/BigIntColumn.ts"],"names":[],"mappings":";;AAYA,oCAEC;AAdD,qDAAoD;AACpD,qCAA+B;AAK/B;;;;;GAKG;AACH,SAAgB,YAAY,CAAC,OAA6B;IACtD,OAAO,IAAA,eAAM,EAAC,SAAS,EAAE,EAAC,GAAG,OAAO,EAAE,WAAW,EAAE,gCAAiB,EAAC,CAAC,CAAA;AAC1E,CAAC"}

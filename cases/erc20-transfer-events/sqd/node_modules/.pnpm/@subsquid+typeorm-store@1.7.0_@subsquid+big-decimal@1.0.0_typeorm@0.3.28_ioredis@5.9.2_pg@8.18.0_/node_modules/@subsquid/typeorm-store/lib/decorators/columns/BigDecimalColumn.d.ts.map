@@ -1,0 +1,1 @@
+{"version":3,"file":"BigDecimalColumn.d.ts","sourceRoot":"","sources":["../../../src/decorators/columns/BigDecimalColumn.ts"],"names":[],"mappings":"AAEA,OAAO,EAAC,mBAAmB,EAAC,MAAM,UAAU,CAAA;AAE5C,MAAM,MAAM,uBAAuB,GAAG,IAAI,CAAC,mBAAmB,EAAE,MAAM,GAAG,QAAQ,GAAG,UAAU,GAAG,SAAS,GAAG,SAAS,CAAC,CAAA;AAEvH;;;;;GAKG;AACH,wBAAgB,gBAAgB,CAAC,OAAO,CAAC,EAAE,uBAAuB,GAAG,iBAAiB,CAErF"}

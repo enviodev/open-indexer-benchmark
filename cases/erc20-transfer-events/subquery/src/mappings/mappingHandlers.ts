@@ -17,23 +17,21 @@ export async function handleTransfer(log: TransferLog): Promise<void> {
   const to = log.args.to.toLowerCase();
   const value = log.args.value.toBigInt();
 
-  // Upsert sender: subtract value from balance
-  let sender = await Account.get(from);
-  if (!sender) {
-    sender = Account.create({ id: from, balance: BigInt(0) });
-  }
+  // Load both accounts concurrently
+  const [senderRaw, receiverRaw] = await Promise.all([
+    Account.get(from),
+    Account.get(to),
+  ]);
+
+  const sender = senderRaw ?? Account.create({ id: from, balance: BigInt(0) });
   sender.balance = sender.balance - value;
-  await sender.save();
 
-  // Upsert receiver: add value to balance
-  let receiver = await Account.get(to);
-  if (!receiver) {
-    receiver = Account.create({ id: to, balance: BigInt(0) });
-  }
+  const receiver =
+    from === to
+      ? sender
+      : receiverRaw ?? Account.create({ id: to, balance: BigInt(0) });
   receiver.balance = receiver.balance + value;
-  await receiver.save();
 
-  // Insert transfer event record
   const transferEvent = TransferEvent.create({
     id: `${log.blockNumber}-${log.logIndex}`,
     amount: value,
@@ -41,7 +39,13 @@ export async function handleTransfer(log: TransferLog): Promise<void> {
     from: from,
     to: to,
   });
-  await transferEvent.save();
+
+  // Save accounts and event concurrently
+  await Promise.all([
+    sender.save(),
+    ...(from === to ? [] : [receiver.save()]),
+    transferEvent.save(),
+  ]);
 }
 
 export async function handleApproval(log: ApprovalLog): Promise<void> {
@@ -64,9 +68,6 @@ export async function handleApproval(log: ApprovalLog): Promise<void> {
   } else {
     allowance.amount = value;
   }
-  await allowance.save();
-
-  // Insert approval event record
   const approvalEvent = ApprovalEvent.create({
     id: `${log.blockNumber}-${log.logIndex}`,
     amount: value,
@@ -74,5 +75,7 @@ export async function handleApproval(log: ApprovalLog): Promise<void> {
     owner: owner,
     spender: spender,
   });
-  await approvalEvent.save();
+
+  // Save allowance and event concurrently
+  await Promise.all([allowance.save(), approvalEvent.save()]);
 }

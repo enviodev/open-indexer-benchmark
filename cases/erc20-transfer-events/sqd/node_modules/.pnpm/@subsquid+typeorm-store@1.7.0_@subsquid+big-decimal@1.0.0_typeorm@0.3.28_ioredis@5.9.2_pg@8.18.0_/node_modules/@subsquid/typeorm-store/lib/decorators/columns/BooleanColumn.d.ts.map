@@ -1,0 +1,1 @@
+{"version":3,"file":"BooleanColumn.d.ts","sourceRoot":"","sources":["../../../src/decorators/columns/BooleanColumn.ts"],"names":[],"mappings":"AACA,OAAO,EAAC,mBAAmB,EAAC,MAAM,UAAU,CAAA;AAE5C,MAAM,MAAM,oBAAoB,GAAG,IAAI,CACnC,mBAAmB,EACnB,MAAM,GAAG,QAAQ,GAAG,UAAU,GAAG,SAAS,GAAG,SAAS,GAAG,OAAO,CACnE,CAAA;AAED;;;GAGG;AACH,wBAAgB,aAAa,CAAC,OAAO,CAAC,EAAE,oBAAoB,GAAG,iBAAiB,CAE/E"}

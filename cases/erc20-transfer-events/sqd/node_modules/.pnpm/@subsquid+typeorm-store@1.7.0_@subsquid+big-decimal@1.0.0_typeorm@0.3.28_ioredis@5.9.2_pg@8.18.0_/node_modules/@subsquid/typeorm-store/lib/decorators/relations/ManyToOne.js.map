@@ -1,0 +1,1 @@
+{"version":3,"file":"ManyToOne.js","sourceRoot":"","sources":["../../../src/decorators/relations/ManyToOne.ts"],"names":[],"mappings":";;AA6BA,8BAMC;AAnCD,qCAA2D;AAwB3D;;;;GAIG;AACH,SAAgB,SAAS,CACrB,oBAA8D,EAC9D,oBAAsE,EACtE,OAAyB;IAEzB,OAAO,IAAA,mBAAU,EAAC,oBAAoB,EAAE,oBAA2B,EAAE,OAAO,CAAC,CAAA;AACjF,CAAC"}

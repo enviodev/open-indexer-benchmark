@@ -1,0 +1,1 @@
+{"version":3,"file":"BigDecimalColumn.js","sourceRoot":"","sources":["../../../src/decorators/columns/BigDecimalColumn.ts"],"names":[],"mappings":";;AAYA,4CAEC;AAdD,qDAAwD;AACxD,qCAA+B;AAK/B;;;;;GAKG;AACH,SAAgB,gBAAgB,CAAC,OAAiC;IAC9D,OAAO,IAAA,eAAM,EAAC,SAAS,EAAE,EAAC,GAAG,OAAO,EAAE,WAAW,EAAE,oCAAqB,EAAC,CAAC,CAAA;AAC9E,CAAC"}

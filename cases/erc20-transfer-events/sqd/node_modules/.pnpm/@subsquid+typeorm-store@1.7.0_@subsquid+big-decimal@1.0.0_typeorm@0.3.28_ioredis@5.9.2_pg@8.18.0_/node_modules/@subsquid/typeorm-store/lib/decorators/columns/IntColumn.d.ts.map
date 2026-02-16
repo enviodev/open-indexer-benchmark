@@ -1,0 +1,1 @@
+{"version":3,"file":"IntColumn.d.ts","sourceRoot":"","sources":["../../../src/decorators/columns/IntColumn.ts"],"names":[],"mappings":"AACA,OAAO,EAAC,mBAAmB,EAAgB,MAAM,UAAU,CAAA;AAE3D,MAAM,MAAM,gBAAgB,GAAG,IAAI,CAC/B,mBAAmB,EACnB,MAAM,GAAG,QAAQ,GAAG,UAAU,GAAG,SAAS,GAAG,SAAS,GAAG,OAAO,CACnE,CAAA;AAED;;;GAGG;AACH,wBAAgB,SAAS,CAAC,OAAO,CAAC,EAAE,gBAAgB,GAAG,iBAAiB,CAEvE"}

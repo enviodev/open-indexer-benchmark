@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../src/dialect/index.ts"],"names":[],"mappings":"AACA,OAAO,EAAC,OAAO,EAAE,aAAa,EAAE,aAAa,EAAC,MAAM,UAAU,CAAA;AAE9D,cAAc,UAAU,CAAA;AAExB,wBAAsB,gBAAgB,CAAC,OAAO,EAAE,aAAa,GAAG;IAAC,OAAO,CAAC,EAAE,OAAO,CAAA;CAAC,GAAG,OAAO,CAAC,aAAa,CAAC,CAc3G"}

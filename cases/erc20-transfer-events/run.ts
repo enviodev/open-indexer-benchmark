@@ -13,6 +13,10 @@ const RINDEXER_DIR = resolve(__dirname, "rindexer");
 const SUBQUERY_DIR = resolve(__dirname, "subquery");
 const SQUID_DIR = resolve(__dirname, "sqd");
 const START_BLOCK = 18_600_000;
+const BENCHMARK_PORT = 19_876;
+// SubQuery runs via Docker Compose, which has significant app startup overhead (~25s).
+// To get a fair measurement, we run it for 5x the requested duration and normalize results.
+const SUBQUERY_DURATION_MULTIPLIER = 5;
 
 const DURATION_S = (() => {
   const flag = process.argv.find((a) => a.startsWith("--duration="));
@@ -153,7 +157,7 @@ process.on("SIGTERM", async () => {
 // ── Ponder Benchmark ───────────────────────────────────────────────────
 
 async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
-  const GRAPHQL_URL = "http://localhost:42069/graphql";
+  const GRAPHQL_URL = `http://localhost:${BENCHMARK_PORT}/graphql`;
   const QUERY = `{
     _meta {
       status
@@ -183,7 +187,7 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   const ponderEnv = { ...process.env, PONDER_RPC_URL_1: rpcUrl };
   const dev = start(
     "pnpm",
-    ["ponder", "dev", "--disable-ui"],
+    ["ponder", "dev", "--disable-ui", `--port=${BENCHMARK_PORT}`],
     PONDER_DIR,
     ponderEnv
   );
@@ -223,7 +227,7 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
 // ── Envio Benchmark ────────────────────────────────────────────────────
 
 async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
-  const GRAPHQL_URL = "http://localhost:8080/v1/graphql";
+  const GRAPHQL_URL = `http://localhost:${BENCHMARK_PORT}/v1/graphql`;
   const QUERY = `{
     _meta {
       eventsProcessed
@@ -244,7 +248,11 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   const durationPromise = sleep(DURATION_S * 1_000);
 
   // Start envio dev with TUI disabled
-  const envioEnv = { ...process.env, TUI_OFF: "true" };
+  const envioEnv = {
+    ...process.env,
+    TUI_OFF: "true",
+    HASURA_EXTERNAL_PORT: String(BENCHMARK_PORT),
+  };
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
@@ -274,7 +282,7 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
 // ── Rindexer Benchmark ────────────────────────────────────────────────
 
 async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
-  const GRAPHQL_URL = "http://localhost:3001/graphql";
+  const GRAPHQL_URL = `http://localhost:${BENCHMARK_PORT}/graphql`;
   const rindexerEnv = {
     ...process.env,
     ETHEREUM_RPC: rpcUrl,
@@ -514,7 +522,7 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
 // ── SubQuery Benchmark ────────────────────────────────────────────────
 
 async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
-  const GRAPHQL_URL = "http://localhost:3000";
+  const GRAPHQL_URL = `http://localhost:${BENCHMARK_PORT}`;
   const QUERY = `{
     _metadata {
       lastProcessedHeight
@@ -535,14 +543,16 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   rmSync(resolve(SUBQUERY_DIR, "dist"), { recursive: true, force: true });
   rmSync(resolve(SUBQUERY_DIR, "src/types"), { recursive: true, force: true });
 
+  const subqueryEnv = { ...process.env, ETHEREUM_RPC_URL: rpcUrl };
+
   // Install deps
   console.log("Installing dependencies...\n");
   await exec("pnpm", ["install", "--frozen-lockfile"], SUBQUERY_DIR);
 
-  // Codegen and build
+  // Codegen and build (needs ETHEREUM_RPC_URL so project.ts resolves the endpoint)
   console.log("Running codegen and build...\n");
-  await exec("pnpm", ["codegen"], SUBQUERY_DIR);
-  await exec("pnpm", ["build"], SUBQUERY_DIR);
+  await exec("pnpm", ["codegen"], SUBQUERY_DIR, subqueryEnv);
+  await exec("pnpm", ["build"], SUBQUERY_DIR, subqueryEnv);
 
   // Write .env file for docker-compose
   writeFileSync(
@@ -550,9 +560,7 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
     `ETHEREUM_RPC_URL=${rpcUrl}\n`
   );
 
-  const subqueryEnv = { ...process.env, ETHEREUM_RPC_URL: rpcUrl };
-
-  // Start docker-compose (down -v first so we get a clean DB)
+  // Pre-initialize Docker infrastructure (not counted toward benchmark time)
   console.log("Cleaning previous docker state...");
   await exec(
     "docker",
@@ -561,10 +569,40 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
     subqueryEnv
   ).catch(() => {});
 
-  const durationPromise = sleep(DURATION_S * 1_000);
-
-  console.log(`\nStarting SubQuery via docker compose for ${DURATION_S}s...\n`);
+  console.log("Pulling images and starting postgres...");
   await exec("docker", ["compose", "pull"], SUBQUERY_DIR, subqueryEnv);
+  await exec(
+    "docker",
+    ["compose", "up", "-d", "postgres"],
+    SUBQUERY_DIR,
+    subqueryEnv
+  );
+  activeDockerDir = SUBQUERY_DIR;
+
+  // Wait for postgres to be healthy before starting the benchmark timer
+  console.log("Waiting for postgres to be ready...");
+  const pgDeadline = Date.now() + 30_000;
+  while (Date.now() < pgDeadline) {
+    try {
+      await exec(
+        "docker",
+        ["compose", "exec", "postgres", "pg_isready", "-U", "postgres"],
+        SUBQUERY_DIR,
+        subqueryEnv
+      );
+      break;
+    } catch {
+      await sleep(1_000);
+    }
+  }
+
+  // Start benchmark timer — app startup is included, Docker/DB init is not.
+  // SubQuery runs for SUBQUERY_DURATION_MULTIPLIER × DURATION_S to amortize
+  // its heavy app startup (~25s), then results are normalized back to DURATION_S.
+  const actualDuration = DURATION_S * SUBQUERY_DURATION_MULTIPLIER;
+  const durationPromise = sleep(actualDuration * 1_000);
+
+  console.log(`\nStarting SubQuery services for ${actualDuration}s (${SUBQUERY_DURATION_MULTIPLIER}x multiplier)...\n`);
   const dev = start(
     "docker",
     ["compose", "up", "--remove-orphans"],
@@ -572,11 +610,10 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
     subqueryEnv
   );
   activeProc = dev;
-  activeDockerDir = SUBQUERY_DIR;
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([
-    waitReady(GRAPHQL_URL, QUERY, DURATION_S * 1_000),
+    waitReady(GRAPHQL_URL, QUERY, actualDuration * 1_000),
     durationPromise,
   ]);
 
@@ -589,16 +626,144 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   await exec("docker", ["compose", "down", "-v"], SUBQUERY_DIR, subqueryEnv);
   activeDockerDir = null;
 
-  // Compute metrics
+  // Compute metrics — normalize from actual (extended) duration back to DURATION_S
   const transfers: number = data.transferEvents?.totalCount ?? 0;
   const approvals: number = data.approvalEvents?.totalCount ?? 0;
-  const totalEvents = transfers + approvals;
+  const totalEvents = Math.round(
+    (transfers + approvals) / SUBQUERY_DURATION_MULTIPLIER
+  );
 
   const lastHeight: number = data._metadata?.lastProcessedHeight ?? 0;
-  const totalBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
+  const rawBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
+  const totalBlocks = Math.round(rawBlocks / SUBQUERY_DURATION_MULTIPLIER);
 
   return {
     name: "SubQuery",
+    totalEvents,
+    totalBlocks,
+  };
+}
+
+// ── Sqd Benchmark ───────────────────────────────────────────────────
+
+async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
+  const GRAPHQL_URL = `http://localhost:${BENCHMARK_PORT}/graphql`;
+  const QUERY = `{
+    transferEventsConnection(orderBy: id_ASC) {
+      totalCount
+    }
+    approvalEventsConnection(orderBy: id_ASC) {
+      totalCount
+    }
+    accounts(orderBy: id_ASC, limit: 1) {
+      id
+    }
+  }`;
+
+  // Query to detect the highest indexed block via the last transfer event
+  const BLOCK_QUERY = `{
+    transferEvents(orderBy: id_DESC, limit: 1) {
+      id
+    }
+  }`;
+
+  console.log("\n--- Sqd ---\n");
+
+  // Clean previous state
+  console.log("Cleaning squid build artifacts...");
+  rmSync(resolve(SQUID_DIR, "lib"), { recursive: true, force: true });
+  rmSync(resolve(SQUID_DIR, "db/migrations"), { recursive: true, force: true });
+
+  // Install deps
+  console.log("Installing dependencies...\n");
+  await exec("pnpm", ["install", "--frozen-lockfile"], SQUID_DIR);
+
+  // Generate models from schema.graphql
+  console.log("Generating models from schema...\n");
+  await exec("pnpm", ["codegen"], SQUID_DIR);
+
+  // Build TypeScript
+  console.log("Building squid project...\n");
+  await exec("pnpm", ["build"], SQUID_DIR);
+
+  // Start Postgres via Docker
+  console.log("Starting PostgreSQL database...\n");
+  const squidEnv = {
+    ...process.env,
+    RPC_ENDPOINT: rpcUrl,
+    DB_PORT: "23798",
+    DB_HOST: "localhost",
+    DB_NAME: "squid",
+    DB_PASS: "postgres",
+    GQL_PORT: String(BENCHMARK_PORT),
+  };
+  await exec("docker", ["compose", "down", "-v"], SQUID_DIR, squidEnv).catch(
+    () => {}
+  );
+  await exec("docker", ["compose", "up", "-d"], SQUID_DIR, squidEnv);
+  // Wait for Postgres to be ready
+  await sleep(3_000);
+
+  // Generate and apply migrations
+  console.log("Generating migrations...\n");
+  await exec(
+    "npx",
+    ["squid-typeorm-migration", "generate"],
+    SQUID_DIR,
+    squidEnv
+  );
+  console.log("Applying migrations...\n");
+  await exec("npx", ["squid-typeorm-migration", "apply"], SQUID_DIR, squidEnv);
+
+  const durationPromise = sleep(DURATION_S * 1_000);
+
+  // Start the GraphQL server and processor as separate processes
+  console.log(`\nStarting squid for ${DURATION_S}s...\n`);
+  const gqlServer = start("npx", ["squid-graphql-server"], SQUID_DIR, squidEnv);
+  const processor = start(
+    "node",
+    ["--require=dotenv/config", "lib/main.js"],
+    SQUID_DIR,
+    squidEnv
+  );
+  activeProc = processor;
+
+  // Wait for GraphQL to become ready, sleep concurrently
+  await Promise.all([waitReady(GRAPHQL_URL, QUERY, 60_000), durationPromise]);
+
+  // Snapshot results
+  const data: any = await gql(GRAPHQL_URL, QUERY);
+  let blockData: any;
+  try {
+    blockData = await gql(GRAPHQL_URL, BLOCK_QUERY);
+  } catch {}
+
+  await kill(processor);
+  await kill(gqlServer);
+  activeProc = null;
+
+  // Tear down Postgres
+  try {
+    await exec("docker", ["compose", "down"], SQUID_DIR, squidEnv);
+  } catch {}
+
+  // Compute metrics
+  const approvals: number = data.approvalEventsConnection?.totalCount ?? 0;
+  const transfers: number = data.transferEventsConnection?.totalCount ?? 0;
+  const totalEvents = approvals + transfers;
+
+  // Extract the highest block number from the last transfer event ID (format: "blockHeight-logIndex")
+  let totalBlocks = 0;
+  const lastId = blockData?.transferEvents?.[0]?.id;
+  if (lastId) {
+    const blockHeight = parseInt(lastId.split("-")[0], 10);
+    if (!isNaN(blockHeight)) {
+      totalBlocks = blockHeight - START_BLOCK;
+    }
+  }
+
+  return {
+    name: "Sqd",
     totalEvents,
     totalBlocks,
   };
