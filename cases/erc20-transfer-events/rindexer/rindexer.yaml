@@ -65,7 +65,7 @@ contracts:
                     value: $value
 
 graphql:
-  port: 3001
+  port: 19876
 
 global:
   health_port: 8082

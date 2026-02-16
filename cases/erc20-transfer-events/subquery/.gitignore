@@ -1,0 +1,6 @@
+node_modules/
+dist/
+src/types/
+.data/
+project.yaml
+.env

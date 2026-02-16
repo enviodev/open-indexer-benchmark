@@ -4,3 +4,4 @@ lib
 generated
 src/model/generated
 db/migrations
+src/abi
