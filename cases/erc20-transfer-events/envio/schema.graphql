@@ -1,0 +1,27 @@
+type Account {
+  id: ID!
+  balance: BigInt!
+}
+
+type TransferEvent {
+  id: ID!
+  amount: BigInt!
+  timestamp: Int!
+  from: String!
+  to: String!
+}
+
+type Allowance {
+  id: ID!
+  amount: BigInt!
+  owner: String!
+  spender: String!
+}
+
+type ApprovalEvent {
+  id: ID!
+  amount: BigInt!
+  timestamp: Int!
+  owner: String!
+  spender: String!
+}
