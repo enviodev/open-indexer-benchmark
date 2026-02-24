@@ -1,0 +1,31 @@
+specVersion: 1.3.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: ERC20
+    network: mainnet
+    source:
+      address: "0xae78736cd615f374d3085123a210448e74fc6393"
+      abi: ERC20
+      startBlock: 18600000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Account
+        - TransferEvent
+        - Allowance
+        - ApprovalEvent
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+      file: ./src/erc20.ts

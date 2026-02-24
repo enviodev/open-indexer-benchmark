@@ -30,6 +30,7 @@ For each **Approval** event:
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
 - **Sqd** — [sqd/](./sqd/)
+- **SubGraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
@@ -71,6 +72,10 @@ Runs a native binary (`rindexer start all`) with a separate Postgres container. 
 ### Sqd (Subsquid)
 
 Runs the processor and GraphQL server as separate native Node.js processes. Uses a Docker Postgres instance for storage. The handler batches all events in memory per block range, then flushes accounts, allowances, transfer events, and approval events concurrently via `Promise.all`.
+
+### SubGraph (The Graph)
+
+Runs entirely via Docker Compose (postgres + IPFS + graph-node). Uses `specVersion: 1.3.0` with `indexerHints.prune: auto` for automatic pruning. Event entities use `@entity(immutable: true)` and `Bytes` IDs via `concatI32()` for optimal indexing and query performance. The Graph Node GraphQL API (port 8000) is mapped to the shared benchmark port. The `ETHEREUM_REORG_THRESHOLD` and `GRAPH_ETHEREUM_CLEANUP_BLOCKS` env vars are set to `1` to minimize overhead in benchmark mode.
 
 ### SubQuery
 
