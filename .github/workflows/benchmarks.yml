@@ -13,15 +13,13 @@ on:
         required: false
         default: '60'
         type: string
+  push:
+    branches: [main]
   pull_request:
-    types: [labeled, synchronize]
 
 jobs:
   setup:
     name: Setup matrix
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-benchmarks'))
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
