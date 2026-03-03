@@ -251,6 +251,7 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   const envioEnv = {
     ...process.env,
     TUI_OFF: "true",
+    ENVIO_HASURA: "false",
     HASURA_EXTERNAL_PORT: String(BENCHMARK_PORT),
   };
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
