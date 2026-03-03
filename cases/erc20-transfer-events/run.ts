@@ -14,9 +14,6 @@ const SUBQUERY_DIR = resolve(__dirname, "subquery");
 const SQUID_DIR = resolve(__dirname, "sqd");
 const START_BLOCK = 18_600_000;
 const BENCHMARK_PORT = 19_876;
-// SubQuery runs via Docker Compose, which has significant app startup overhead (~25s).
-// To get a fair measurement, we run it for 5x the requested duration and normalize results.
-const SUBQUERY_DURATION_MULTIPLIER = 5;
 
 const DURATION_S = (() => {
   const flag = process.argv.find((a) => a.startsWith("--duration="));
@@ -527,12 +524,9 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   }
 
   // Start benchmark timer — app startup is included, Docker/DB init is not.
-  // SubQuery runs for SUBQUERY_DURATION_MULTIPLIER × DURATION_S to amortize
-  // its heavy app startup (~25s), then results are normalized back to DURATION_S.
-  const actualDuration = DURATION_S * SUBQUERY_DURATION_MULTIPLIER;
-  const durationPromise = sleep(actualDuration * 1_000);
+  const durationPromise = sleep(DURATION_S * 1_000);
 
-  console.log(`\nStarting SubQuery services for ${actualDuration}s (${SUBQUERY_DURATION_MULTIPLIER}x multiplier)...\n`);
+  console.log(`\nStarting SubQuery services for ${DURATION_S}s...\n`);
   const dev = start(
     "docker",
     ["compose", "up", "--remove-orphans"],
@@ -543,7 +537,7 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([
-    waitReady(GRAPHQL_URL, QUERY, actualDuration * 1_000),
+    waitReady(GRAPHQL_URL, QUERY, DURATION_S * 1_000),
     durationPromise,
   ]);
 
@@ -556,16 +550,12 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   await exec("docker", ["compose", "down", "-v"], SUBQUERY_DIR, subqueryEnv);
   activeDockerDir = null;
 
-  // Compute metrics — normalize from actual (extended) duration back to DURATION_S
   const transfers: number = data.transferEvents?.totalCount ?? 0;
   const approvals: number = data.approvalEvents?.totalCount ?? 0;
-  const totalEvents = Math.round(
-    (transfers + approvals) / SUBQUERY_DURATION_MULTIPLIER
-  );
+  const totalEvents = transfers + approvals;
 
   const lastHeight: number = data._metadata?.lastProcessedHeight ?? 0;
-  const rawBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
-  const totalBlocks = Math.round(rawBlocks / SUBQUERY_DURATION_MULTIPLIER);
+  const totalBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
 
   return {
     name: "SubQuery",
