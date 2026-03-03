@@ -17,13 +17,37 @@ on:
     types: [labeled, synchronize]
 
 jobs:
-  erc20-transfer-events:
-    name: "Benchmark: ERC20 Transfer Events"
+  setup:
+    name: Setup matrix
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-benchmarks'))
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      duration: ${{ steps.set-matrix.outputs.duration }}
+    steps:
+      - id: set-matrix
+        run: |
+          INDEXERS="${{ inputs.indexers }}"
+          if [ -z "$INDEXERS" ]; then
+            echo 'matrix=["envio","ponder","rindexer","subquery","sqd"]' >> "$GITHUB_OUTPUT"
+          else
+            MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | jq -R . | jq -sc .)
+            echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          fi
+          DURATION="${{ inputs.duration }}"
+          echo "duration=${DURATION:-60}" >> "$GITHUB_OUTPUT"
+
+  benchmark:
+    name: "Benchmark: ${{ matrix.indexer }}"
+    needs: setup
+    runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        indexer: ${{ fromJSON(needs.setup.outputs.matrix) }}
     services:
       postgres:
         image: postgres:16
@@ -49,40 +73,97 @@ jobs:
         with:
           node-version: 24
 
-      - name: Run benchmarks
+      - name: Run benchmark
         run: |
           set -o pipefail
-          DURATION="${{ inputs.duration }}"
-          DURATION="${DURATION:-60}"
-          INDEXERS="${{ inputs.indexers }}"
-
-          if [ -z "$INDEXERS" ]; then
-            node cases/erc20-transfer-events/run.ts --duration="$DURATION" 2>&1 | tee /tmp/benchmark-output.txt
-          else
-            node cases/erc20-transfer-events/run.ts $INDEXERS --duration="$DURATION" 2>&1 | tee /tmp/benchmark-output.txt
-          fi
+          node cases/erc20-transfer-events/run.ts ${{ matrix.indexer }} --duration="${{ needs.setup.outputs.duration }}" 2>&1 | tee /tmp/benchmark-output.txt
         env:
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
 
       - name: Post results to job summary
         if: always()
         run: |
-          echo "## ERC20 Transfer Events Benchmark" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # Extract the markdown table if present
-          if grep -q "=== Markdown ===" /tmp/benchmark-output.txt 2>/dev/null; then
-            sed -n '/=== Markdown ===/,$ p' /tmp/benchmark-output.txt | tail -n +3 >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          echo "<details><summary>Full output</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "## ${{ matrix.indexer }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/benchmark-output.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "No output captured" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ matrix.indexer }}
+          path: /tmp/benchmark-output.txt
+          if-no-files-found: ignore
+
+  summary:
+    name: Summary
+    needs: [setup, benchmark]
+    if: always() && needs.setup.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: benchmark-*
+
+      - name: Build comparison table
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const duration = parseInt('${{ needs.setup.outputs.duration }}', 10) || 60;
+
+            const resultsDir = 'results';
+            const results = [];
+            const outputs = [];
+
+            if (fs.existsSync(resultsDir)) {
+              for (const dir of fs.readdirSync(resultsDir).sort()) {
+                const file = path.join(resultsDir, dir, 'benchmark-output.txt');
+                if (!fs.existsSync(file)) continue;
+                const content = fs.readFileSync(file, 'utf8');
+                outputs.push(content);
+
+                const match = content.match(/Summary — (\w+): ([\d,]+) blocks, ([\d,]+) events/);
+                if (match) {
+                  const name = match[1];
+                  const blocks = parseInt(match[2].replace(/,/g, ''), 10);
+                  const events = parseInt(match[3].replace(/,/g, ''), 10);
+                  results.push({ name, blocks, events,
+                    blocksPerSec: blocks / duration,
+                    eventsPerSec: events / duration });
+                }
+              }
+            }
+
+            if (results.length === 0) {
+              core.summary.addRaw('## ERC20 Transfer Events Benchmark\n\n_No results collected._\n');
+              await core.summary.write();
+              return;
+            }
+
+            results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
+            const firstRate = results[0].blocksPerSec;
+            const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+            const label = (r, i) => {
+              if (i === 0 || results.length === 1) return r.name;
+              const ratio = firstRate / r.blocksPerSec;
+              const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
+              return `${r.name} (${n}x slower)`;
+            };
+
+            const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
+            const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
+            const blocksRow = `| blocks | ${results.map(r => `${fmt(r.blocks)} (${r.blocksPerSec.toFixed(1)}/s)`).join(' | ')} |`;
+            const eventsRow = `| events | ${results.map(r => `${fmt(r.events)} (${r.eventsPerSec.toFixed(1)}/s)`).join(' | ')} |`;
+            const table = [header, sep, blocksRow, eventsRow].join('\n');
+
+            core.summary.addRaw(`## ERC20 Transfer Events Benchmark\n\n${table}\n`);
+            await core.summary.write();
 
       - name: Comment results on PR
         if: github.event_name == 'pull_request' && !cancelled()
@@ -90,29 +171,61 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            let output = '';
-            try {
-              output = fs.readFileSync('/tmp/benchmark-output.txt', 'utf8');
-            } catch {
-              output = 'No benchmark output captured.';
+            const path = require('path');
+            const duration = parseInt('${{ needs.setup.outputs.duration }}', 10) || 60;
+
+            const resultsDir = 'results';
+            const results = [];
+            const outputs = [];
+
+            if (fs.existsSync(resultsDir)) {
+              for (const dir of fs.readdirSync(resultsDir).sort()) {
+                const file = path.join(resultsDir, dir, 'benchmark-output.txt');
+                if (!fs.existsSync(file)) continue;
+                const content = fs.readFileSync(file, 'utf8');
+                outputs.push(content);
+
+                const match = content.match(/Summary — (\w+): ([\d,]+) blocks, ([\d,]+) events/);
+                if (match) {
+                  const name = match[1];
+                  const blocks = parseInt(match[2].replace(/,/g, ''), 10);
+                  const events = parseInt(match[3].replace(/,/g, ''), 10);
+                  results.push({ name, blocks, events,
+                    blocksPerSec: blocks / duration,
+                    eventsPerSec: events / duration });
+                }
+              }
             }
 
-            let table = '';
-            const marker = '=== Markdown ===';
-            const idx = output.indexOf(marker);
-            if (idx !== -1) {
-              table = output.substring(idx + marker.length).trim();
+            let table = '_No results collected._';
+            if (results.length > 0) {
+              results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
+              const firstRate = results[0].blocksPerSec;
+              const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+              const label = (r, i) => {
+                if (i === 0 || results.length === 1) return r.name;
+                const ratio = firstRate / r.blocksPerSec;
+                const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
+                return `${r.name} (${n}x slower)`;
+              };
+              const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
+              const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
+              const blocksRow = `| blocks | ${results.map(r => `${fmt(r.blocks)} (${r.blocksPerSec.toFixed(1)}/s)`).join(' | ')} |`;
+              const eventsRow = `| events | ${results.map(r => `${fmt(r.events)} (${r.eventsPerSec.toFixed(1)}/s)`).join(' | ')} |`;
+              table = [header, sep, blocksRow, eventsRow].join('\n');
             }
+
+            const fullOutput = outputs.join('\n\n---\n\n') || 'No benchmark output captured.';
 
             const body = [
               '## Benchmark Results: ERC20 Transfer Events',
               '',
-              table || '_No results table generated._',
+              table,
               '',
               '<details><summary>Full output</summary>',
               '',
               '```',
-              output,
+              fullOutput,
               '```',
               '',
               '</details>'
