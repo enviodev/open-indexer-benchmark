@@ -356,6 +356,7 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
   // Install rindexer CLI if not already present
   const rindexerBin = resolve(
     process.env.HOME ?? "~",
+    ".config",
     ".rindexer",
     "bin",
     "rindexer"

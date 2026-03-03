@@ -73,6 +73,29 @@ jobs:
         with:
           node-version: 24
 
+      - name: Prepare services
+        run: |
+          INDEXER="${{ matrix.indexer }}"
+          CASE_DIR="cases/erc20-transfer-events"
+
+          # Pre-pull Docker images so pulls don't count toward benchmark time
+          case "$INDEXER" in
+            ponder)
+              docker pull postgres:17-alpine
+              ;;
+            rindexer)
+              docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
+              curl -L https://rindexer.xyz/install.sh | bash
+              ;;
+            subquery)
+              docker compose -f "$CASE_DIR/subquery/docker-compose.yml" pull
+              docker compose -f "$CASE_DIR/subquery/docker-compose.yml" build
+              ;;
+            sqd)
+              docker compose -f "$CASE_DIR/sqd/docker-compose.yml" pull
+              ;;
+          esac
+
       - name: Run benchmark
         run: |
           set -o pipefail
