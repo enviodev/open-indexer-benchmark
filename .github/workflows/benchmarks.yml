@@ -29,7 +29,7 @@ jobs:
         run: |
           INDEXERS="${{ inputs.indexers }}"
           if [ -z "$INDEXERS" ]; then
-            echo 'matrix=["envio","ponder","rindexer","subquery","sqd"]' >> "$GITHUB_OUTPUT"
+            echo 'matrix=["envio","envio-rpc","ponder","rindexer","subquery","sqd"]' >> "$GITHUB_OUTPUT"
           else
             MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | jq -R . | jq -sc .)
             echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -149,7 +149,7 @@ jobs:
                 const content = fs.readFileSync(file, 'utf8');
                 outputs.push(content);
 
-                const match = content.match(/Summary — (\w+): ([\d,]+) blocks, ([\d,]+) events/);
+                const match = content.match(/Summary — (.+?): ([\d,]+) blocks, ([\d,]+) events/);
                 if (match) {
                   const name = match[1];
                   const blocks = parseInt(match[2].replace(/,/g, ''), 10);
@@ -206,7 +206,7 @@ jobs:
                 const content = fs.readFileSync(file, 'utf8');
                 outputs.push(content);
 
-                const match = content.match(/Summary — (\w+): ([\d,]+) blocks, ([\d,]+) events/);
+                const match = content.match(/Summary — (.+?): ([\d,]+) blocks, ([\d,]+) events/);
                 if (match) {
                   const name = match[1];
                   const blocks = parseInt(match[2].replace(/,/g, ''), 10);
