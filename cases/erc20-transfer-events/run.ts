@@ -247,10 +247,10 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   ]);
 
   // Snapshot results from PostgreSQL
-  const [transferCount, approvalCount, blockNumber] = await Promise.all([
+  const [transferCount, approvalCount, checkpoint] = await Promise.all([
     psql(PONDER_DB_URL, "SELECT count(*) FROM transfer_event"),
     psql(PONDER_DB_URL, "SELECT count(*) FROM approval_event"),
-    psql(PONDER_DB_URL, "SELECT block_number FROM _ponder_status LIMIT 1").catch(() => "0"),
+    psql(PONDER_DB_URL, 'SELECT "latestCheckpoint" FROM _ponder_checkpoint LIMIT 1').catch(() => ""),
   ]);
   await kill(dev);
   activeProc = null;
@@ -264,7 +264,8 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   const transfers = parseInt(transferCount, 10) || 0;
   const approvals = parseInt(approvalCount, 10) || 0;
   const totalEvents = transfers + approvals;
-  const block = parseInt(blockNumber, 10) || 0;
+  // Checkpoint is a 75-char string: [10 timestamp][16 chainId][16 blockNumber]...
+  const block = checkpoint.length >= 42 ? Number(BigInt(checkpoint.slice(26, 42))) : 0;
   const totalBlocks = block > START_BLOCK ? block - START_BLOCK : 0;
 
   return {
