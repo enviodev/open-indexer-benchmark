@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       envio:
-        specifier: 3.0.0-alpha.13
-        version: 3.0.0-alpha.13(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
+        specifier: 3.0.0-alpha.14
+        version: 3.0.0-alpha.14(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -67,18 +67,21 @@ packages:
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@envio-dev/hyperfuel-client-linux-x64-gnu@1.2.2':
     resolution: {integrity: sha512-XDkvkBG/frS+xiZkJdY4KqOaoAwyxPdi2MysDQgF8NmZdssi32SWch0r4LTqKWLLlCBg9/R55POeXL5UAjg2wQ==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@envio-dev/hyperfuel-client-linux-x64-musl@1.2.2':
     resolution: {integrity: sha512-DKnKJJSwsYtA7YT0EFGhFB5Eqoo42X0l0vZBv4lDuxngEXiiNjeLemXoKQVDzhcbILD7eyXNa5jWUc+2hpmkEg==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@envio-dev/hyperfuel-client-win32-x64-msvc@1.2.2':
     resolution: {integrity: sha512-SwIgTAVM9QhCFPyHwL+e1yQ6o3paV6q25klESkXw+r/KW9QPhOOyA6Yr8nfnur3uqMTLJHAKHTLUnkyi/Nh7Aw==}
@@ -107,18 +110,21 @@ packages:
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@envio-dev/hypersync-client-linux-x64-gnu@0.7.0':
     resolution: {integrity: sha512-Rpz3VSLqq2O9Qp3GiDXHmF3MPm7TcsTfRzSz2RkRVEfdchaKA7Ob86jQ2ueRyG1UEEu47V9JzL6mYmVs4gNa7w==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@envio-dev/hypersync-client-linux-x64-musl@0.7.0':
     resolution: {integrity: sha512-SZ8RHNaCEcPvubFGdA7gkbxJeJe4whhw0oaAvSyGEbUjL5byFI9nqMVzW8o8mPACqqjlOHIq77GYxbbUI+53vQ==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@envio-dev/hypersync-client-win32-x64-msvc@0.7.0':
     resolution: {integrity: sha512-R7M1IBcWfqx1TyBcK5Mc/VJmayGeK9woWPzSPzjTgYsHFl65gE1e0hXb8B/gi+km8GQDZYNcaHyBh6xSVHkrzg==}
@@ -292,9 +298,17 @@ packages:
   '@noble/curves@1.4.0':
     resolution: {integrity: sha512-p+4cb332SFCrReJkCYe8Xzm0OWi4Jji5jVdIZRL/PmacmDkFNw6MrrV+gGpiPxLHbV+zKFRywUWbaseT+tZRXg==}
 
+  '@noble/curves@1.9.1':
+    resolution: {integrity: sha512-k11yZxZg+t+gWvBbIswW0yoJlu8cHOC7dhunwOzoWH/mXGBiYyR4YY6hAEK/3EUs4UpB8la1RfdRpeGsFHkWsA==}
+    engines: {node: ^14.21.3 || >=16}
+
   '@noble/hashes@1.4.0':
     resolution: {integrity: sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==}
     engines: {node: '>= 16'}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
@@ -343,66 +357,79 @@ packages:
     resolution: {integrity: sha512-F8sWbhZ7tyuEfsmOxwc2giKDQzN3+kuBLPwwZGyVkLlKGdV1nvnNwYD0fKQ8+XS6hp9nY7B+ZeK01EBUE7aHaw==}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm-musleabihf@4.57.1':
     resolution: {integrity: sha512-rGfNUfn0GIeXtBP1wL5MnzSj98+PZe/AXaGBCRmT0ts80lU5CATYGxXukeTX39XBKsxzFpEeK+Mrp9faXOlmrw==}
     cpu: [arm]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-arm64-gnu@4.57.1':
     resolution: {integrity: sha512-MMtej3YHWeg/0klK2Qodf3yrNzz6CGjo2UntLvk2RSPlhzgLvYEB3frRvbEF2wRKh1Z2fDIg9KRPe1fawv7C+g==}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm64-musl@4.57.1':
     resolution: {integrity: sha512-1a/qhaaOXhqXGpMFMET9VqwZakkljWHLmZOX48R0I/YLbhdxr1m4gtG1Hq7++VhVUmf+L3sTAf9op4JlhQ5u1Q==}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-loong64-gnu@4.57.1':
     resolution: {integrity: sha512-QWO6RQTZ/cqYtJMtxhkRkidoNGXc7ERPbZN7dVW5SdURuLeVU7lwKMpo18XdcmpWYd0qsP1bwKPf7DNSUinhvA==}
     cpu: [loong64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-loong64-musl@4.57.1':
     resolution: {integrity: sha512-xpObYIf+8gprgWaPP32xiN5RVTi/s5FCR+XMXSKmhfoJjrpRAjCuuqQXyxUa/eJTdAE6eJ+KDKaoEqjZQxh3Gw==}
     cpu: [loong64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-ppc64-gnu@4.57.1':
     resolution: {integrity: sha512-4BrCgrpZo4hvzMDKRqEaW1zeecScDCR+2nZ86ATLhAoJ5FQ+lbHVD3ttKe74/c7tNT9c6F2viwB3ufwp01Oh2w==}
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-ppc64-musl@4.57.1':
     resolution: {integrity: sha512-NOlUuzesGauESAyEYFSe3QTUguL+lvrN1HtwEEsU2rOwdUDeTMJdO5dUYl/2hKf9jWydJrO9OL/XSSf65R5+Xw==}
     cpu: [ppc64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-riscv64-gnu@4.57.1':
     resolution: {integrity: sha512-ptA88htVp0AwUUqhVghwDIKlvJMD/fmL/wrQj99PRHFRAG6Z5nbWoWG4o81Nt9FT+IuqUQi+L31ZKAFeJ5Is+A==}
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-musl@4.57.1':
     resolution: {integrity: sha512-S51t7aMMTNdmAMPpBg7OOsTdn4tySRQvklmL3RpDRyknk87+Sp3xaumlatU+ppQ+5raY7sSTcC2beGgvhENfuw==}
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.57.1':
     resolution: {integrity: sha512-Bl00OFnVFkL82FHbEqy3k5CUCKH6OEJL54KCyx2oqsmZnFTR8IoNqBF+mjQVcRCT5sB6yOvK8A37LNm/kPJiZg==}
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.57.1':
     resolution: {integrity: sha512-ABca4ceT4N+Tv/GtotnWAeXZUZuM/9AQyCyKYyKnpk4yoA7QIAuBt6Hkgpw8kActYlew2mvckXkvx0FfoInnLg==}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-musl@4.57.1':
     resolution: {integrity: sha512-HFps0JeGtuOR2convgRRkHCekD7j+gdAuXM+/i6kGzQtFhlCtQkpwtNzkNj6QhCDp7DRJ7+qC/1Vg2jt5iSOFw==}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-openbsd-x64@4.57.1':
     resolution: {integrity: sha512-H+hXEv9gdVQuDTgnqD+SQffoWoc0Of59AStSzTEj/feWTBAnSfSD3+Dql1ZruJQxmykT/JVY0dE8Ka7z0DH1hw==}
@@ -682,28 +709,28 @@ packages:
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
-  envio-darwin-arm64@3.0.0-alpha.13:
-    resolution: {integrity: sha512-H3VAqfuA0MHcHo7KsIF7Knv8ZGZ6Tpg9PMC8kirNcL5PNPOnrIMM6S2LXqt6W36XZWbfYRIRmqZcc6xSnp9x5A==}
+  envio-darwin-arm64@3.0.0-alpha.14:
+    resolution: {integrity: sha512-7ykQSaPXiSdnwHCbMsTA8lLGMioXFPuyibP7hCkTnGSm6U7V2Kp06eJSC2zGgkYY+Uzute7FB8EVQ4yzat8u3Q==}
     cpu: [arm64]
     os: [darwin]
 
-  envio-darwin-x64@3.0.0-alpha.13:
-    resolution: {integrity: sha512-o/HvOOE2IsfgYgCROVYz+38k/xeliOiFwyPuzfAVnl9WwjebU3Gvx5S5DN6mas84PFCPEC8MwxtL9Fz+HQFxtg==}
+  envio-darwin-x64@3.0.0-alpha.14:
+    resolution: {integrity: sha512-YNZ5GvhoKqR4fx6G7EZB+RKHdy0FqRjSBZpVQw4A833wEp0UGSZF0JDP40QBpibGTM5O1PsbcGQ/Y8qk41p3eQ==}
     cpu: [x64]
     os: [darwin]
 
-  envio-linux-arm64@3.0.0-alpha.13:
-    resolution: {integrity: sha512-sqFCIcHoKYUQDayFUTsGP3fEpzrYYYGShOL6FOS+4XTaYRtUY6x+2VCDDdTfz4QxD3KAuxzaUjl3fQsMOAGKHg==}
+  envio-linux-arm64@3.0.0-alpha.14:
+    resolution: {integrity: sha512-ymD9H9Ne4abvHLaJYOZI3Wn0EAmvYfFsJEJPCfU2Hk85/lb82lkh99UBLhX2RlIDM6DG/fJlsUBv76PPre+vRg==}
     cpu: [arm64]
     os: [linux]
 
-  envio-linux-x64@3.0.0-alpha.13:
-    resolution: {integrity: sha512-ktVRP30jBpb/Nt9qrZDxr7j7tfEt/aZzrvNeixubp7pifnbptvJMbrk/ZPm4ZMuEXbrxKSmnN9BHzmzUNPhrEQ==}
+  envio-linux-x64@3.0.0-alpha.14:
+    resolution: {integrity: sha512-9KTjRvD4McULKauPt8gYkla49C7EJ1cLdfgBLrFVPT6/2CWREjZ9nPX9XaX4kzMLBPvTA7HzVg3wPEOim1vXqA==}
     cpu: [x64]
     os: [linux]
 
-  envio@3.0.0-alpha.13:
-    resolution: {integrity: sha512-zS1CL6lV018RP9O7JH9tUtu2qfRBuMMB5M2exk1yQkvKf7T+EKq0XRGloI+UVFnGtpT/yrfeQGSScfSAfulyDg==}
+  envio@3.0.0-alpha.14:
+    resolution: {integrity: sha512-v477ydFRaAfvy8GidMkFJNXKT6WeO5pt2RcvPpz0+hK2PcVFRQTz5qpNMP03bQLQBp+Lw1puW2z+Fy4Y2IblFA==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -1654,7 +1681,13 @@ snapshots:
     dependencies:
       '@noble/hashes': 1.4.0
 
+  '@noble/curves@1.9.1':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
   '@noble/hashes@1.4.0': {}
+
+  '@noble/hashes@1.8.0': {}
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -1968,19 +2001,19 @@ snapshots:
     dependencies:
       once: 1.4.0
 
-  envio-darwin-arm64@3.0.0-alpha.13:
+  envio-darwin-arm64@3.0.0-alpha.14:
     optional: true
 
-  envio-darwin-x64@3.0.0-alpha.13:
+  envio-darwin-x64@3.0.0-alpha.14:
     optional: true
 
-  envio-linux-arm64@3.0.0-alpha.13:
+  envio-linux-arm64@3.0.0-alpha.14:
     optional: true
 
-  envio-linux-x64@3.0.0-alpha.13:
+  envio-linux-x64@3.0.0-alpha.14:
     optional: true
 
-  envio@3.0.0-alpha.13(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3):
+  envio@3.0.0-alpha.14(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3):
     dependencies:
       '@clickhouse/client': 1.12.1
       '@elastic/ecs-pino-format': 1.4.0
@@ -2006,10 +2039,10 @@ snapshots:
       viem: 2.21.0(typescript@5.9.3)
       yargs: 17.7.2
     optionalDependencies:
-      envio-darwin-arm64: 3.0.0-alpha.13
-      envio-darwin-x64: 3.0.0-alpha.13
-      envio-linux-arm64: 3.0.0-alpha.13
-      envio-linux-x64: 3.0.0-alpha.13
+      envio-darwin-arm64: 3.0.0-alpha.14
+      envio-darwin-x64: 3.0.0-alpha.14
+      envio-linux-arm64: 3.0.0-alpha.14
+      envio-linux-x64: 3.0.0-alpha.14
     transitivePeerDependencies:
       - '@types/react'
       - bufferutil
@@ -2772,8 +2805,8 @@ snapshots:
 
   webauthn-p256@0.0.5:
     dependencies:
-      '@noble/curves': 1.4.0
-      '@noble/hashes': 1.4.0
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
 
   why-is-node-running@2.3.0:
     dependencies:
