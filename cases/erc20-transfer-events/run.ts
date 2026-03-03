@@ -128,6 +128,40 @@ async function waitReady(url: string, query: string, timeoutMs = 30_000) {
   );
 }
 
+/** Run a SQL query via psql and return the trimmed stdout. */
+function psql(connStr: string, query: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const p = spawn("psql", [connStr, "-t", "-A", "-c", query], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    p.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    p.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    p.on("exit", (code) =>
+      code === 0
+        ? resolve(stdout.trim())
+        : reject(new Error(`psql failed (${code}): ${stderr}`))
+    );
+  });
+}
+
+/** Poll a PostgreSQL database until the given query succeeds. */
+async function waitPg(connStr: string, query: string, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await psql(connStr, query);
+      return;
+    } catch {
+      await sleep(1_000);
+    }
+  }
+  throw new Error(
+    `PostgreSQL ${connStr} did not become ready within ${timeoutMs / 1000}s`
+  );
+}
+
 // ── Cleanup on unexpected exit ─────────────────────────────────────────
 
 let activeProc: ChildProcess | null = null;
@@ -144,6 +178,10 @@ async function cleanup() {
     } catch {}
     activeDockerDir = null;
   }
+  // Clean up standalone containers
+  try {
+    await exec("docker", ["rm", "-f", PONDER_PG_CONTAINER], __dirname);
+  } catch {}
 }
 process.on("SIGINT", async () => {
   await cleanup();
@@ -156,20 +194,11 @@ process.on("SIGTERM", async () => {
 
 // ── Ponder Benchmark ───────────────────────────────────────────────────
 
-async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
-  const GRAPHQL_URL = `http://localhost:${BENCHMARK_PORT}/graphql`;
-  const QUERY = `{
-    _meta {
-      status
-    }
-    approvalEvents {
-      totalCount
-    }
-    transferEvents {
-      totalCount
-    }
-  }`;
+const PONDER_PG_PORT = 19_877;
+const PONDER_PG_CONTAINER = "ponder-benchmark-pg";
+const PONDER_DB_URL = `postgresql://postgres:postgres@localhost:${PONDER_PG_PORT}/ponder`;
 
+async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   console.log("\n--- Ponder ---\n");
 
   // Clean previous state
@@ -180,11 +209,29 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   console.log("Installing dependencies...\n");
   await exec("pnpm", ["install", "--frozen-lockfile"], PONDER_DIR);
 
+  // Start PostgreSQL for Ponder
+  console.log("Starting PostgreSQL for Ponder...");
+  try {
+    await exec("docker", ["rm", "-f", PONDER_PG_CONTAINER], PONDER_DIR);
+  } catch {}
+  await exec("docker", [
+    "run", "-d", "--name", PONDER_PG_CONTAINER,
+    "-e", "POSTGRES_PASSWORD=postgres",
+    "-e", "POSTGRES_DB=ponder",
+    "-p", `${PONDER_PG_PORT}:5432`,
+    "postgres:17-alpine",
+  ], PONDER_DIR);
+  await waitPg(PONDER_DB_URL, "SELECT 1");
+
   const delayPromise = sleep(DURATION_S * 1_000);
 
-  // Start ponder dev
+  // Start ponder dev with PostgreSQL
   console.log(`\nStarting ponder dev for ${DURATION_S}s...\n`);
-  const ponderEnv = { ...process.env, PONDER_RPC_URL_1: rpcUrl };
+  const ponderEnv = {
+    ...process.env,
+    PONDER_RPC_URL_1: rpcUrl,
+    DATABASE_URL: PONDER_DB_URL,
+  };
   const dev = start(
     "pnpm",
     ["ponder", "dev", "--disable-ui", `--port=${BENCHMARK_PORT}`],
@@ -193,29 +240,32 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   );
   activeProc = dev;
 
-  // Wait for GraphQL to become ready, sleep concurrently
-  await Promise.all([waitReady(GRAPHQL_URL, QUERY), delayPromise]);
+  // Wait for tables to exist, sleep concurrently
+  await Promise.all([
+    waitPg(PONDER_DB_URL, "SELECT 1 FROM transfer_event LIMIT 1"),
+    delayPromise,
+  ]);
 
-  // Snapshot results
-  const data: any = await gql(GRAPHQL_URL, QUERY);
+  // Snapshot results from PostgreSQL
+  const [transferCount, approvalCount, blockNumber] = await Promise.all([
+    psql(PONDER_DB_URL, "SELECT count(*) FROM transfer_event"),
+    psql(PONDER_DB_URL, "SELECT count(*) FROM approval_event"),
+    psql(PONDER_DB_URL, "SELECT block_number FROM _ponder_status LIMIT 1").catch(() => "0"),
+  ]);
   await kill(dev);
   activeProc = null;
 
-  // Compute metrics
-  const approvals: number = data.approvalEvents?.totalCount ?? 0;
-  const transfers: number = data.transferEvents?.totalCount ?? 0;
-  const totalEvents = approvals + transfers;
+  // Stop PostgreSQL
+  try {
+    await exec("docker", ["rm", "-f", PONDER_PG_CONTAINER], PONDER_DIR);
+  } catch {}
 
-  let totalBlocks = 0;
-  const chains = data._meta?.status;
-  if (chains && typeof chains === "object") {
-    for (const chain of Object.values(chains) as any[]) {
-      if (chain?.block?.number != null) {
-        totalBlocks = chain.block.number - START_BLOCK;
-        break;
-      }
-    }
-  }
+  // Compute metrics
+  const transfers = parseInt(transferCount, 10) || 0;
+  const approvals = parseInt(approvalCount, 10) || 0;
+  const totalEvents = transfers + approvals;
+  const block = parseInt(blockNumber, 10) || 0;
+  const totalBlocks = block > START_BLOCK ? block - START_BLOCK : 0;
 
   return {
     name: "Ponder",
@@ -226,15 +276,11 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
 
 // ── Envio Benchmark ────────────────────────────────────────────────────
 
-async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
-  const GRAPHQL_URL = `http://localhost:${BENCHMARK_PORT}/v1/graphql`;
-  const QUERY = `{
-    _meta {
-      eventsProcessed
-      progressBlock
-    }
-  }`;
+// Envio defaults: user=postgres, password=testing, database=envio-dev, port=5433
+const ENVIO_PG_PORT = 5433;
+const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${ENVIO_PG_PORT}/envio-dev`;
 
+async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   console.log("\n--- Envio ---\n");
 
   // Clean previous state
@@ -247,31 +293,37 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
 
   const durationPromise = sleep(DURATION_S * 1_000);
 
-  // Start envio dev with TUI disabled
+  // Start envio with TUI and Hasura disabled — we read PostgreSQL directly
   const envioEnv = {
     ...process.env,
     TUI_OFF: "true",
     ENVIO_HASURA: "false",
-    HASURA_EXTERNAL_PORT: String(BENCHMARK_PORT),
+    ENVIO_PG_PORT: String(ENVIO_PG_PORT),
   };
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
-  await exec("pnpm", ["envio", "codegen"], ENVIO_DIR);
+  await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
   activeProc = dev;
 
-  // Wait for GraphQL to become ready, sleep concurrently
-  await Promise.all([waitReady(GRAPHQL_URL, QUERY), durationPromise]);
+  // Wait for envio_chains table to have data, sleep concurrently
+  await Promise.all([
+    waitPg(ENVIO_DB_URL, "SELECT 1 FROM public.envio_chains LIMIT 1"),
+    durationPromise,
+  ]);
 
-  // Snapshot results
-  const data: any = await gql(GRAPHQL_URL, QUERY);
+  // Snapshot results from PostgreSQL
+  const metaRow = await psql(
+    ENVIO_DB_URL,
+    "SELECT events_processed, progress_block FROM public.envio_chains LIMIT 1"
+  );
   await kill(dev);
   activeProc = null;
 
-  // Compute metrics
-  const meta = data._meta[0];
-  const totalEvents: number = meta?.eventsProcessed ?? 0;
-  const totalBlocks =
-    meta?.progressBlock != null ? meta.progressBlock - START_BLOCK : 0;
+  // Parse "events_processed|progress_block" (psql -A uses | as delimiter)
+  const [eventsStr, blockStr] = metaRow.split("|");
+  const totalEvents = parseInt(eventsStr, 10) || 0;
+  const progressBlock = parseInt(blockStr, 10) || 0;
+  const totalBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
 
   return {
     name: "Envio",
