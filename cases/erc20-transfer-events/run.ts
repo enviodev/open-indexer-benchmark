@@ -278,8 +278,12 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
 const ENVIO_PG_PORT = 5433;
 const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${ENVIO_PG_PORT}/envio-dev`;
 
-async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
-  console.log("\n--- Envio ---\n");
+async function benchmarkEnvioImpl(
+  rpcUrl: string,
+  mode: "hypersync" | "rpc"
+): Promise<BenchmarkResult> {
+  const label = mode === "rpc" ? "Envio - RPC" : "Envio";
+  console.log(`\n--- ${label} ---\n`);
 
   // Clean previous state
   console.log("Cleaning envio cache...");
@@ -297,6 +301,8 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
     TUI_OFF: "true",
     ENVIO_HASURA: "false",
     ENVIO_PG_PORT: String(ENVIO_PG_PORT),
+    ENVIO_RPC_URL: rpcUrl,
+    ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
   };
   console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
@@ -324,10 +330,18 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
   const totalBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
 
   return {
-    name: "Envio",
+    name: label,
     totalEvents,
     totalBlocks,
   };
+}
+
+async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
+  return benchmarkEnvioImpl(rpcUrl, "hypersync");
+}
+
+async function benchmarkEnvioRpc(rpcUrl: string): Promise<BenchmarkResult> {
+  return benchmarkEnvioImpl(rpcUrl, "rpc");
 }
 
 // ── Rindexer Benchmark ────────────────────────────────────────────────
@@ -694,6 +708,7 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
 const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
   {
     envio: benchmarkEnvio,
+    "envio-rpc": benchmarkEnvioRpc,
     ponder: benchmarkPonder,
     rindexer: benchmarkRindexer,
     subquery: benchmarkSubQuery,
