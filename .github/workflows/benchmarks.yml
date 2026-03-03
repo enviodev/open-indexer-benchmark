@@ -24,6 +24,20 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-benchmarks'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testing
+          POSTGRES_DB: envio-dev
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +51,7 @@ jobs:
 
       - name: Run benchmarks
         run: |
+          set -o pipefail
           DURATION="${{ inputs.duration }}"
           DURATION="${DURATION:-60}"
           INDEXERS="${{ inputs.indexers }}"
