@@ -42,10 +42,10 @@ Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. St
 This benchmark is inspired by the one used on the [Ponder landing page](https://ponder.sh/). It's the most basic indexing case of a single contract.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
-| | Envio | Sqd (7.5x slower) | Rindexer (33.2x slower) | Ponder (153.5x slower) | SubQuery (758.7x slower) |
-| --- | --- | --- | --- | --- | --- |
-| blocks | 4,776,567 (79609.4/s) | 637,535 (10625.6/s) | 143,967 (2399.4/s) | 31,125 (518.8/s) | 6,296 (104.9/s) |
-| events | 634,074 (10567.9/s) | 86,341 (1439.0/s) | 9,421 (157.0/s) | 2,745 (45.8/s) | 552 (9.2/s) |
+| | Envio | Sqd (6.9x slower) | Rindexer (17.3x slower) | Envio - RPC (25.9x slower) | Ponder (182.6x slower) | SubQuery (336.3x slower) |
+| --- | --- | --- | --- | --- | --- | --- |
+| blocks | 4,980,121 (83002.0/s) | 722,324 (12038.7/s) | 288,441 (4807.4/s) | 191,999 (3200.0/s) | 27,271 (454.5/s) | 14,810 (246.8/s) |
+| events | 676,025 (11267.1/s) | 93,841 (1564.0/s) | 33,343 (555.7/s) | 14,654 (244.2/s) | 2,388 (39.8/s) | 1,425 (23.8/s) |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
