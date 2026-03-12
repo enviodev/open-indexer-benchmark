@@ -124,6 +124,8 @@ jobs:
     if: always() && needs.setup.result == 'success'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all results
         uses: actions/download-artifact@v4
         with:
@@ -131,6 +133,7 @@ jobs:
           pattern: benchmark-*
 
       - name: Build comparison table
+        id: build-table
         uses: actions/github-script@v7
         with:
           script: |
@@ -185,6 +188,8 @@ jobs:
 
             core.summary.addRaw(`## ERC20 Transfer Events Benchmark\n\n${table}\n`);
             await core.summary.write();
+
+            fs.writeFileSync('/tmp/benchmark-table.md', table);
 
       - name: Comment results on PR
         if: github.event_name == 'pull_request' && !cancelled()
@@ -258,3 +263,22 @@ jobs:
               issue_number: context.issue.number,
               body
             });
+
+      - name: Update README
+        if: github.event_name == 'push'
+        run: |
+          [ -f /tmp/benchmark-table.md ] || exit 0
+
+          # Replace content between markers with the new table
+          awk '
+            /<!-- BENCHMARK:erc20-transfer-events:START -->/ { print; while ((getline line < "/tmp/benchmark-table.md") > 0) print line; skip=1; next }
+            /<!-- BENCHMARK:erc20-transfer-events:END -->/ { skip=0 }
+            !skip { print }
+          ' README.md > README.tmp && mv README.tmp README.md
+
+          git diff --quiet README.md && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Update benchmark results in README"
+          git push
