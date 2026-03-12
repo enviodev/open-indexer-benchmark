@@ -247,7 +247,7 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   const [transferCount, approvalCount, checkpoint] = await Promise.all([
     psql(PONDER_DB_URL, "SELECT count(*) FROM transfer_event"),
     psql(PONDER_DB_URL, "SELECT count(*) FROM approval_event"),
-    psql(PONDER_DB_URL, 'SELECT "latestCheckpoint" FROM _ponder_checkpoint LIMIT 1').catch(() => ""),
+    psql(PONDER_DB_URL, 'SELECT "latest_checkpoint" FROM _ponder_checkpoint LIMIT 1').catch(() => ""),
   ]);
   await kill(dev);
   activeProc = null;
