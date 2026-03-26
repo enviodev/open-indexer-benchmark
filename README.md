@@ -1,64 +1,130 @@
 # Open Indexer Benchmark
 
-An open, honest, and objective benchmark for blockchain indexers (EVM, Solana, and more). We compare historical backfill speed, latency, data storage, DX, and anything else you find important. Contributions welcome!
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?logo=discord&logoColor=white)](https://discord.com/invite/envio)
 
-## Introduction
+An open, honest, and objective benchmark for blockchain indexers. All results are publicly verifiable, all code is open, and contributions are welcome.
 
-The project started in May 2025 as a fork of [Sentio](https://sentio.xyz) research on blockchain indexer performance. See it here: [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md). We are not affiliated with Sentio and committed a few changes to the codebase to make [Envio](https://envio.dev) usage more idiomatic. [SQD](https://www.sqd.ai) team did the same. After this, the original repository was closed and only the fork remained.
+This repository is maintained by [Envio](https://envio.dev) but aims to be objective and fair. If you want to add a new use case, indexer, or correction, open an issue or pull request.
 
-Now, after almost a year without updates, many projects have evolved and new problems have emerged. We are reopening the project to compare the performance of indexers on new use cases. Even though this benchmark now lives under the [Envio](https://envio.dev) organization, we aim to be objective and fair in our comparisons.
+> All benchmark data referenced on the [Envio landing page](https://envio.dev) and in the [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) comparison article comes from this repository.
 
-## How to contribute
+---
 
-We are open to contributions! If you want to add a new use case, please open an issue or a pull request.
+## Featured Indexers
 
-## Featured Projects
-
-> In alphabetical order
+Indexers included in this benchmark (alphabetical order):
 
 - [Envio](https://envio.dev)
-- [Goldsky](https://goldsky.com/)
-- [Ponder](https://ponder.sh/)
-- [rindexer](https://rindexer.xyz/)
-- [Sentio](https://sentio.xyz/)
+- [Goldsky](https://goldsky.com)
+- [Ponder](https://ponder.sh)
+- [rindexer](https://rindexer.xyz)
+- [Sentio](https://sentio.xyz)
 - [SQD](https://www.sqd.ai)
-- [SubQuery](https://subquery.network/)
-- [TheGraph](https://thegraph.com/)
+- [SubQuery](https://subquery.network)
+- [The Graph](https://thegraph.com)
 
-## Cases
+---
 
-For every case we run the following benchmarks:
+## Methodology
 
-- Backfill speed - we run every indexer for exactly 1 minute and measure how many blocks and events were indexed per second
+**Backfill speed**: each indexer runs for exactly 1 minute. We measure how many blocks and events were indexed per second. Results are sorted by the most efficient indexer in each category.
 
-The results are sorted by the most efficient indexer in each category.
+All benchmarks run on standardised hardware. RPC provider: Alchemy Growth tier when built-in RPC support is unavailable.
 
-You can enter the cases directory to see a detailed breakdown of each case, see code and run benchmarks yourself.
+You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 
-### [ERC20 Transfer Events](./cases/erc20-transfer-events/README.md)
+---
 
-Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Store decoded event logs + aggregate account balances.
+## Results
 
-This benchmark is inspired by the one used on the [Ponder landing page](https://ponder.sh/). It's the most basic indexing case of a single contract.
+### ERC-20 Transfer Events
 
-<!-- BENCHMARK:erc20-transfer-events:START -->
-| | Envio | Sqd (5.9x slower) | Envio - RPC (18.8x slower) | Rindexer (28.3x slower) | Ponder (153.7x slower) | SubQuery (341.3x slower) |
-| --- | --- | --- | --- | --- | --- | --- |
-| blocks | 4,630,634 (77177.2/s) | 780,390 (13006.5/s) | 245,999 (4100.0/s) | 163,812 (2730.2/s) | 30,131 (502.2/s) | 13,566 (226.1/s) |
-| events | 599,038 (9984.0/s) | 97,631 (1627.2/s) | 29,529 (492.1/s) | 12,435 (207.3/s) | 2,663 (44.4/s) | 1,320 (22.0/s) |
-<!-- BENCHMARK:erc20-transfer-events:END -->
+Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Stores decoded event logs and aggregates account balances. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
+
+| Indexer | Blocks (blocks/s) | Events (events/s) | vs Envio |
+|---|---|---|---|
+| Envio | 4,630,634 (77,177/s) | 599,038 (9,984/s) | baseline |
+| SQD | 780,390 (13,007/s) | 97,631 (1,627/s) | 5.9x slower |
+| Envio RPC | 245,999 (4,100/s) | 29,529 (492/s) | 18.8x slower |
+| rindexer | 163,812 (2,730/s) | 12,435 (207/s) | 28.3x slower |
+| Ponder | 30,131 (502/s) | 2,663 (44/s) | 153.7x slower |
+| SubQuery | 13,566 (226/s) | 1,320 (22/s) | 341.3x slower |
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
 
-### [2025 Sentio Benchmarks](./sentio-benchmarks-april-2025/README.md)
+---
 
-| Case                   | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio_Subgraph | Goldsky_Subgraph |
-| ---------------------- | ------ | --------------- | ---------------- | ------ | -------- | -------- | --------------- | ---------------- |
-| case_1_lbtc_event_only | 8m     |                 | 3m               | 1h40m  | 10m      | 3h9m     | 2h36m           |                  |
-| case_2_lbtc_full       | 6m     |                 | 1m               | 45m    | 34m      | 1h3m     | 56m             |                  |
-| case_3_ethereum_block  | 18m    | 7.9s            |                  | 33m    | 1m‡      | 10m      | 15m             |                  |
-| case_4_on_transaction  | 17m    | 1m26s           |                  | 33m    | 7m       | N/A      |                 |                  |
-| case_5_on_trace        | 16m    | 41s             |                  | N/A§   | 2m       | 8m       | 1h21m           |                  |
-| case_6_template        | 19m    |                 | 8s               | 21m    | 2m       | 19m      | 10m             | 20h24m           |
+### Sentio Benchmark Cases
 
-See the full breakdown in [./sentio-benchmarks-april-2025/README.md](./sentio-benchmarks-april-2025/README.md).
+Six real-world indexing scenarios covering events, blocks, transactions, and traces on Ethereum Mainnet.
+
+| Case | Description |
+|---|---|
+| case_1_lbtc_event_only | Simple event indexing of LBTC token transfers. No RPC calls, write-only. |
+| case_2_lbtc_full | Complex indexing with RPC calls for token balances and point calculation. Read-after-write. |
+| case_3_ethereum_block | Block-level indexing of Ethereum blocks and metadata extraction. |
+| case_4_on_transaction | Transaction gas usage indexing. |
+| case_5_on_trace | Uniswap V2 transaction trace analysis. Swap decoding from execution traces. |
+| case_6_template | Uniswap V2 factory template benchmark. Pair creation and swap event analysis. |
+
+| Case | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio Subgraph | Goldsky Subgraph |
+|---|---|---|---|---|---|---|---|---|
+| case_1_lbtc_event_only | 8m | 3m | 1h 40m | 10m | 3h 9m | 2h 36m | | |
+| case_2_lbtc_full | 6m | 1m | 45m | 34m | 1h 3m | 56m | | |
+| case_3_ethereum_block | 18m | 7.9s | 33m | 1m | 10m | 15m | | |
+| case_4_on_transaction | 17m | 1m 26s | 33m | 7m | N/A | | | |
+| case_5_on_trace | 16m | 41s | N/A | 2m | 8m | 1h 21m | | |
+| case_6_template | 19m | 8s | 21m | 2m | 19m | 10m | 20h 24m | |
+
+See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
+
+---
+
+### Uniswap V2 Factory, May 2025
+
+| Indexer | Time to complete | vs HyperIndex |
+|---|---|---|
+| Envio HyperIndex | 1 minute | baseline |
+| Subsquid | 15 minutes | 15x slower |
+| The Graph | 2 hours 23 minutes | 143x slower |
+| Ponder | 2 hours 38 minutes | 158x slower |
+
+Benchmark originally run by [Sentio](https://sentio.xyz) in May 2025. Full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
+
+---
+
+## Background
+
+This project started in May 2025 as a fork of Sentio's research on blockchain indexer performance. The original repository was later closed and only the fork remained. Envio has since reopened and extended the benchmark to cover new use cases and keep results current as indexers evolve.
+
+We are not affiliated with Sentio. A few changes were made to the original codebase to make Envio usage more idiomatic. The SQD team made similar adjustments for their implementation.
+
+Even though this benchmark now lives under the Envio organisation, the goal is objective and fair comparisons. Contributions from any indexer team are welcome.
+
+---
+
+## Running the benchmarks
+
+See the README in each case directory for setup instructions and requirements:
+
+- [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md)
+- [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md)
+
+---
+
+## Contributing
+
+Contributions are welcome. Open an issue or pull request to add a new indexer, add a new benchmark scenario, report a result that looks incorrect, or improve methodology.
+
+---
+
+## Related
+
+- [Envio HyperIndex](https://github.com/enviodev/hyperindex)
+- [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026)
+- [Envio Docs](https://docs.envio.dev)
+
+## Support
+
+- [Discord community](https://discord.com/invite/envio)
+- Telegram community](https://t.me/+kAIGElzPjApiMjI0)
