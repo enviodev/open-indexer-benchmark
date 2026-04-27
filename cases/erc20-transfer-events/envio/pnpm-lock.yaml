@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       envio:
-        specifier: 3.0.0-alpha.21
-        version: 3.0.0-alpha.21(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
+        specifier: 3.0.0-alpha.22
+        version: 3.0.0-alpha.22(react-dom@19.2.4(react@19.2.5))(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -343,6 +343,9 @@ packages:
     peerDependencies:
       react: '>=19.1.0'
       react-dom: '>=19.1.0'
+
+  '@rescript/runtime@12.2.0':
+    resolution: {integrity: sha512-NwfljDRq1rjFPHUaca1nzFz13xsa9ZGkBkLvMhvVgavJT5+A4rMcLu8XAaVTi/oAhO/tlHf9ZDoOTF1AfyAk9Q==}
 
   '@rollup/rollup-android-arm-eabi@4.57.1':
     resolution: {integrity: sha512-A6ehUVSiSaaliTxai040ZpZ2zTevHYbvu/lDoeAteHI8QnaosIzm4qwtezfRg1jOYaUmnzLX1AOD6Z+UJjtifg==}
@@ -748,28 +751,36 @@ packages:
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
-  envio-darwin-arm64@3.0.0-alpha.21:
-    resolution: {integrity: sha512-Y8jQnHQJ96wOzZ8rBgpbyBjAnprCo4SRbuXZwL0T4mkOeGoPXCGQ/NWOvmJfkVz0jZPlA0oVtWbVFFlLSNSHDQ==}
+  envio-darwin-arm64@3.0.0-alpha.22:
+    resolution: {integrity: sha512-DP3AzDyj9gaZTGm7rRcd81DAiO5YmyT4p7c4BXPs9eEeklogVh9fmZ864JawQmKYA5C4B1mNNsSlsdcNIPKICw==}
     cpu: [arm64]
     os: [darwin]
 
-  envio-darwin-x64@3.0.0-alpha.21:
-    resolution: {integrity: sha512-7d2ROZpw9bABfjcA1GaeHkqLSZzsfdGLB/jwqeADrG80xlJl2NvV5+aJWcsxJLfRsqSAVcYOwm3M1IWZh14CAQ==}
+  envio-darwin-x64@3.0.0-alpha.22:
+    resolution: {integrity: sha512-V6dTqc75gCfEzpgLuNAJyNArMTurDVw+sWnikvYMnJxXJF7Wf2ESuXnj0SFud+9W0W0P1WJ5YnP9Ysk76hEaMA==}
     cpu: [x64]
     os: [darwin]
 
-  envio-linux-arm64@3.0.0-alpha.21:
-    resolution: {integrity: sha512-aOdRnOl+yzyZhEh54ZIlIWxqvLOxNte5RC2K24ewyuDCRU5LjBRypkS5ncPyhe0q/n3Q3l+zcU1sjp2CDh0QOg==}
+  envio-linux-arm64@3.0.0-alpha.22:
+    resolution: {integrity: sha512-hRRBSnVoNt5wxskOVGCsywRatIEZv+5VLdo8JBCR9/NYWI+UusWaZFVzxQQK2rSjyblpZymNzA9BVGN67cnUsg==}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
-  envio-linux-x64@3.0.0-alpha.21:
-    resolution: {integrity: sha512-X0o78EPQGoLAnDRN7dVbx8h2HUxuUOmGIhivd/Y2crbLaqPKgQFlGuq8+TYsrGU5yKVZlCJgKyC+UWoDKWREbw==}
+  envio-linux-x64-musl@3.0.0-alpha.22:
+    resolution: {integrity: sha512-l4wyb/u9sYJeAvYMJJlP+VWBxzgNrze2OaRNaeDiE2j9fwVJgsvtENyJ6oTktq8eGY3gzvNBRfxlPglnR7B1ng==}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
-  envio@3.0.0-alpha.21:
-    resolution: {integrity: sha512-IRrYMZCkj0Ws1LMaoNbl/dqePjygiHuTyB22dnmldsqp2RJth9XTIXFX5BEGp6osxdXeGMN+uDCxiistknIZug==}
+  envio-linux-x64@3.0.0-alpha.22:
+    resolution: {integrity: sha512-SSpiAERsYxL50kkyBw8lepj+F3aUxRN/4xXMFXW2rhwfYHojHWUnvmp8nsVSYWiN6uuJ6KeJwoKvFypHFz3Guw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  envio@3.0.0-alpha.22:
+    resolution: {integrity: sha512-Ol7PQU7dIaRKEg1JaNq+HJWSqzcQk5V7CSazrXh4X/6GfHd00nNNyifAsgjd3RZS5GF9MzBn3YJuTVUwH3sVIg==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -1010,6 +1021,9 @@ packages:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
     engines: {node: '>=10'}
 
+  js-sdsl@4.4.2:
+    resolution: {integrity: sha512-dwXFwByc/ajSV6m5bcKAPwe4yDDF6D614pxmIi5odytzxRlwqF6nwoiCek80Ixc7Cvma5awClxrzFtxCQvcM8w==}
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -1204,8 +1218,8 @@ packages:
     peerDependencies:
       react: ^19.2.0
 
-  react@19.2.3:
-    resolution: {integrity: sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA==}
+  react@19.2.5:
+    resolution: {integrity: sha512-llUJLzz1zTUBrskt2pwZgLq59AemifIftw4aB7JxOqf1HY2FDaGDxgwpAPVzHU1kdWabH7FauP4i1oEeer2WCA==}
     engines: {node: '>=0.10.0'}
 
   real-require@0.2.0:
@@ -1216,24 +1230,13 @@ packages:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
     engines: {node: '>=0.10.0'}
 
-  rescript-envsafe@5.0.0:
-    resolution: {integrity: sha512-xSQbNsFSSQEynvLWUYtI7GJJhzicACLTq5aO1tjgK0N2Vcm9qlrkcLSmnU8tTohebEu9zgm1V/xYY+oGeQgLvA==}
+  rescript-schema@9.5.1:
+    resolution: {integrity: sha512-g2UEMqZ0IVkW8Os7vDs3JrcSS9pyQNubksY+doa3wgt86Y+c9ruvynikDrZLvZYQyQyF1vLJc05r0r2/jLdeZQ==}
     peerDependencies:
-      rescript: 11.x
-      rescript-schema: 9.x
-
-  rescript-schema@9.3.4:
-    resolution: {integrity: sha512-VPhkkHCSQSo2KienoMD4Adu/yS8WhckmsUFFrNhKrt5yqeiJt+pY6/V+puuRIFLlWSIqGyu5/pxqSNUg3VLyxA==}
-    peerDependencies:
-      rescript: 11.x
+      rescript: ^12.0.0-alpha.8
     peerDependenciesMeta:
       rescript:
         optional: true
-
-  rescript@11.1.3:
-    resolution: {integrity: sha512-bI+yxDcwsv7qE34zLuXeO8Qkc2+1ng5ErlSjnUIZdrAWKoGzHXpJ6ZxiiRBUoYnoMsgRwhqvrugIFyNgWasmsw==}
-    engines: {node: '>=10'}
-    hasBin: true
 
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
@@ -1789,10 +1792,12 @@ snapshots:
 
   '@pinojs/redact@0.4.0': {}
 
-  '@rescript/react@0.14.1(react-dom@19.2.4(react@19.2.3))(react@19.2.3)':
+  '@rescript/react@0.14.1(react-dom@19.2.4(react@19.2.5))(react@19.2.5)':
     dependencies:
-      react: 19.2.3
-      react-dom: 19.2.4(react@19.2.3)
+      react: 19.2.5
+      react-dom: 19.2.4(react@19.2.5)
+
+  '@rescript/runtime@12.2.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.57.1':
     optional: true
@@ -2114,19 +2119,22 @@ snapshots:
     dependencies:
       once: 1.4.0
 
-  envio-darwin-arm64@3.0.0-alpha.21:
+  envio-darwin-arm64@3.0.0-alpha.22:
     optional: true
 
-  envio-darwin-x64@3.0.0-alpha.21:
+  envio-darwin-x64@3.0.0-alpha.22:
     optional: true
 
-  envio-linux-arm64@3.0.0-alpha.21:
+  envio-linux-arm64@3.0.0-alpha.22:
     optional: true
 
-  envio-linux-x64@3.0.0-alpha.21:
+  envio-linux-x64-musl@3.0.0-alpha.22:
     optional: true
 
-  envio@3.0.0-alpha.21(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3):
+  envio-linux-x64@3.0.0-alpha.22:
+    optional: true
+
+  envio@3.0.0-alpha.22(react-dom@19.2.4(react@19.2.5))(typescript@5.9.3):
     dependencies:
       '@clickhouse/client': 1.17.0
       '@elastic/ecs-pino-format': 1.4.0
@@ -2137,36 +2145,38 @@ snapshots:
       '@fuel-ts/hasher': 0.96.1
       '@fuel-ts/math': 0.96.1
       '@fuel-ts/utils': 0.96.1
-      '@rescript/react': 0.14.1(react-dom@19.2.4(react@19.2.3))(react@19.2.3)
+      '@rescript/react': 0.14.1(react-dom@19.2.4(react@19.2.5))(react@19.2.5)
+      '@rescript/runtime': 12.2.0
       bignumber.js: 9.3.1
       date-fns: 3.3.1
       dotenv: 16.4.5
       eventsource: 4.1.0
       express: 4.19.2
-      ink: 6.8.0(react@19.2.3)
-      ink-big-text: 2.0.0(ink@6.8.0(react@19.2.3))(react@19.2.3)
-      ink-spinner: 5.0.0(ink@6.8.0(react@19.2.3))(react@19.2.3)
+      ink: 6.8.0(react@19.2.5)
+      ink-big-text: 2.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5)
+      ink-spinner: 5.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5)
+      js-sdsl: 4.4.2
       pino: 10.3.1
       pino-pretty: 13.1.3
       postgres: 3.4.8
       prom-client: 15.1.3
-      rescript: 11.1.3
-      rescript-envsafe: 5.0.0(rescript-schema@9.3.4(rescript@11.1.3))(rescript@11.1.3)
-      rescript-schema: 9.3.4(rescript@11.1.3)
+      react: 19.2.5
+      rescript-schema: 9.5.1
       tsx: 4.21.0
       viem: 2.46.2(typescript@5.9.3)
       yargs: 17.7.2
     optionalDependencies:
-      envio-darwin-arm64: 3.0.0-alpha.21
-      envio-darwin-x64: 3.0.0-alpha.21
-      envio-linux-arm64: 3.0.0-alpha.21
-      envio-linux-x64: 3.0.0-alpha.21
+      envio-darwin-arm64: 3.0.0-alpha.22
+      envio-darwin-x64: 3.0.0-alpha.22
+      envio-linux-arm64: 3.0.0-alpha.22
+      envio-linux-x64: 3.0.0-alpha.22
+      envio-linux-x64-musl: 3.0.0-alpha.22
     transitivePeerDependencies:
       - '@types/react'
       - bufferutil
-      - react
       - react-devtools-core
       - react-dom
+      - rescript
       - supports-color
       - typescript
       - utf-8-validate
@@ -2369,20 +2379,20 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ink-big-text@2.0.0(ink@6.8.0(react@19.2.3))(react@19.2.3):
+  ink-big-text@2.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5):
     dependencies:
       cfonts: 3.3.1
-      ink: 6.8.0(react@19.2.3)
+      ink: 6.8.0(react@19.2.5)
       prop-types: 15.8.1
-      react: 19.2.3
+      react: 19.2.5
 
-  ink-spinner@5.0.0(ink@6.8.0(react@19.2.3))(react@19.2.3):
+  ink-spinner@5.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5):
     dependencies:
       cli-spinners: 2.9.2
-      ink: 6.8.0(react@19.2.3)
-      react: 19.2.3
+      ink: 6.8.0(react@19.2.5)
+      react: 19.2.5
 
-  ink@6.8.0(react@19.2.3):
+  ink@6.8.0(react@19.2.5):
     dependencies:
       '@alcalzone/ansi-tokenize': 0.2.4
       ansi-escapes: 7.3.0
@@ -2397,8 +2407,8 @@ snapshots:
       indent-string: 5.0.0
       is-in-ci: 2.0.0
       patch-console: 2.0.0
-      react: 19.2.3
-      react-reconciler: 0.33.0(react@19.2.3)
+      react: 19.2.5
+      react-reconciler: 0.33.0(react@19.2.5)
       scheduler: 0.27.0
       signal-exit: 3.0.7
       slice-ansi: 8.0.0
@@ -2448,6 +2458,8 @@ snapshots:
       ws: 8.18.3
 
   joycon@3.1.1: {}
+
+  js-sdsl@4.4.2: {}
 
   js-tokens@4.0.0: {}
 
@@ -2624,34 +2636,25 @@ snapshots:
       iconv-lite: 0.4.24
       unpipe: 1.0.0
 
-  react-dom@19.2.4(react@19.2.3):
+  react-dom@19.2.4(react@19.2.5):
     dependencies:
-      react: 19.2.3
+      react: 19.2.5
       scheduler: 0.27.0
 
   react-is@16.13.1: {}
 
-  react-reconciler@0.33.0(react@19.2.3):
+  react-reconciler@0.33.0(react@19.2.5):
     dependencies:
-      react: 19.2.3
+      react: 19.2.5
       scheduler: 0.27.0
 
-  react@19.2.3: {}
+  react@19.2.5: {}
 
   real-require@0.2.0: {}
 
   require-directory@2.1.1: {}
 
-  rescript-envsafe@5.0.0(rescript-schema@9.3.4(rescript@11.1.3))(rescript@11.1.3):
-    dependencies:
-      rescript: 11.1.3
-      rescript-schema: 9.3.4(rescript@11.1.3)
-
-  rescript-schema@9.3.4(rescript@11.1.3):
-    optionalDependencies:
-      rescript: 11.1.3
-
-  rescript@11.1.3: {}
+  rescript-schema@9.5.1: {}
 
   resolve-pkg-maps@1.0.0: {}
 

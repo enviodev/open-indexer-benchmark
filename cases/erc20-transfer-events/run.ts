@@ -20,14 +20,38 @@ const DURATION_S = (() => {
   return flag ? parseInt(flag.split("=")[1], 10) : 60;
 })();
 
+// Per-indexer run durations. Most indexers run for DURATION_S, but SubQuery
+// starts up slowly inside Docker, so we extend its run to amortise the boot
+// cost. The summary uses each indexer's actual DURATION_S to compute per-second
+// rates, and surfaces a "(Ns)" tag whenever it differs from DURATION_S.
+const SUBQUERY_DURATION_S = Math.max(DURATION_S, 180);
+
 const SUMMARY_DELAY_MS = 3_000;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface BenchmarkResult {
   name: string;
-  totalEvents: number;
-  totalBlocks: number;
+  // The actual run window for this indexer. Most use DURATION_S; SubQuery
+  // extends to SUBQUERY_DURATION_S. Surfaced in the summary so any non-
+  // baseline runs are visible.
+  durationS: number;
+  blocksPerSec: number;
+  eventsPerSec: number;
+}
+
+function buildResult(
+  name: string,
+  totalBlocks: number,
+  totalEvents: number,
+  durationS: number
+): BenchmarkResult {
+  return {
+    name,
+    durationS,
+    blocksPerSec: durationS > 0 ? totalBlocks / durationS : 0,
+    eventsPerSec: durationS > 0 ? totalEvents / durationS : 0,
+  };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -265,11 +289,7 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   const block = checkpoint.length >= 42 ? Number(BigInt(checkpoint.slice(26, 42))) : 0;
   const totalBlocks = block > START_BLOCK ? block - START_BLOCK : 0;
 
-  return {
-    name: "Ponder",
-    totalEvents,
-    totalBlocks,
-  };
+  return buildResult("Ponder", totalBlocks, totalEvents, DURATION_S);
 }
 
 // ── Envio Benchmark ────────────────────────────────────────────────────
@@ -304,7 +324,7 @@ async function benchmarkEnvioImpl(
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
   };
-  console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
+  console.log(`\nStarting envio for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
   activeProc = dev;
@@ -329,11 +349,7 @@ async function benchmarkEnvioImpl(
   const progressBlock = parseInt(blockStr, 10) || 0;
   const totalBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
 
-  return {
-    name: label,
-    totalEvents,
-    totalBlocks,
-  };
+  return buildResult(label, totalBlocks, totalEvents, DURATION_S);
 }
 
 async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
@@ -453,11 +469,7 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
   // Stop PostgreSQL
   await exec("docker", ["compose", "down"], RINDEXER_DIR, rindexerEnv);
 
-  return {
-    name: "Rindexer",
-    totalEvents,
-    totalBlocks,
-  };
+  return buildResult("Rindexer", totalBlocks, totalEvents, DURATION_S);
 }
 
 // ── SubQuery Benchmark ────────────────────────────────────────────────
@@ -538,9 +550,9 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   }
 
   // Start benchmark timer — app startup is included, Docker/DB init is not.
-  const durationPromise = sleep(DURATION_S * 1_000);
+  const durationPromise = sleep(SUBQUERY_DURATION_S * 1_000);
 
-  console.log(`\nStarting SubQuery services for ${DURATION_S}s...\n`);
+  console.log(`\nStarting SubQuery services for ${SUBQUERY_DURATION_S}s...\n`);
   const dev = start(
     "docker",
     ["compose", "up", "--remove-orphans"],
@@ -551,7 +563,7 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([
-    waitReady(GRAPHQL_URL, QUERY, DURATION_S * 1_000),
+    waitReady(GRAPHQL_URL, QUERY, SUBQUERY_DURATION_S * 1_000),
     durationPromise,
   ]);
 
@@ -571,11 +583,7 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   const lastHeight: number = data._metadata?.lastProcessedHeight ?? 0;
   const totalBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
 
-  return {
-    name: "SubQuery",
-    totalEvents,
-    totalBlocks,
-  };
+  return buildResult("SubQuery", totalBlocks, totalEvents, SUBQUERY_DURATION_S);
 }
 
 // ── Sqd Benchmark ───────────────────────────────────────────────────
@@ -696,11 +704,7 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
     }
   }
 
-  return {
-    name: "Sqd",
-    totalEvents,
-    totalBlocks,
-  };
+  return buildResult("Sqd", totalBlocks, totalEvents, DURATION_S);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
@@ -715,8 +719,11 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
     sqd: benchmarkSqd,
   };
 
-function formatInt(n: number): string {
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+function formatRate(n: number): string {
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
 }
 
 async function main() {
@@ -750,30 +757,30 @@ async function main() {
 
   const results: BenchmarkResult[] = [];
 
+  // Add a "(40s)" suffix to the indexer name when the run window differs from
+  // the baseline so the reader can see which entries are normalised over a
+  // non-default duration.
+  const labelWithDuration = (r: BenchmarkResult): string =>
+    r.durationS === DURATION_S ? r.name : `${r.name} (${r.durationS}s)`;
+
   // Run selected benchmarks sequentially to avoid resource contention
   for (const name of selected) {
     const result = await BENCHMARKS[name](rpcUrl);
     results.push(result);
     await sleep(SUMMARY_DELAY_MS);
     console.log(
-      `\nSummary — ${result.name}: ${formatInt(
-        result.totalBlocks
-      )} blocks, ${formatInt(result.totalEvents)} events\n`
+      `\nSummary — ${labelWithDuration(result)}: ${formatRate(
+        result.blocksPerSec
+      )} blocks/s, ${formatRate(result.eventsPerSec)} events/s\n`
     );
     await sleep(SUMMARY_DELAY_MS);
   }
 
-  // Compute per-second rates for sorting and table
-  const withRates = results.map((r) => ({
-    ...r,
-    eventsPerSec: r.totalEvents / DURATION_S,
-    blocksPerSec: r.totalBlocks / DURATION_S,
-  }));
-  withRates.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
+  results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
 
-  const firstRate = withRates[0].blocksPerSec;
-  const nameWithSlower = (r: (typeof withRates)[0], i: number) => {
-    if (i === 0 || withRates.length === 1) return r.name;
+  const firstRate = results[0].blocksPerSec;
+  const nameWithSlower = (r: BenchmarkResult, i: number) => {
+    if (i === 0 || results.length === 1) return r.name;
     const ratio = firstRate / r.blocksPerSec;
     const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
     return `${r.name} (${n}x slower)`;
@@ -781,36 +788,24 @@ async function main() {
 
   // Print final results table
   console.log(`\n=== Results (sorted by blocks/s) ===\n`);
-  for (let i = 0; i < withRates.length; i++) {
-    const r = withRates[i];
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
     console.log(`  ${nameWithSlower(r, i)}:`);
-    console.log(
-      `    Blocks : ${formatInt(r.totalBlocks)} (${r.blocksPerSec.toFixed(
-        1
-      )}/s)`
-    );
-    console.log(
-      `    Events : ${formatInt(r.totalEvents)} (${r.eventsPerSec.toFixed(
-        1
-      )}/s)`
-    );
+    console.log(`    Blocks : ${formatRate(r.blocksPerSec)}/s`);
+    console.log(`    Events : ${formatRate(r.eventsPerSec)}/s`);
   }
 
-  // Markdown comparison table: whole numbers with per-second in parentheses
-  const headerNames = withRates.map((r, i) => nameWithSlower(r, i));
+  // Markdown comparison table: per-second rates only.
+  const headerNames = results.map((r, i) => nameWithSlower(r, i));
   const header = ["| |", ...headerNames.map((name) => ` ${name} |`)].join("");
-  const sep = ["| --- |", ...withRates.map(() => " --- |")].join("");
+  const sep = ["| --- |", ...results.map(() => " --- |")].join("");
   const blocksRow = [
-    "| blocks |",
-    ...withRates.map(
-      (r) => ` ${formatInt(r.totalBlocks)} (${r.blocksPerSec.toFixed(1)}/s) |`
-    ),
+    "| blocks/s |",
+    ...results.map((r) => ` ${formatRate(r.blocksPerSec)} |`),
   ].join("");
   const eventsRow = [
-    "| events |",
-    ...withRates.map(
-      (r) => ` ${formatInt(r.totalEvents)} (${r.eventsPerSec.toFixed(1)}/s) |`
-    ),
+    "| events/s |",
+    ...results.map((r) => ` ${formatRate(r.eventsPerSec)} |`),
   ].join("");
 
   console.log(`\n=== Markdown ===\n`);
