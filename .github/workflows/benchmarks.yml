@@ -139,11 +139,17 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const duration = parseInt('${{ needs.setup.outputs.duration }}', 10) || 60;
 
             const resultsDir = 'results';
             const results = [];
             const outputs = [];
+
+            // Summary lines look like:
+            //   "Summary — Envio (40s): 77,177.0 blocks/s, 9,984.0 events/s"
+            //   "Summary — Ponder: 502.0 blocks/s, 44.0 events/s"
+            // The "(40s)" suffix is part of the displayed name when the
+            // indexer's run window differs from the baseline.
+            const SUMMARY_RE = /Summary — (.+?): ([\d,.]+) blocks\/s, ([\d,.]+) events\/s/;
 
             if (fs.existsSync(resultsDir)) {
               for (const dir of fs.readdirSync(resultsDir).sort()) {
@@ -152,14 +158,13 @@ jobs:
                 const content = fs.readFileSync(file, 'utf8');
                 outputs.push(content);
 
-                const match = content.match(/Summary — (.+?): ([\d,]+) blocks, ([\d,]+) events/);
+                const match = content.match(SUMMARY_RE);
                 if (match) {
-                  const name = match[1];
-                  const blocks = parseInt(match[2].replace(/,/g, ''), 10);
-                  const events = parseInt(match[3].replace(/,/g, ''), 10);
-                  results.push({ name, blocks, events,
-                    blocksPerSec: blocks / duration,
-                    eventsPerSec: events / duration });
+                  results.push({
+                    name: match[1],
+                    blocksPerSec: parseFloat(match[2].replace(/,/g, '')),
+                    eventsPerSec: parseFloat(match[3].replace(/,/g, '')),
+                  });
                 }
               }
             }
@@ -172,7 +177,6 @@ jobs:
 
             results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
             const firstRate = results[0].blocksPerSec;
-            const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
             const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
             const label = (r, i) => {
               if (i === 0 || results.length === 1) return r.name;
@@ -183,8 +187,8 @@ jobs:
 
             const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
             const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
-            const blocksRow = `| blocks | ${results.map(r => `${fmt(r.blocks)} (${fmtRate(r.blocksPerSec)}/s)`).join(' | ')} |`;
-            const eventsRow = `| events | ${results.map(r => `${fmt(r.events)} (${fmtRate(r.eventsPerSec)}/s)`).join(' | ')} |`;
+            const blocksRow = `| blocks/s | ${results.map(r => fmtRate(r.blocksPerSec)).join(' | ')} |`;
+            const eventsRow = `| events/s | ${results.map(r => fmtRate(r.eventsPerSec)).join(' | ')} |`;
             const table = [header, sep, blocksRow, eventsRow].join('\n');
 
             core.summary.addRaw(`## ERC20 Transfer Events Benchmark\n\n${table}\n`);
@@ -199,11 +203,12 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const duration = parseInt('${{ needs.setup.outputs.duration }}', 10) || 60;
 
             const resultsDir = 'results';
             const results = [];
             const outputs = [];
+
+            const SUMMARY_RE = /Summary — (.+?): ([\d,.]+) blocks\/s, ([\d,.]+) events\/s/;
 
             if (fs.existsSync(resultsDir)) {
               for (const dir of fs.readdirSync(resultsDir).sort()) {
@@ -212,14 +217,13 @@ jobs:
                 const content = fs.readFileSync(file, 'utf8');
                 outputs.push(content);
 
-                const match = content.match(/Summary — (.+?): ([\d,]+) blocks, ([\d,]+) events/);
+                const match = content.match(SUMMARY_RE);
                 if (match) {
-                  const name = match[1];
-                  const blocks = parseInt(match[2].replace(/,/g, ''), 10);
-                  const events = parseInt(match[3].replace(/,/g, ''), 10);
-                  results.push({ name, blocks, events,
-                    blocksPerSec: blocks / duration,
-                    eventsPerSec: events / duration });
+                  results.push({
+                    name: match[1],
+                    blocksPerSec: parseFloat(match[2].replace(/,/g, '')),
+                    eventsPerSec: parseFloat(match[3].replace(/,/g, '')),
+                  });
                 }
               }
             }
@@ -228,7 +232,7 @@ jobs:
             if (results.length > 0) {
               results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
               const firstRate = results[0].blocksPerSec;
-              const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+              const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
               const label = (r, i) => {
                 if (i === 0 || results.length === 1) return r.name;
                 const ratio = firstRate / r.blocksPerSec;
@@ -237,8 +241,8 @@ jobs:
               };
               const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
               const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
-              const blocksRow = `| blocks | ${results.map(r => `${fmt(r.blocks)} (${r.blocksPerSec.toFixed(1)}/s)`).join(' | ')} |`;
-              const eventsRow = `| events | ${results.map(r => `${fmt(r.events)} (${r.eventsPerSec.toFixed(1)}/s)`).join(' | ')} |`;
+              const blocksRow = `| blocks/s | ${results.map(r => fmtRate(r.blocksPerSec)).join(' | ')} |`;
+              const eventsRow = `| events/s | ${results.map(r => fmtRate(r.eventsPerSec)).join(' | ')} |`;
               table = [header, sep, blocksRow, eventsRow].join('\n');
             }
 
