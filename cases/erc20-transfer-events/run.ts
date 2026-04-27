@@ -20,15 +20,10 @@ const DURATION_S = (() => {
   return flag ? parseInt(flag.split("=")[1], 10) : 60;
 })();
 
-// Per-indexer run durations. Some indexers warrant a non-default window — Envio
-// in HyperSync mode often saturates well before the default 60s mark, so we
-// cap its run to keep the measurement on the active region. SubQuery starts
-// up slowly inside Docker, so we extend its run to amortise the boot cost.
-// The Envio RPC variant stays at the baseline because RPC sync is the slower
-// path and benefits from a full window. The summary uses each indexer's
-// actual durationS to compute per-second rates, and surfaces a "(Ns)" tag
-// whenever it differs from DURATION_S.
-const ENVIO_HYPERSYNC_DURATION_S = Math.min(DURATION_S, 50);
+// Per-indexer run durations. Most indexers run for DURATION_S, but SubQuery
+// starts up slowly inside Docker, so we extend its run to amortise the boot
+// cost. The summary uses each indexer's actual DURATION_S to compute per-second
+// rates, and surfaces a "(Ns)" tag whenever it differs from DURATION_S.
 const SUBQUERY_DURATION_S = Math.max(DURATION_S, 180);
 
 const SUMMARY_DELAY_MS = 3_000;
@@ -37,10 +32,9 @@ const SUMMARY_DELAY_MS = 3_000;
 
 interface BenchmarkResult {
   name: string;
-  // The actual run window for this indexer. Most use DURATION_S; Envio in
-  // HyperSync mode caps at ENVIO_HYPERSYNC_DURATION_S and SubQuery extends to
-  // SUBQUERY_DURATION_S. Surfaced in the summary so any non-baseline runs are
-  // visible.
+  // The actual run window for this indexer. Most use DURATION_S; SubQuery
+  // extends to SUBQUERY_DURATION_S. Surfaced in the summary so any non-
+  // baseline runs are visible.
   durationS: number;
   blocksPerSec: number;
   eventsPerSec: number;
@@ -309,9 +303,6 @@ async function benchmarkEnvioImpl(
   mode: "hypersync" | "rpc"
 ): Promise<BenchmarkResult> {
   const label = mode === "rpc" ? "Envio - RPC" : "Envio";
-  // RPC sync is the slower path and benefits from a full baseline window;
-  // HyperSync mode is capped (see ENVIO_HYPERSYNC_DURATION_S above).
-  const durationS = mode === "rpc" ? DURATION_S : ENVIO_HYPERSYNC_DURATION_S;
   console.log(`\n--- ${label} ---\n`);
 
   // Clean previous state
@@ -322,7 +313,7 @@ async function benchmarkEnvioImpl(
   console.log("Installing dependencies...\n");
   await exec("pnpm", ["install", "--frozen-lockfile"], ENVIO_DIR);
 
-  const durationPromise = sleep(durationS * 1_000);
+  const durationPromise = sleep(DURATION_S * 1_000);
 
   // Start envio with TUI and Hasura disabled — we read PostgreSQL directly
   const envioEnv = {
@@ -333,7 +324,7 @@ async function benchmarkEnvioImpl(
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
   };
-  console.log(`\nStarting envio for ${durationS}s...\n`);
+  console.log(`\nStarting envio for ${DURATION_S}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
   activeProc = dev;
@@ -358,7 +349,7 @@ async function benchmarkEnvioImpl(
   const progressBlock = parseInt(blockStr, 10) || 0;
   const totalBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
 
-  return buildResult(label, totalBlocks, totalEvents, durationS);
+  return buildResult(label, totalBlocks, totalEvents, DURATION_S);
 }
 
 async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
