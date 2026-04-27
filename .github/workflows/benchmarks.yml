@@ -29,7 +29,7 @@ jobs:
         run: |
           INDEXERS="${{ inputs.indexers }}"
           if [ -z "$INDEXERS" ]; then
-            echo 'matrix=["envio","envio-rpc","ponder","rindexer","subquery","sqd"]' >> "$GITHUB_OUTPUT"
+            echo 'matrix=["envio","envio-rpc","envio-bun","ponder","rindexer","subquery","sqd"]' >> "$GITHUB_OUTPUT"
           else
             MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | jq -R . | jq -sc .)
             echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -70,6 +70,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - if: matrix.indexer == 'envio-bun'
+        uses: oven-sh/setup-bun@v2
 
       - name: Prepare services
         run: |

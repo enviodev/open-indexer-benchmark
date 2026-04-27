@@ -280,9 +280,10 @@ const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${ENVIO_PG_PORT}/e
 
 async function benchmarkEnvioImpl(
   rpcUrl: string,
-  mode: "hypersync" | "rpc"
+  mode: "hypersync" | "rpc" | "bun"
 ): Promise<BenchmarkResult> {
-  const label = mode === "rpc" ? "Envio - RPC" : "Envio";
+  const label =
+    mode === "rpc" ? "Envio - RPC" : mode === "bun" ? "Envio - Bun" : "Envio";
   console.log(`\n--- ${label} ---\n`);
 
   // Clean previous state
@@ -304,9 +305,21 @@ async function benchmarkEnvioImpl(
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
   };
-  console.log(`\nStarting envio dev for ${DURATION_S}s...\n`);
-  await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
-  const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
+  // The bun mode runs envio's bin entry under the bun runtime via `bun --bun`,
+  // bypassing the node-hardcoded `.bin/envio` shim. Other modes use pnpm/node.
+  const ENVIO_BIN = "./node_modules/envio/bin.mjs";
+  const [runner, runnerPrefix] =
+    mode === "bun"
+      ? (["bun", ["--bun", ENVIO_BIN]] as const)
+      : (["pnpm", ["envio"]] as const);
+  console.log(`\nStarting envio for ${DURATION_S}s...\n`);
+  await exec(runner, [...runnerPrefix, "codegen"], ENVIO_DIR, envioEnv);
+  const dev = start(
+    runner,
+    [...runnerPrefix, "start", "-r"],
+    ENVIO_DIR,
+    envioEnv
+  );
   activeProc = dev;
 
   // Wait for envio_chains table to have data, sleep concurrently
@@ -342,6 +355,10 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
 
 async function benchmarkEnvioRpc(rpcUrl: string): Promise<BenchmarkResult> {
   return benchmarkEnvioImpl(rpcUrl, "rpc");
+}
+
+async function benchmarkEnvioBun(rpcUrl: string): Promise<BenchmarkResult> {
+  return benchmarkEnvioImpl(rpcUrl, "bun");
 }
 
 // ── Rindexer Benchmark ────────────────────────────────────────────────
@@ -709,6 +726,7 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
   {
     envio: benchmarkEnvio,
     "envio-rpc": benchmarkEnvioRpc,
+    "envio-bun": benchmarkEnvioBun,
     ponder: benchmarkPonder,
     rindexer: benchmarkRindexer,
     subquery: benchmarkSubQuery,
