@@ -12,7 +12,6 @@ Even though this benchmark now lives under the [Envio](https://envio.dev) organi
 
 > All benchmark data referenced on the [Envio landing page](https://envio.dev) and in the [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) comparison article comes from this repository.
 
----
 
 ## Featured Indexers
 
@@ -27,7 +26,6 @@ Indexers included in this benchmark (alphabetical order):
 - [SubQuery](https://subquery.network)
 - [The Graph](https://thegraph.com)
 
----
 
 ## Methodology
 
@@ -37,7 +35,6 @@ All benchmarks run on standardised hardware — all benchmarks run in GitHub CI.
 
 You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 
----
 
 ## Results
 
@@ -51,7 +48,6 @@ _Results will be populated automatically by the [benchmarks workflow](.github/wo
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
 
----
 
 ### Sentio Benchmark Cases, May 2025
 
@@ -77,7 +73,6 @@ Six real-world indexing scenarios covering events, blocks, transactions, and tra
 
 See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
 
----
 
 ### Uniswap V2 Factory
 
@@ -90,7 +85,6 @@ See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benc
 
 Benchmark originally run by [Sentio](https://sentio.xyz) in May 2025. Full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
 
----
 
 ## Running the benchmarks
 
@@ -99,13 +93,11 @@ See the README in each case directory for setup instructions and requirements:
 - [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md)
 - [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md)
 
----
 
 ## Contributing
 
 Contributions are welcome. Open an issue or pull request to add a new indexer, add a new benchmark scenario, report a result that looks incorrect, or improve methodology.
 
----
 
 ## Related
 
