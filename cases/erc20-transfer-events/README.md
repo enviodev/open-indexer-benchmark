@@ -62,7 +62,9 @@ Runs natively via `envio start -r`. Manages its own Docker infrastructure intern
 
 Envio runs are capped at **40s** (instead of the default 60s) — Envio typically saturates well before 60s, so a shorter window keeps the measurement on the active region of the run. The reported totals are scaled to a 60s-equivalent count so per-second rates are directly comparable to the rest of the matrix.
 
-The `envio-bun` variant runs the same case under the [Bun](https://bun.sh) runtime via `bun --bun envio start -r`. The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
+Tuned via `ENVIO_MAX_PARTITION_CONCURRENCY=30` and `ENVIO_INDEXING_MAX_BUFFER_SIZE=350000` to match the throughput Envio is configured for in production.
+
+The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
 
 ### Ponder
 

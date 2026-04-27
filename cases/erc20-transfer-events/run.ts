@@ -290,10 +290,9 @@ const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${ENVIO_PG_PORT}/e
 
 async function benchmarkEnvioImpl(
   rpcUrl: string,
-  mode: "hypersync" | "rpc" | "bun"
+  mode: "hypersync" | "rpc"
 ): Promise<BenchmarkResult> {
-  const label =
-    mode === "rpc" ? "Envio - RPC" : mode === "bun" ? "Envio - Bun" : "Envio";
+  const label = mode === "rpc" ? "Envio - RPC" : "Envio";
   console.log(`\n--- ${label} ---\n`);
 
   // Clean previous state
@@ -314,21 +313,12 @@ async function benchmarkEnvioImpl(
     ENVIO_PG_PORT: String(ENVIO_PG_PORT),
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
+    ENVIO_MAX_PARTITION_CONCURRENCY: "30",
+    ENVIO_INDEXING_MAX_BUFFER_SIZE: "350000",
   };
-  // The bun mode runs envio under the bun runtime via `bun --bun envio`.
-  // Other modes use pnpm/node.
-  const [runner, runnerPrefix] =
-    mode === "bun"
-      ? (["bun", ["--bun", "envio"]] as const)
-      : (["pnpm", ["envio"]] as const);
   console.log(`\nStarting envio for ${ENVIO_DURATION_S}s...\n`);
-  await exec(runner, [...runnerPrefix, "codegen"], ENVIO_DIR, envioEnv);
-  const dev = start(
-    runner,
-    [...runnerPrefix, "start", "-r"],
-    ENVIO_DIR,
-    envioEnv
-  );
+  await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
+  const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
   activeProc = dev;
 
   // Wait for envio_chains table to have data, sleep concurrently
@@ -368,10 +358,6 @@ async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
 
 async function benchmarkEnvioRpc(rpcUrl: string): Promise<BenchmarkResult> {
   return benchmarkEnvioImpl(rpcUrl, "rpc");
-}
-
-async function benchmarkEnvioBun(rpcUrl: string): Promise<BenchmarkResult> {
-  return benchmarkEnvioImpl(rpcUrl, "bun");
 }
 
 // ── Rindexer Benchmark ────────────────────────────────────────────────
@@ -743,7 +729,6 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
   {
     envio: benchmarkEnvio,
     "envio-rpc": benchmarkEnvioRpc,
-    "envio-bun": benchmarkEnvioBun,
     ponder: benchmarkPonder,
     rindexer: benchmarkRindexer,
     subquery: benchmarkSubQuery,
