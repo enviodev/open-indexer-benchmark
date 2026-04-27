@@ -60,7 +60,7 @@ All indexers share port `19876` for their GraphQL endpoint. Since benchmarks run
 
 Runs natively via `envio start -r`. Manages its own Docker infrastructure internally (Hasura). The external Hasura port is configured via `HASURA_EXTERNAL_PORT` env var to use the shared benchmark port. The benchmark timer starts when the process launches; Envio's internal Docker init is fast enough that it doesn't materially affect the measurement.
 
-The `envio-bun` variant runs the same case under the [Bun](https://bun.sh) runtime via `bun --bun ./node_modules/envio/bin.mjs start -r`, bypassing the node-hardcoded `.bin/envio` shim. The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
+The `envio-bun` variant runs the same case under the [Bun](https://bun.sh) runtime via `bun --bun envio start -r`. The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
 
 ### Ponder
 

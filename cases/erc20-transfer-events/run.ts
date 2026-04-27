@@ -305,12 +305,11 @@ async function benchmarkEnvioImpl(
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
   };
-  // The bun mode runs envio's bin entry under the bun runtime via `bun --bun`,
-  // bypassing the node-hardcoded `.bin/envio` shim. Other modes use pnpm/node.
-  const ENVIO_BIN = "./node_modules/envio/bin.mjs";
+  // The bun mode runs envio under the bun runtime via `bun --bun envio`.
+  // Other modes use pnpm/node.
   const [runner, runnerPrefix] =
     mode === "bun"
-      ? (["bun", ["--bun", ENVIO_BIN]] as const)
+      ? (["bun", ["--bun", "envio"]] as const)
       : (["pnpm", ["envio"]] as const);
   console.log(`\nStarting envio for ${DURATION_S}s...\n`);
   await exec(runner, [...runnerPrefix, "codegen"], ENVIO_DIR, envioEnv);
