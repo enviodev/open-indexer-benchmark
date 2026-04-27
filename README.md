@@ -29,7 +29,7 @@ Indexers included in this benchmark (alphabetical order):
 
 **Backfill speed**: each indexer runs for exactly 1 minute. We measure how many blocks and events were indexed per second. Results are sorted by the most efficient indexer in each category.
 
-All benchmarks run on standardised hardware — all benchmarks run in GitHub CI. RPC provider: [Envio HyperRPC](https://docs.envio.dev/docs/HyperSync/overview-hyperrpc) when built-in RPC support is unavailable.
+All benchmarks run in GitHub CI on standardised hardware. Indexers without built-in data source support use [Envio HyperRPC](https://docs.envio.dev/docs/HyperSync/overview-hyperrpc) as the RPC provider.
 
 You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 
