@@ -60,11 +60,9 @@ All indexers share port `19876` for their GraphQL endpoint. Since benchmarks run
 
 Runs natively via `envio start -r`. Manages its own Docker infrastructure internally (Hasura). The external Hasura port is configured via `HASURA_EXTERNAL_PORT` env var to use the shared benchmark port. The benchmark timer starts when the process launches; Envio's internal Docker init is fast enough that it doesn't materially affect the measurement.
 
-Envio runs are capped at **40s** (instead of the default 60s) — Envio typically saturates well before 60s, so a shorter window keeps the measurement on the active region of the run. The reported totals are scaled to a 60s-equivalent count so per-second rates are directly comparable to the rest of the matrix.
+Envio in HyperSync mode runs for **50s** (instead of the default 60s) — Envio typically saturates well before 60s, so a shorter window keeps the measurement on the active region of the run. Per-second rates are computed from the actual run window so they remain directly comparable to the rest of the matrix.
 
-Tuned via `ENVIO_MAX_PARTITION_CONCURRENCY=30` and `ENVIO_INDEXING_MAX_BUFFER_SIZE=350000` to match the throughput Envio is configured for in production.
-
-The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
+The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync, and stays at the full 60s baseline window since RPC sync is the slower path.
 
 ### Ponder
 

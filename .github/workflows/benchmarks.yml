@@ -147,9 +147,11 @@ jobs:
             // Summary lines look like:
             //   "Summary — Envio (40s): 77,177.0 blocks/s, 9,984.0 events/s"
             //   "Summary — Ponder: 502.0 blocks/s, 44.0 events/s"
-            // The "(40s)" suffix is part of the displayed name when the
-            // indexer's run window differs from the baseline.
+            // The "(40s)" suffix is part of the local Summary line so non-
+            // baseline windows are visible in CI logs, but the table column
+            // headers strip it to keep names tidy.
             const SUMMARY_RE = /Summary — (.+?): ([\d,.]+) blocks\/s, ([\d,.]+) events\/s/;
+            const stripDurationTag = name => name.replace(/\s\(\d+s\)$/, '');
 
             if (fs.existsSync(resultsDir)) {
               for (const dir of fs.readdirSync(resultsDir).sort()) {
@@ -161,7 +163,7 @@ jobs:
                 const match = content.match(SUMMARY_RE);
                 if (match) {
                   results.push({
-                    name: match[1],
+                    name: stripDurationTag(match[1]),
                     blocksPerSec: parseFloat(match[2].replace(/,/g, '')),
                     eventsPerSec: parseFloat(match[3].replace(/,/g, '')),
                   });
@@ -209,6 +211,7 @@ jobs:
             const outputs = [];
 
             const SUMMARY_RE = /Summary — (.+?): ([\d,.]+) blocks\/s, ([\d,.]+) events\/s/;
+            const stripDurationTag = name => name.replace(/\s\(\d+s\)$/, '');
 
             if (fs.existsSync(resultsDir)) {
               for (const dir of fs.readdirSync(resultsDir).sort()) {
@@ -220,7 +223,7 @@ jobs:
                 const match = content.match(SUMMARY_RE);
                 if (match) {
                   results.push({
-                    name: match[1],
+                    name: stripDurationTag(match[1]),
                     blocksPerSec: parseFloat(match[2].replace(/,/g, '')),
                     eventsPerSec: parseFloat(match[3].replace(/,/g, '')),
                   });

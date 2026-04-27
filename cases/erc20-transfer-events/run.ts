@@ -21,12 +21,14 @@ const DURATION_S = (() => {
 })();
 
 // Per-indexer run durations. Some indexers warrant a non-default window — Envio
-// often saturates well before the default 60s mark, so we cap its run to make
-// the measurement reflect peak rate rather than tail-idle. SubQuery starts up
-// slowly inside Docker, so we extend its run to amortise the boot cost. The
-// summary uses each indexer's actual durationS to compute per-second rates,
-// and surfaces a "(Ns)" tag whenever it differs from DURATION_S.
-const ENVIO_DURATION_S = Math.min(DURATION_S, 40);
+// in HyperSync mode often saturates well before the default 60s mark, so we
+// cap its run to keep the measurement on the active region. SubQuery starts
+// up slowly inside Docker, so we extend its run to amortise the boot cost.
+// The Envio RPC variant stays at the baseline because RPC sync is the slower
+// path and benefits from a full window. The summary uses each indexer's
+// actual durationS to compute per-second rates, and surfaces a "(Ns)" tag
+// whenever it differs from DURATION_S.
+const ENVIO_HYPERSYNC_DURATION_S = Math.min(DURATION_S, 50);
 const SUBQUERY_DURATION_S = Math.max(DURATION_S, 180);
 
 const SUMMARY_DELAY_MS = 3_000;
@@ -35,9 +37,10 @@ const SUMMARY_DELAY_MS = 3_000;
 
 interface BenchmarkResult {
   name: string;
-  // The actual run window for this indexer. Most use DURATION_S; Envio caps
-  // its window (ENVIO_DURATION_S) and SubQuery extends it (SUBQUERY_DURATION_S).
-  // Surfaced in the summary so any non-baseline runs are visible.
+  // The actual run window for this indexer. Most use DURATION_S; Envio in
+  // HyperSync mode caps at ENVIO_HYPERSYNC_DURATION_S and SubQuery extends to
+  // SUBQUERY_DURATION_S. Surfaced in the summary so any non-baseline runs are
+  // visible.
   durationS: number;
   blocksPerSec: number;
   eventsPerSec: number;
@@ -306,6 +309,9 @@ async function benchmarkEnvioImpl(
   mode: "hypersync" | "rpc"
 ): Promise<BenchmarkResult> {
   const label = mode === "rpc" ? "Envio - RPC" : "Envio";
+  // RPC sync is the slower path and benefits from a full baseline window;
+  // HyperSync mode is capped (see ENVIO_HYPERSYNC_DURATION_S above).
+  const durationS = mode === "rpc" ? DURATION_S : ENVIO_HYPERSYNC_DURATION_S;
   console.log(`\n--- ${label} ---\n`);
 
   // Clean previous state
@@ -316,7 +322,7 @@ async function benchmarkEnvioImpl(
   console.log("Installing dependencies...\n");
   await exec("pnpm", ["install", "--frozen-lockfile"], ENVIO_DIR);
 
-  const durationPromise = sleep(ENVIO_DURATION_S * 1_000);
+  const durationPromise = sleep(durationS * 1_000);
 
   // Start envio with TUI and Hasura disabled — we read PostgreSQL directly
   const envioEnv = {
@@ -326,10 +332,8 @@ async function benchmarkEnvioImpl(
     ENVIO_PG_PORT: String(ENVIO_PG_PORT),
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
-    ENVIO_MAX_PARTITION_CONCURRENCY: "30",
-    ENVIO_INDEXING_MAX_BUFFER_SIZE: "350000",
   };
-  console.log(`\nStarting envio for ${ENVIO_DURATION_S}s...\n`);
+  console.log(`\nStarting envio for ${durationS}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
   activeProc = dev;
@@ -354,7 +358,7 @@ async function benchmarkEnvioImpl(
   const progressBlock = parseInt(blockStr, 10) || 0;
   const totalBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
 
-  return buildResult(label, totalBlocks, totalEvents, ENVIO_DURATION_S);
+  return buildResult(label, totalBlocks, totalEvents, durationS);
 }
 
 async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
@@ -785,11 +789,10 @@ async function main() {
 
   const firstRate = results[0].blocksPerSec;
   const nameWithSlower = (r: BenchmarkResult, i: number) => {
-    const base = labelWithDuration(r);
-    if (i === 0 || results.length === 1) return base;
+    if (i === 0 || results.length === 1) return r.name;
     const ratio = firstRate / r.blocksPerSec;
     const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
-    return `${base} (${n}x slower)`;
+    return `${r.name} (${n}x slower)`;
   };
 
   // Print final results table
