@@ -72,18 +72,6 @@ Six real-world indexing scenarios covering events, blocks, transactions, and tra
 See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
 
 
-### Uniswap V2 Factory
-
-| Indexer | Time to complete | vs HyperIndex |
-|---|---|---|
-| Envio HyperIndex | 1 minute | baseline |
-| Subsquid | 15 minutes | 15x slower |
-| The Graph | 2 hours 23 minutes | 143x slower |
-| Ponder | 2 hours 38 minutes | 158x slower |
-
-Benchmark originally run by [Sentio](https://sentio.xyz) in May 2025. Full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
-
-
 ## Running the benchmarks
 
 See the README in each case directory for setup instructions and requirements:
