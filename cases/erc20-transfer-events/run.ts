@@ -754,6 +754,13 @@ function formatInt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
+function formatRate(n: number): string {
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
 async function main() {
   // Parse positional args (benchmark names) — anything that isn't a flag
   const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -820,14 +827,10 @@ async function main() {
     const r = withRates[i];
     console.log(`  ${nameWithSlower(r, i)}:`);
     console.log(
-      `    Blocks : ${formatInt(r.totalBlocks)} (${r.blocksPerSec.toFixed(
-        1
-      )}/s)`
+      `    Blocks : ${formatInt(r.totalBlocks)} (${formatRate(r.blocksPerSec)}/s)`
     );
     console.log(
-      `    Events : ${formatInt(r.totalEvents)} (${r.eventsPerSec.toFixed(
-        1
-      )}/s)`
+      `    Events : ${formatInt(r.totalEvents)} (${formatRate(r.eventsPerSec)}/s)`
     );
   }
 
@@ -838,13 +841,13 @@ async function main() {
   const blocksRow = [
     "| blocks |",
     ...withRates.map(
-      (r) => ` ${formatInt(r.totalBlocks)} (${r.blocksPerSec.toFixed(1)}/s) |`
+      (r) => ` ${formatInt(r.totalBlocks)} (${formatRate(r.blocksPerSec)}/s) |`
     ),
   ].join("");
   const eventsRow = [
     "| events |",
     ...withRates.map(
-      (r) => ` ${formatInt(r.totalEvents)} (${r.eventsPerSec.toFixed(1)}/s) |`
+      (r) => ` ${formatInt(r.totalEvents)} (${formatRate(r.eventsPerSec)}/s) |`
     ),
   ].join("");
 

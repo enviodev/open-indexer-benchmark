@@ -176,6 +176,7 @@ jobs:
             results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
             const firstRate = results[0].blocksPerSec;
             const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+            const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
             const label = (r, i) => {
               if (i === 0 || results.length === 1) return r.name;
               const ratio = firstRate / r.blocksPerSec;
@@ -185,8 +186,8 @@ jobs:
 
             const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
             const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
-            const blocksRow = `| blocks | ${results.map(r => `${fmt(r.blocks)} (${r.blocksPerSec.toFixed(1)}/s)`).join(' | ')} |`;
-            const eventsRow = `| events | ${results.map(r => `${fmt(r.events)} (${r.eventsPerSec.toFixed(1)}/s)`).join(' | ')} |`;
+            const blocksRow = `| blocks | ${results.map(r => `${fmt(r.blocks)} (${fmtRate(r.blocksPerSec)}/s)`).join(' | ')} |`;
+            const eventsRow = `| events | ${results.map(r => `${fmt(r.events)} (${fmtRate(r.eventsPerSec)}/s)`).join(' | ')} |`;
             const table = [header, sep, blocksRow, eventsRow].join('\n');
 
             core.summary.addRaw(`## ERC20 Transfer Events Benchmark\n\n${table}\n`);
