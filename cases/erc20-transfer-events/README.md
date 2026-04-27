@@ -60,6 +60,8 @@ All indexers share port `19876` for their GraphQL endpoint. Since benchmarks run
 
 Runs natively via `envio start -r`. Manages its own Docker infrastructure internally (Hasura). The external Hasura port is configured via `HASURA_EXTERNAL_PORT` env var to use the shared benchmark port. The benchmark timer starts when the process launches; Envio's internal Docker init is fast enough that it doesn't materially affect the measurement.
 
+Envio runs are capped at **40s** (instead of the default 60s) — Envio typically saturates well before 60s, so a shorter window keeps the measurement on the active region of the run. The reported totals are scaled to a 60s-equivalent count so per-second rates are directly comparable to the rest of the matrix.
+
 The `envio-bun` variant runs the same case under the [Bun](https://bun.sh) runtime via `bun --bun envio start -r`. The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
 
 ### Ponder
@@ -79,6 +81,6 @@ Runs the processor and GraphQL server as separate native Node.js processes. Uses
 Runs entirely via Docker Compose (postgres + subquery-node + graphql-engine). This has the heaviest startup overhead:
 
 - **Docker/DB pre-initialization**: Postgres is started and health-checked _before_ the benchmark timer begins. Image pulls also happen beforehand. This is not counted toward the benchmark duration.
-- **5x duration multiplier**: SubQuery's `subquery-node` takes ~25 seconds to boot inside Docker (spawning workers, connecting to the RPC). To amortize this startup cost fairly, SubQuery runs for 5x the requested duration and the results are divided by 5.
+- **3-minute run window**: SubQuery's `subquery-node` takes ~25 seconds to boot inside Docker (spawning workers, connecting to the RPC). To amortize this startup cost fairly, SubQuery runs for **180s** instead of the default 60s, and the totals are scaled back down so the reported per-second rate is directly comparable to the rest of the matrix.
 - **`project.ts` env var**: The `project.ts` config uses `process.env.ETHEREUM_RPC_URL` which gets baked into `project.yaml` at codegen/build time. The benchmark passes this env var during `codegen` and `build`, otherwise the endpoint resolves to `null`.
 - **Dictionary errors**: The SubQuery node logs `dictionary-v1` warnings (backend error 1601). This is a known issue with the default dictionary endpoint and doesn't prevent indexing, but may slow it down slightly as the node falls back to direct RPC fetching.

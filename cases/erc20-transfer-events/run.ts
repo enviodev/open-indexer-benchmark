@@ -20,6 +20,16 @@ const DURATION_S = (() => {
   return flag ? parseInt(flag.split("=")[1], 10) : 60;
 })();
 
+// Per-indexer run durations. Some indexers warrant a non-default window — Envio
+// often saturates well before the default 60s mark, so we cap its run to make
+// the measurement reflect peak rate rather than tail-idle. SubQuery starts up
+// slowly inside Docker, so we extend its run to amortise the boot cost. In
+// both cases the totals are scaled to a `DURATION_S`-equivalent count so the
+// downstream rate math (totals / DURATION_S) reflects the indexer's true per-
+// second throughput regardless of the actual run window.
+const ENVIO_DURATION_S = Math.min(DURATION_S, 40);
+const SUBQUERY_DURATION_S = Math.max(DURATION_S, 180);
+
 const SUMMARY_DELAY_MS = 3_000;
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -294,7 +304,7 @@ async function benchmarkEnvioImpl(
   console.log("Installing dependencies...\n");
   await exec("pnpm", ["install", "--frozen-lockfile"], ENVIO_DIR);
 
-  const durationPromise = sleep(DURATION_S * 1_000);
+  const durationPromise = sleep(ENVIO_DURATION_S * 1_000);
 
   // Start envio with TUI and Hasura disabled — we read PostgreSQL directly
   const envioEnv = {
@@ -311,7 +321,7 @@ async function benchmarkEnvioImpl(
     mode === "bun"
       ? (["bun", ["--bun", "envio"]] as const)
       : (["pnpm", ["envio"]] as const);
-  console.log(`\nStarting envio for ${DURATION_S}s...\n`);
+  console.log(`\nStarting envio for ${ENVIO_DURATION_S}s...\n`);
   await exec(runner, [...runnerPrefix, "codegen"], ENVIO_DIR, envioEnv);
   const dev = start(
     runner,
@@ -337,14 +347,18 @@ async function benchmarkEnvioImpl(
 
   // Parse "events_processed|progress_block" (psql -A uses | as delimiter)
   const [eventsStr, blockStr] = metaRow.split("|");
-  const totalEvents = parseInt(eventsStr, 10) || 0;
+  const observedEvents = parseInt(eventsStr, 10) || 0;
   const progressBlock = parseInt(blockStr, 10) || 0;
-  const totalBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
+  const observedBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
+
+  // Scale totals to a DURATION_S-equivalent count so downstream rate math is
+  // consistent with the rest of the matrix (see ENVIO_DURATION_S comment).
+  const scale = DURATION_S / ENVIO_DURATION_S;
 
   return {
     name: label,
-    totalEvents,
-    totalBlocks,
+    totalEvents: Math.round(observedEvents * scale),
+    totalBlocks: Math.round(observedBlocks * scale),
   };
 }
 
@@ -554,9 +568,9 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   }
 
   // Start benchmark timer — app startup is included, Docker/DB init is not.
-  const durationPromise = sleep(DURATION_S * 1_000);
+  const durationPromise = sleep(SUBQUERY_DURATION_S * 1_000);
 
-  console.log(`\nStarting SubQuery services for ${DURATION_S}s...\n`);
+  console.log(`\nStarting SubQuery services for ${SUBQUERY_DURATION_S}s...\n`);
   const dev = start(
     "docker",
     ["compose", "up", "--remove-orphans"],
@@ -567,7 +581,7 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
 
   // Wait for GraphQL to become ready, sleep concurrently
   await Promise.all([
-    waitReady(GRAPHQL_URL, QUERY, DURATION_S * 1_000),
+    waitReady(GRAPHQL_URL, QUERY, SUBQUERY_DURATION_S * 1_000),
     durationPromise,
   ]);
 
@@ -582,15 +596,19 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
 
   const transfers: number = data.transferEvents?.totalCount ?? 0;
   const approvals: number = data.approvalEvents?.totalCount ?? 0;
-  const totalEvents = transfers + approvals;
+  const observedEvents = transfers + approvals;
 
   const lastHeight: number = data._metadata?.lastProcessedHeight ?? 0;
-  const totalBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
+  const observedBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
+
+  // Scale totals to a DURATION_S-equivalent count so downstream rate math is
+  // consistent with the rest of the matrix (see SUBQUERY_DURATION_S comment).
+  const scale = DURATION_S / SUBQUERY_DURATION_S;
 
   return {
     name: "SubQuery",
-    totalEvents,
-    totalBlocks,
+    totalEvents: Math.round(observedEvents * scale),
+    totalBlocks: Math.round(observedBlocks * scale),
   };
 }
 
