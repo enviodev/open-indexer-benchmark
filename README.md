@@ -10,8 +10,6 @@ We are not affiliated with [Sentio](https://sentio.xyz). A few changes were made
 
 Even though this benchmark now lives under the [Envio](https://envio.dev) organisation, the goal is objective and fair comparisons. Contributions from any indexer team are welcome.
 
-> All benchmark data referenced on the [Envio landing page](https://envio.dev) and in the [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) comparison article comes from this repository.
-
 
 ## Featured Indexers
 
@@ -104,6 +102,8 @@ Contributions are welcome. Open an issue or pull request to add a new indexer, a
 - [Envio HyperIndex](https://github.com/enviodev/hyperindex)
 - [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026)
 - [Envio Docs](https://docs.envio.dev)
+
+> All benchmark data referenced on the [Envio landing page](https://envio.dev) and in the [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) comparison article comes from this repository.
 
 ## Support
 
