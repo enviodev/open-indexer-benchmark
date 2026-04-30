@@ -27,9 +27,9 @@ Indexers included in this benchmark (alphabetical order):
 
 ## Methodology
 
-**Backfill speed**: each indexer runs for exactly 1 minute. We measure how many blocks and events were indexed per second. Results are sorted by the most efficient indexer in each category.
+**Backfill speed**: each indexer runs for 60 seconds (SubQuery runs for 180s to amortise its slower startup; the summary divides by each indexer's actual duration). We measure how many blocks and events were indexed per second. Results are sorted by the most efficient indexer in each category.
 
-All benchmarks run in GitHub CI on standardised hardware. Indexers without built-in data source support use [Envio HyperRPC](https://docs.envio.dev/docs/HyperSync/overview-hyperrpc) as the RPC provider.
+All benchmarks run in GitHub CI on `ubuntu-latest` runners. Indexers without built-in data source support use [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) as the RPC provider.
 
 You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 
@@ -60,8 +60,8 @@ Six real-world indexing scenarios covering events, blocks, transactions, and tra
 | case_2_lbtc_full | Complex indexing with RPC calls for token balances and point calculation. Read-after-write. |
 | case_3_ethereum_block | Block-level indexing of Ethereum blocks and metadata extraction. |
 | case_4_on_transaction | Transaction gas usage indexing. |
-| case_5_on_trace | Uniswap V2 transaction trace analysis. Swap decoding from execution traces. |
-| case_6_template | Uniswap V2 factory template benchmark. Pair creation and swap event analysis. |
+| case_5_on_trace | Uniswap V2 transaction trace analysis. Transaction trace handling, swap decoding. |
+| case_6_template | Uniswap V2 template benchmark. Event handling, pair and swap analysis. |
 
 | Case                   | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio_Subgraph | Goldsky_Subgraph |
 | ---------------------- | ------ | --------------- | ---------------- | ------ | -------- | -------- | --------------- | ---------------- |
