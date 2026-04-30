@@ -63,14 +63,14 @@ Six real-world indexing scenarios covering events, blocks, transactions, and tra
 | case_5_on_trace | Uniswap V2 transaction trace analysis. Swap decoding from execution traces. |
 | case_6_template | Uniswap V2 factory template benchmark. Pair creation and swap event analysis. |
 
-| Case | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio Subgraph | Goldsky Subgraph |
-|---|---|---|---|---|---|---|---|---|
-| case_1_lbtc_event_only | 8m | 3m | 1h 40m | 10m | 3h 9m | 2h 36m | | |
-| case_2_lbtc_full | 6m | 1m | 45m | 34m | 1h 3m | 56m | | |
-| case_3_ethereum_block | 18m | 7.9s | 33m | 1m | 10m | 15m | | |
-| case_4_on_transaction | 17m | 1m 26s | 33m | 7m | N/A | | | |
-| case_5_on_trace | 16m | 41s | N/A | 2m | 8m | 1h 21m | | |
-| case_6_template | 19m | 8s | 21m | 2m | 19m | 10m | 20h 24m | |
+| Case                   | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio_Subgraph | Goldsky_Subgraph |
+| ---------------------- | ------ | --------------- | ---------------- | ------ | -------- | -------- | --------------- | ---------------- |
+| case_1_lbtc_event_only | 8m     |                 | 3m               | 1h40m  | 10m      | 3h9m     | 2h36m           |                  |
+| case_2_lbtc_full       | 6m     |                 | 1m               | 45m    | 34m      | 1h3m     | 56m             |                  |
+| case_3_ethereum_block  | 18m    | 7.9s            |                  | 33m    | 1m‡      | 10m      | 15m             |                  |
+| case_4_on_transaction  | 17m    | 1m26s           |                  | 33m    | 7m       | N/A      |                 |                  |
+| case_5_on_trace        | 16m    | 41s             |                  | N/A§   | 2m       | 8m       | 1h21m           |                  |
+| case_6_template        | 19m    |                 | 8s               | 21m    | 2m       | 19m      | 10m             | 20h24m           |
 
 See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
 
