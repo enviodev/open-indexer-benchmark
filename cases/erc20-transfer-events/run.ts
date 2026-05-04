@@ -307,7 +307,7 @@ async function benchmarkEnvioImpl(
 
   // Clean previous state
   console.log("Cleaning envio cache...");
-  rmSync(resolve(ENVIO_DIR, "generated"), { recursive: true, force: true });
+  rmSync(resolve(ENVIO_DIR, ".envio"), { recursive: true, force: true });
 
   // Install deps
   console.log("Installing dependencies...\n");
@@ -318,7 +318,7 @@ async function benchmarkEnvioImpl(
   // Start envio with TUI and Hasura disabled — we read PostgreSQL directly
   const envioEnv = {
     ...process.env,
-    TUI_OFF: "true",
+    ENVIO_TUI: "false",
     ENVIO_HASURA: "false",
     ENVIO_PG_PORT: String(ENVIO_PG_PORT),
     ENVIO_RPC_URL: rpcUrl,
