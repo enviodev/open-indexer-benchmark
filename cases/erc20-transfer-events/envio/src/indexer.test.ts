@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createTestIndexer } from "generated";
+import { createTestIndexer } from "envio";
 
 describe("Indexer Testing", () => {
   it("Should create accounts and transfer events from ERC20 Transfer events", async () => {

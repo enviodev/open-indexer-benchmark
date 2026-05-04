@@ -1,4 +1,4 @@
-import { indexer } from "generated";
+import { indexer } from "envio";
 
 indexer.onEvent(
   { contract: "ERC20", event: "Transfer" },
