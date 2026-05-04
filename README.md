@@ -41,10 +41,10 @@ You can enter the `cases` directory to see code, setup instructions, and run the
 Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Stores decoded event logs and aggregates account balances. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
-| | Envio | Sqd (9.9x slower) | Envio - RPC (25.7x slower) | Rindexer (37.7x slower) | Ponder (193.9x slower) | SubQuery (435.5x slower) |
+| | Envio | Rindexer (23.1x slower) | Sqd (27.6x slower) | Envio - RPC (33.4x slower) | Ponder (193.8x slower) | SubQuery (573.0x slower) |
 | --- | --- | --- | --- | --- | --- | --- |
-| blocks/s | 105,266.9 | 10,625.6 | 4,100.0 | 2,791.7 | 542.8 | 241.7 |
-| events/s | 14,868.8 | 1,439.0 | 492.2 | 158.5 | 47.1 | 20.8 |
+| blocks/s | 107,030.0 | 4,641.2 | 3,873.2 | 3,200.0 | 552.2 | 186.8 |
+| events/s | 15,358.7 | 634.1 | 423.8 | 244.2 | 47.8 | 16.3 |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
