@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       envio:
-        specifier: 3.0.0-alpha.24
-        version: 3.0.0-alpha.24(react-dom@19.2.4(react@19.2.5))(typescript@5.9.3)
+        specifier: 3.0.0-rc.1
+        version: 3.0.0-rc.1(react-dom@19.2.4(react@19.2.5))(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -747,36 +747,36 @@ packages:
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
-  envio-darwin-arm64@3.0.0-alpha.24:
-    resolution: {integrity: sha512-f0m31cWcjCrke0qYKpOHTlCD2iWztbQ2YLuDjo+T1LFyuIu041P0ZnIDCk1cmoYGpKi+B6/Z96OKaUdKWIK33g==}
+  envio-darwin-arm64@3.0.0-rc.1:
+    resolution: {integrity: sha512-krDFIQLy6iYRoODg7QE4F/lBr3gssNcwZ7QIOrtcwogjNfnLS66xg6FuFH32xjOiBLWM84qzbfu/R+8Erix6mw==}
     cpu: [arm64]
     os: [darwin]
 
-  envio-darwin-x64@3.0.0-alpha.24:
-    resolution: {integrity: sha512-2u72JTt0ZQNHVerEjzV5KKYeZEHRTvMOMdYTp/jHc7jSNEOW4hQO11G06eOBRt9lQ3l4QV3cOvAOyMenuhsABw==}
+  envio-darwin-x64@3.0.0-rc.1:
+    resolution: {integrity: sha512-mpL34MtfHnvXnnC3JP8NEf26D8Rb76Gf3RkNOz/ULSgDF25uVo+v46uOpMR8cKcsTmf5N6u1yE+ee8jbVzFnVQ==}
     cpu: [x64]
     os: [darwin]
 
-  envio-linux-arm64@3.0.0-alpha.24:
-    resolution: {integrity: sha512-11MvkhJkj2ckLh3OEa7KriGIl0qp/IzsYyEIWcGu/ah3AX7uDgl9IPjCQqjrR9xJJpcWLGp+VdNPcGNignucNg==}
+  envio-linux-arm64@3.0.0-rc.1:
+    resolution: {integrity: sha512-NRX7zyrHVTmx7Bugg8UM7lnycI47/twL1TtvvswnSnyJkmW7ozWhMqfP9JIRSi9m9cygx6ruxYDdPMS0aQxm7w==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  envio-linux-x64-musl@3.0.0-alpha.24:
-    resolution: {integrity: sha512-E/gc2LnBXwUUK9btGKZYUkfsc1lpJYAZ6marqCwi9oiqeOkdy34Occd9bK5By59w/10Lnie01GTe3FJjaVMOuQ==}
+  envio-linux-x64-musl@3.0.0-rc.1:
+    resolution: {integrity: sha512-Z7/2kqIQ/cWoKpNcjOHbWpHoXphKCO6NG2RI6aajVqm4A7FThvQ0QqlgEMJkOP3nBOhzUI2s6mWWg4e4g5OF6g==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  envio-linux-x64@3.0.0-alpha.24:
-    resolution: {integrity: sha512-T0ltx93RgNn4PB5Zlbr5vggIcJxE7A0qVufZA4Kq7LND0alCA8GsuxwoUWvtZoL8NP3dyUf1EQCgPvFgd6M1PA==}
+  envio-linux-x64@3.0.0-rc.1:
+    resolution: {integrity: sha512-yd49rGWgjzDeXmaFQhMf/JZG6QaW4pJvpGeULQX+oZGR0Pc0Kj573FLaEHsWqT7nQyKC0YAuCQPDI5YYCaXUug==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  envio@3.0.0-alpha.24:
-    resolution: {integrity: sha512-AD9CXMZltcpx1kFnuvt5h0by1JE4qHnHe7mcD4Drbq287ApOgyA8/Y/9T/nkuXhCIgF53vDzTgSagK2zddqrWw==}
+  envio@3.0.0-rc.1:
+    resolution: {integrity: sha512-igKXgskxnaOsCxpjn5Y3tvIX6BcTG2p7PoVGoI1OXuiz1qkwwXqB8SmDXK2vM/PCzkz/Dq1IqgDOEODbnORjbw==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -2115,22 +2115,22 @@ snapshots:
     dependencies:
       once: 1.4.0
 
-  envio-darwin-arm64@3.0.0-alpha.24:
+  envio-darwin-arm64@3.0.0-rc.1:
     optional: true
 
-  envio-darwin-x64@3.0.0-alpha.24:
+  envio-darwin-x64@3.0.0-rc.1:
     optional: true
 
-  envio-linux-arm64@3.0.0-alpha.24:
+  envio-linux-arm64@3.0.0-rc.1:
     optional: true
 
-  envio-linux-x64-musl@3.0.0-alpha.24:
+  envio-linux-x64-musl@3.0.0-rc.1:
     optional: true
 
-  envio-linux-x64@3.0.0-alpha.24:
+  envio-linux-x64@3.0.0-rc.1:
     optional: true
 
-  envio@3.0.0-alpha.24(react-dom@19.2.4(react@19.2.5))(typescript@5.9.3):
+  envio@3.0.0-rc.1(react-dom@19.2.4(react@19.2.5))(typescript@5.9.3):
     dependencies:
       '@clickhouse/client': 1.17.0
       '@elastic/ecs-pino-format': 1.4.0
@@ -2162,11 +2162,11 @@ snapshots:
       viem: 2.46.2(typescript@5.9.3)
       yargs: 17.7.2
     optionalDependencies:
-      envio-darwin-arm64: 3.0.0-alpha.24
-      envio-darwin-x64: 3.0.0-alpha.24
-      envio-linux-arm64: 3.0.0-alpha.24
-      envio-linux-x64: 3.0.0-alpha.24
-      envio-linux-x64-musl: 3.0.0-alpha.24
+      envio-darwin-arm64: 3.0.0-rc.1
+      envio-darwin-x64: 3.0.0-rc.1
+      envio-linux-arm64: 3.0.0-rc.1
+      envio-linux-x64: 3.0.0-rc.1
+      envio-linux-x64-musl: 3.0.0-rc.1
     transitivePeerDependencies:
       - '@types/react'
       - bufferutil
