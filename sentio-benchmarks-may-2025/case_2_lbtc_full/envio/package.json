@@ -22,7 +22,7 @@
     "viem": "2.31.0"
   },
   "dependencies": {
-    "envio": "3.0.0"
+    "envio": "2.22.1"
   },
   "optionalDependencies": {
     "generated": "./generated"
