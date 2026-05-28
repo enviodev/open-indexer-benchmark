@@ -25,6 +25,9 @@ const DURATION_S = (() => {
 // cost. The summary uses each indexer's actual DURATION_S to compute per-second
 // rates, and surfaces a "(Ns)" tag whenever it differs from DURATION_S.
 const SUBQUERY_DURATION_S = Math.max(DURATION_S, 180);
+// Envio with HyperSync catches up to the chain head quickly, so a shorter
+// window keeps the measurement representative of steady-state throughput.
+const ENVIO_HYPERSYNC_DURATION_S = Math.min(DURATION_S, 45);
 
 const SUMMARY_DELAY_MS = 3_000;
 
@@ -303,6 +306,7 @@ async function benchmarkEnvioImpl(
   mode: "hypersync" | "rpc"
 ): Promise<BenchmarkResult> {
   const label = mode === "rpc" ? "Envio - RPC" : "Envio";
+  const durationS = mode === "rpc" ? DURATION_S : ENVIO_HYPERSYNC_DURATION_S;
   console.log(`\n--- ${label} ---\n`);
 
   // Clean previous state
@@ -313,7 +317,7 @@ async function benchmarkEnvioImpl(
   console.log("Installing dependencies...\n");
   await exec("pnpm", ["install", "--frozen-lockfile"], ENVIO_DIR);
 
-  const durationPromise = sleep(DURATION_S * 1_000);
+  const durationPromise = sleep(durationS * 1_000);
 
   // Start envio with TUI and Hasura disabled — we read PostgreSQL directly
   const envioEnv = {
@@ -324,7 +328,7 @@ async function benchmarkEnvioImpl(
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
   };
-  console.log(`\nStarting envio for ${DURATION_S}s...\n`);
+  console.log(`\nStarting envio for ${durationS}s...\n`);
   await exec("pnpm", ["envio", "codegen"], ENVIO_DIR, envioEnv);
   const dev = start("pnpm", ["envio", "start", "-r"], ENVIO_DIR, envioEnv);
   activeProc = dev;
@@ -349,7 +353,7 @@ async function benchmarkEnvioImpl(
   const progressBlock = parseInt(blockStr, 10) || 0;
   const totalBlocks = progressBlock > START_BLOCK ? progressBlock - START_BLOCK : 0;
 
-  return buildResult(label, totalBlocks, totalEvents, DURATION_S);
+  return buildResult(label, totalBlocks, totalEvents, durationS);
 }
 
 async function benchmarkEnvio(rpcUrl: string): Promise<BenchmarkResult> {
