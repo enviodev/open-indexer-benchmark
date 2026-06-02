@@ -33,4 +33,5 @@ cache
 *.res.mjs
 generated
 .envio
+envio-env.d.ts
 .env
