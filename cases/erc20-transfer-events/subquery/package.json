@@ -1,7 +1,7 @@
 {
   "name": "subquery-erc20-transfer-events",
   "version": "0.0.1",
-  "description": "SubQuery indexer for ERC20 Transfer and Approval events benchmark",
+  "description": "SubQuery indexer for ERC20 Transfer Events benchmark",
   "main": "dist/index.js",
   "scripts": {
     "build": "subql build",

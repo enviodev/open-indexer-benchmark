@@ -1,0 +1,22 @@
+{
+  "name": "envio-erc20-account-balances",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "codegen": "envio codegen",
+    "dev": "envio dev",
+    "start": "envio start",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "dependencies": {
+    "envio": "3.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

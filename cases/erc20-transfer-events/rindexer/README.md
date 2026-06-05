@@ -2,7 +2,7 @@
 
 [rindexer](https://rindexer.xyz/) is a no-code EVM blockchain indexing framework written in Rust.
 
-This benchmark indexes ERC-20 `Transfer` and `Approval` events on the Rocket Pool rETH token contract on Ethereum Mainnet from block 18,600,000.
+This benchmark indexes raw ERC-20 `Transfer` events on the USDC token contract on Ethereum Mainnet from block 18,600,000.
 
 ## Pre-requisites
 

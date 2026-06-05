@@ -12,7 +12,7 @@ import * as dotenv from 'dotenv'
 
 dotenv.config()
 
-const CONTRACT_ADDRESS = '0xae78736cd615f374d3085123a210448e74fc6393'
+const CONTRACT_ADDRESS = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' // USDC
 const rpcEndpoint = process.env.RPC_ENDPOINT
 
 export const processor = new EvmBatchProcessor()
@@ -36,7 +36,6 @@ export const processor = new EvmBatchProcessor()
         address: [CONTRACT_ADDRESS],
         topic0: [
             erc20Abi.events.Transfer.topic,
-            erc20Abi.events.Approval.topic,
         ],
     })
 
