@@ -208,7 +208,6 @@ jobs:
 
             const resultsDir = 'results';
             const results = [];
-            const outputs = [];
 
             const SUMMARY_RE = /Summary — (.+?): ([\d,.]+) blocks\/s, ([\d,.]+) events\/s/;
             const stripDurationTag = name => name.replace(/\s\(\d+s\)$/, '');
@@ -218,7 +217,6 @@ jobs:
                 const file = path.join(resultsDir, dir, 'benchmark-output.txt');
                 if (!fs.existsSync(file)) continue;
                 const content = fs.readFileSync(file, 'utf8');
-                outputs.push(content);
 
                 const match = content.match(SUMMARY_RE);
                 if (match) {
@@ -249,20 +247,14 @@ jobs:
               table = [header, sep, blocksRow, eventsRow].join('\n');
             }
 
-            const fullOutput = outputs.join('\n\n---\n\n') || 'No benchmark output captured.';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             const body = [
               '## Benchmark Results: ERC20 Transfer Events',
               '',
               table,
               '',
-              '<details><summary>Full output</summary>',
-              '',
-              '```',
-              fullOutput,
-              '```',
-              '',
-              '</details>'
+              `[Full output](${runUrl}) is available in the workflow run logs.`,
             ].join('\n');
 
             await github.rest.issues.createComment({
