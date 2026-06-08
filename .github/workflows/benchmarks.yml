@@ -57,12 +57,15 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # Cap concurrency so the matrix (cases x indexers) doesn't overload the
-      # shared Envio RPC/HyperSync token. With two cases the matrix is 12 jobs;
-      # running them all at once starves the RPC-bound indexers (envio-rpc,
-      # rindexer) with HTTP 503s and produces 0-progress results. 4 keeps the
-      # concurrent RPC load comfortably below the level that ran cleanly before.
-      max-parallel: 4
+      # Run benchmark jobs strictly one at a time. GitHub gives each matrix job
+      # its own runner VM, so local compute (CPU/RAM/Postgres) is already
+      # isolated — but every job shares one Envio RPC/HyperSync token, and that
+      # shared endpoint is the resource the per-job VMs do NOT isolate. Running
+      # jobs concurrently makes them compete for it, starving the RPC-bound
+      # indexers (HTTP 503s, 0-progress results). Serialising gives each indexer
+      # the full, uncontended endpoint — the fair, reproducible condition a
+      # benchmark needs. The cost is CI wall-clock time, which is acceptable here.
+      max-parallel: 1
       matrix:
         case: ${{ fromJSON(needs.setup.outputs.cases) }}
         indexer: ${{ fromJSON(needs.setup.outputs.matrix) }}
