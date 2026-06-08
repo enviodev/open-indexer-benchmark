@@ -271,9 +271,8 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   ]);
 
   // Snapshot results from PostgreSQL
-  const [transferCount, approvalCount, checkpoint] = await Promise.all([
+  const [transferCount, checkpoint] = await Promise.all([
     psql(PONDER_DB_URL, "SELECT count(*) FROM transfer_event"),
-    psql(PONDER_DB_URL, "SELECT count(*) FROM approval_event"),
     psql(PONDER_DB_URL, 'SELECT "latest_checkpoint" FROM _ponder_checkpoint LIMIT 1').catch(() => ""),
   ]);
   await kill(dev);
@@ -285,9 +284,7 @@ async function benchmarkPonder(rpcUrl: string): Promise<BenchmarkResult> {
   } catch {}
 
   // Compute metrics
-  const transfers = parseInt(transferCount, 10) || 0;
-  const approvals = parseInt(approvalCount, 10) || 0;
-  const totalEvents = transfers + approvals;
+  const totalEvents = parseInt(transferCount, 10) || 0;
   // Checkpoint is a 75-char string: [10 timestamp][16 chainId][16 blockNumber]...
   const block = checkpoint.length >= 42 ? Number(BigInt(checkpoint.slice(26, 42))) : 0;
   const totalBlocks = block > START_BLOCK ? block - START_BLOCK : 0;
@@ -374,9 +371,9 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
     DATABASE_URL: "postgresql://postgres:rindexer@localhost:5440/postgres",
     POSTGRES_PASSWORD: "rindexer",
   };
-  // PostGraphile exposes allTransfers / allApprovals from the auto-generated schema
-  // (table names transfer, approval in schema erc_20indexer_rocket_token_reth).
-  // We query totalCount for event counts and use the health endpoint for block progress.
+  // PostGraphile exposes allTransfers from the auto-generated schema
+  // (raw event table `transfer` in schema erc20indexer_usdc).
+  // We query totalCount for event counts and the last transfer for block progress.
   const READY_QUERY = `{
     allTransfers(first: 1) {
       totalCount
@@ -435,31 +432,15 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
       allTransfers {
         totalCount
       }
-      allApprovals {
-        totalCount
-      }
       lastTransfer: allTransfers(last: 1, orderBy: BLOCK_NUMBER_ASC) {
-        nodes {
-          blockNumber
-        }
-      }
-      lastApproval: allApprovals(last: 1, orderBy: BLOCK_NUMBER_ASC) {
         nodes {
           blockNumber
         }
       }
     }`;
     const data: any = await gql(GRAPHQL_URL, resultsQuery);
-    const transfers: number = data.allTransfers?.totalCount ?? 0;
-    const approvals: number = data.allApprovals?.totalCount ?? 0;
-    totalEvents = transfers + approvals;
-    const transferBlock = Number(
-      data.lastTransfer?.nodes?.[0]?.blockNumber ?? 0
-    );
-    const approvalBlock = Number(
-      data.lastApproval?.nodes?.[0]?.blockNumber ?? 0
-    );
-    const maxBlock = Math.max(transferBlock, approvalBlock);
+    totalEvents = data.allTransfers?.totalCount ?? 0;
+    const maxBlock = Number(data.lastTransfer?.nodes?.[0]?.blockNumber ?? 0);
     if (maxBlock > START_BLOCK) {
       totalBlocks = maxBlock - START_BLOCK;
     }
@@ -485,9 +466,6 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
       lastProcessedHeight
     }
     transferEvents {
-      totalCount
-    }
-    approvalEvents {
       totalCount
     }
   }`;
@@ -580,9 +558,7 @@ async function benchmarkSubQuery(rpcUrl: string): Promise<BenchmarkResult> {
   await exec("docker", ["compose", "down", "-v"], SUBQUERY_DIR, subqueryEnv);
   activeDockerDir = null;
 
-  const transfers: number = data.transferEvents?.totalCount ?? 0;
-  const approvals: number = data.approvalEvents?.totalCount ?? 0;
-  const totalEvents = transfers + approvals;
+  const totalEvents: number = data.transferEvents?.totalCount ?? 0;
 
   const lastHeight: number = data._metadata?.lastProcessedHeight ?? 0;
   const totalBlocks = lastHeight > START_BLOCK ? lastHeight - START_BLOCK : 0;
@@ -597,12 +573,6 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
   const QUERY = `{
     transferEventsConnection(orderBy: id_ASC) {
       totalCount
-    }
-    approvalEventsConnection(orderBy: id_ASC) {
-      totalCount
-    }
-    accounts(orderBy: id_ASC, limit: 1) {
-      id
     }
   }`;
 
@@ -694,9 +664,7 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
   } catch {}
 
   // Compute metrics
-  const approvals: number = data.approvalEventsConnection?.totalCount ?? 0;
-  const transfers: number = data.transferEventsConnection?.totalCount ?? 0;
-  const totalEvents = approvals + transfers;
+  const totalEvents: number = data.transferEventsConnection?.totalCount ?? 0;
 
   // Extract the highest block number from the last transfer event ID (format: "blockHeight-logIndex")
   let totalBlocks = 0;

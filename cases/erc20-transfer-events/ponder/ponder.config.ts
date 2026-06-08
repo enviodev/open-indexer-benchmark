@@ -1,6 +1,6 @@
 import { createConfig } from "ponder";
 
-import { RocketTokenRETHAbi } from "./abis/RocketTokenRETH";
+import { ERC20Abi } from "./abis/ERC20";
 
 export default createConfig({
   chains: {
@@ -10,10 +10,10 @@ export default createConfig({
     },
   },
   contracts: {
-    RocketTokenRETH: {
+    USDC: {
       chain: "mainnet",
-      abi: RocketTokenRETHAbi,
-      address: "0xae78736cd615f374d3085123a210448e74fc6393",
+      abi: ERC20Abi,
+      address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       startBlock: 18600000,
     },
   },

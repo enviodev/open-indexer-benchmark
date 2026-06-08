@@ -9,7 +9,7 @@ const project: EthereumProject = {
   version: "0.0.1",
   name: "erc20-transfer-events",
   description:
-    "SubQuery indexer for ERC20 Transfer and Approval events on RocketTokenRETH",
+    "SubQuery indexer for raw ERC20 Transfer events on USDC",
   runner: {
     node: {
       name: "@subql/node-ethereum",
@@ -33,7 +33,7 @@ const project: EthereumProject = {
       startBlock: 18600000,
       options: {
         abi: "erc20",
-        address: "0xae78736cd615f374d3085123a210448e74fc6393",
+        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       },
       assets: new Map([["erc20", { file: "./abis/erc20.abi.json" }]]),
       mapping: {
@@ -45,15 +45,6 @@ const project: EthereumProject = {
             filter: {
               topics: [
                 "Transfer(address indexed from, address indexed to, uint256 value)",
-              ],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: [
-                "Approval(address indexed owner, address indexed spender, uint256 value)",
               ],
             },
           },

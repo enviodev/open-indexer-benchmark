@@ -8,6 +8,11 @@ on:
         required: false
         default: ''
         type: string
+      cases:
+        description: 'Cases to benchmark (space-separated). Leave empty for all.'
+        required: false
+        default: ''
+        type: string
       duration:
         description: 'Benchmark duration in seconds'
         required: false
@@ -23,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      cases: ${{ steps.set-matrix.outputs.cases }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
       - id: set-matrix
@@ -34,17 +40,34 @@ jobs:
             MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | jq -R . | jq -sc .)
             echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           fi
+          CASES="${{ inputs.cases }}"
+          if [ -z "$CASES" ]; then
+            echo 'cases=["erc20-account-balances","erc20-transfer-events"]' >> "$GITHUB_OUTPUT"
+          else
+            CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | jq -R . | jq -sc .)
+            echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
+          fi
           DURATION="${{ inputs.duration }}"
           echo "duration=${DURATION:-60}" >> "$GITHUB_OUTPUT"
 
   benchmark:
-    name: "Benchmark: ${{ matrix.indexer }}"
+    name: "Benchmark: ${{ matrix.case }} / ${{ matrix.indexer }}"
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # Run benchmark jobs strictly one at a time. GitHub gives each matrix job
+      # its own runner VM, so local compute (CPU/RAM/Postgres) is already
+      # isolated — but every job shares one Envio RPC/HyperSync token, and that
+      # shared endpoint is the resource the per-job VMs do NOT isolate. Running
+      # jobs concurrently makes them compete for it, starving the RPC-bound
+      # indexers (HTTP 503s, 0-progress results). Serialising gives each indexer
+      # the full, uncontended endpoint — the fair, reproducible condition a
+      # benchmark needs. The cost is CI wall-clock time, which is acceptable here.
+      max-parallel: 1
       matrix:
+        case: ${{ fromJSON(needs.setup.outputs.cases) }}
         indexer: ${{ fromJSON(needs.setup.outputs.matrix) }}
     services:
       postgres:
@@ -74,7 +97,7 @@ jobs:
       - name: Prepare services
         run: |
           INDEXER="${{ matrix.indexer }}"
-          CASE_DIR="cases/erc20-transfer-events"
+          CASE_DIR="cases/${{ matrix.case }}"
 
           # Pre-pull Docker images so pulls don't count toward benchmark time
           case "$INDEXER" in
@@ -97,14 +120,19 @@ jobs:
       - name: Run benchmark
         run: |
           set -o pipefail
-          node cases/erc20-transfer-events/run.ts ${{ matrix.indexer }} --duration="${{ needs.setup.outputs.duration }}" 2>&1 | tee /tmp/benchmark-output.txt
+          node cases/${{ matrix.case }}/run.ts ${{ matrix.indexer }} --duration="${{ needs.setup.outputs.duration }}" 2>&1 | tee /tmp/benchmark-output.txt
         env:
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
+          # Sqd's archive (v2.archive.subsquid.io) requires an API key as of
+          # 19 May 2026. The @subsquid archive client reads it from SQD_API_KEY.
+          # Get a key at https://portal.sqd.dev and add it as the SQD_API_KEY
+          # repo secret. Without it, the sqd jobs report 0 (CREDENTIALS_INVALID).
+          SQD_API_KEY: ${{ secrets.SQD_API_KEY }}
 
       - name: Post results to job summary
         if: always()
         run: |
-          echo "## ${{ matrix.indexer }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "## ${{ matrix.case }} / ${{ matrix.indexer }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/benchmark-output.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "No output captured" >> "$GITHUB_STEP_SUMMARY"
@@ -114,7 +142,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-${{ matrix.indexer }}
+          name: benchmark-${{ matrix.case }}--${{ matrix.indexer }}
           path: /tmp/benchmark-output.txt
           if-no-files-found: ignore
 
@@ -132,16 +160,18 @@ jobs:
           path: results
           pattern: benchmark-*
 
-      - name: Build comparison table
+      - name: Build comparison tables
         id: build-table
         uses: actions/github-script@v7
+        env:
+          CASES: ${{ needs.setup.outputs.cases }}
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
 
+            const cases = JSON.parse(process.env.CASES);
             const resultsDir = 'results';
-            const results = [];
 
             // Summary lines look like:
             //   "Summary — Envio (40s): 77,177.0 blocks/s, 9,984.0 events/s"
@@ -152,12 +182,23 @@ jobs:
             const SUMMARY_RE = /Summary — (.+?): ([\d,.]+) blocks\/s, ([\d,.]+) events\/s/;
             const stripDurationTag = name => name.replace(/\s\(\d+s\)$/, '');
 
-            if (fs.existsSync(resultsDir)) {
-              for (const dir of fs.readdirSync(resultsDir).sort()) {
+            const titleCase = c =>
+              c.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+            // Artifact dirs are named "benchmark-<case>--<indexer>".
+            const dirs = fs.existsSync(resultsDir)
+              ? fs.readdirSync(resultsDir).sort()
+              : [];
+
+            for (const benchCase of cases) {
+              const prefix = `benchmark-${benchCase}--`;
+              const results = [];
+
+              for (const dir of dirs) {
+                if (!dir.startsWith(prefix)) continue;
                 const file = path.join(resultsDir, dir, 'benchmark-output.txt');
                 if (!fs.existsSync(file)) continue;
                 const content = fs.readFileSync(file, 'utf8');
-
                 const match = content.match(SUMMARY_RE);
                 if (match) {
                   results.push({
@@ -167,53 +208,64 @@ jobs:
                   });
                 }
               }
+
+              const heading = titleCase(benchCase);
+
+              if (results.length === 0) {
+                core.summary.addRaw(`## ${heading} Benchmark\n\n_No results collected._\n`);
+                continue;
+              }
+
+              results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
+              const firstRate = results[0].blocksPerSec;
+              const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+              const label = (r, i) => {
+                if (i === 0 || results.length === 1) return r.name;
+                const ratio = firstRate / r.blocksPerSec;
+                const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
+                return `${r.name} (${n}x slower)`;
+              };
+
+              const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
+              const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
+              const blocksRow = `| blocks/s | ${results.map(r => fmtRate(r.blocksPerSec)).join(' | ')} |`;
+              const eventsRow = `| events/s | ${results.map(r => fmtRate(r.eventsPerSec)).join(' | ')} |`;
+              const table = [header, sep, blocksRow, eventsRow].join('\n');
+
+              core.summary.addRaw(`## ${heading} Benchmark\n\n${table}\n`);
+              fs.writeFileSync(`/tmp/benchmark-table-${benchCase}.md`, table);
             }
 
-            if (results.length === 0) {
-              core.summary.addRaw('## ERC20 Transfer Events Benchmark\n\n_No results collected._\n');
-              await core.summary.write();
-              return;
-            }
-
-            results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
-            const firstRate = results[0].blocksPerSec;
-            const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-            const label = (r, i) => {
-              if (i === 0 || results.length === 1) return r.name;
-              const ratio = firstRate / r.blocksPerSec;
-              const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
-              return `${r.name} (${n}x slower)`;
-            };
-
-            const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
-            const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
-            const blocksRow = `| blocks/s | ${results.map(r => fmtRate(r.blocksPerSec)).join(' | ')} |`;
-            const eventsRow = `| events/s | ${results.map(r => fmtRate(r.eventsPerSec)).join(' | ')} |`;
-            const table = [header, sep, blocksRow, eventsRow].join('\n');
-
-            core.summary.addRaw(`## ERC20 Transfer Events Benchmark\n\n${table}\n`);
             await core.summary.write();
-
-            fs.writeFileSync('/tmp/benchmark-table.md', table);
 
       - name: Comment results on PR
         if: github.event_name == 'pull_request' && !cancelled()
         uses: actions/github-script@v7
+        env:
+          CASES: ${{ needs.setup.outputs.cases }}
         with:
           script: |
             const fs = require('fs');
 
-            // The table was already built and saved by the previous step.
-            const table = fs.existsSync('/tmp/benchmark-table.md')
-              ? fs.readFileSync('/tmp/benchmark-table.md', 'utf8')
-              : '_No results collected._';
+            const cases = JSON.parse(process.env.CASES);
+            const titleCase = c =>
+              c.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+            const sections = [];
+            for (const benchCase of cases) {
+              const file = `/tmp/benchmark-table-${benchCase}.md`;
+              const table = fs.existsSync(file)
+                ? fs.readFileSync(file, 'utf8')
+                : '_No results collected._';
+              sections.push(`### ${titleCase(benchCase)}\n\n${table}`);
+            }
 
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             const body = [
-              '## Benchmark Results: ERC20 Transfer Events',
+              '## Benchmark Results',
               '',
-              table,
+              sections.join('\n\n'),
               '',
               `[Full output](${runUrl}) is available in the workflow run logs.`,
             ].join('\n');
@@ -227,16 +279,26 @@ jobs:
 
       - name: Update README
         if: github.event_name == 'push'
+        env:
+          CASES: ${{ needs.setup.outputs.cases }}
         run: |
-          [ -f /tmp/benchmark-table.md ] || exit 0
+          CHANGED=0
+          for CASE in $(echo "$CASES" | jq -r '.[]'); do
+            TABLE="/tmp/benchmark-table-${CASE}.md"
+            [ -f "$TABLE" ] || continue
 
-          # Replace content between markers with the new table
-          awk '
-            /<!-- BENCHMARK:erc20-transfer-events:START -->/ { print; while ((getline line < "/tmp/benchmark-table.md") > 0) print line; skip=1; next }
-            /<!-- BENCHMARK:erc20-transfer-events:END -->/ { skip=0 }
-            !skip { print }
-          ' README.md > README.tmp && mv README.tmp README.md
+            # Replace content between this case's markers with the new table
+            awk -v start="<!-- BENCHMARK:${CASE}:START -->" \
+                -v end="<!-- BENCHMARK:${CASE}:END -->" \
+                -v tablefile="$TABLE" '
+              $0 ~ start { print; while ((getline line < tablefile) > 0) print line; skip=1; next }
+              $0 ~ end { skip=0 }
+              !skip { print }
+            ' README.md > README.tmp && mv README.tmp README.md
+            CHANGED=1
+          done
 
+          [ "$CHANGED" = "1" ] || exit 0
           git diff --quiet README.md && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

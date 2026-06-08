@@ -1,17 +1,17 @@
-name: rindexer-erc20-benchmark
+name: rindexer-erc20-transfers-benchmark
 
 volumes:
-  rindexer_erc20_pgdata:
+  rindexer_erc20_transfers_pgdata:
     driver: local
 
 services:
   postgresql:
-    container_name: rindexer-erc20-postgres
+    container_name: rindexer-erc20-transfers-postgres
     image: postgres:18
     shm_size: 1g
     restart: always
     volumes:
-      - rindexer_erc20_pgdata:/var/lib/postgresql
+      - rindexer_erc20_transfers_pgdata:/var/lib/postgresql
     ports:
       - 5440:5432
     environment:

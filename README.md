@@ -36,15 +36,26 @@ You can enter the `cases` directory to see code, setup instructions, and run the
 
 ## Results
 
-### ERC-20 Transfer Events
+### ERC-20 Account Balances
 
 Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Stores decoded event logs and aggregates account balances. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
 
-<!-- BENCHMARK:erc20-transfer-events:START -->
+<!-- BENCHMARK:erc20-account-balances:START -->
 | | Envio | Envio - RPC (24.1x slower) | Rindexer (32.3x slower) | Ponder (178.1x slower) | SubQuery (30853.0x slower) | Sqd (Infinityx slower) |
 | --- | --- | --- | --- | --- | --- | --- |
 | blocks/s | 98,729.7 | 4,100.0 | 3,061.3 | 554.3 | 3.2 | 0.0 |
 | events/s | 12,300.8 | 492.2 | 216.1 | 47.0 | 0.1 | 0.0 |
+<!-- BENCHMARK:erc20-account-balances:END -->
+
+See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md).
+
+
+### ERC-20 Transfer Events
+
+Results of indexing raw Transfer event logs from the USDC token contract on Ethereum Mainnet, starting at block 18,600,000. Stores every decoded Transfer event with no aggregation — a pure write-only ingestion throughput test.
+
+<!-- BENCHMARK:erc20-transfer-events:START -->
+_No results yet — run the benchmark to populate this table._
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
@@ -79,6 +90,7 @@ See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benc
 
 See the README in each case directory for setup instructions and requirements:
 
+- [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md)
 - [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md)
 - [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md)
 
