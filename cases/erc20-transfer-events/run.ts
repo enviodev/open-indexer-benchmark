@@ -370,6 +370,12 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
     ETHEREUM_RPC: rpcUrl,
     DATABASE_URL: "postgresql://postgres:rindexer@localhost:5440/postgres",
     POSTGRES_PASSWORD: "rindexer",
+    // TEMP DIAGNOSTIC: rindexer reports 0 blocks/0 events on USDC with no error
+    // at the default INFO level — it logs "Historical indexing started" then goes
+    // silent. Crank up logging to capture the actual eth_getLogs ranges, response
+    // sizes, and any retry/throttle behaviour so we can see why it never commits.
+    // Remove once the root cause is understood.
+    RUST_LOG: "debug",
   };
   // PostGraphile exposes allTransfers from the auto-generated schema
   // (raw event table `transfer` in schema erc20indexer_usdc).
