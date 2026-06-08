@@ -7,6 +7,13 @@ networks:
   - name: ethereum
     chain_id: 1
     rpc: ${ETHEREUM_RPC}
+    # USDC is extremely log-dense, so an unbounded eth_getLogs range (the
+    # default) returns far more than the provider will serve in one response
+    # and rindexer stalls without indexing. Pin an explicit per-request block
+    # range so each fetch stays within provider limits, and fan the historic
+    # backfill across several concurrent workers for throughput.
+    max_block_range: 1000
+    fetch_concurrency: 10
 
 storage:
   postgres:
