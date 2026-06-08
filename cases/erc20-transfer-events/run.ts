@@ -372,10 +372,11 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
     POSTGRES_PASSWORD: "rindexer",
     // TEMP DIAGNOSTIC: rindexer reports 0 blocks/0 events on USDC with no error
     // at the default INFO level — it logs "Historical indexing started" then goes
-    // silent. Crank up logging to capture the actual eth_getLogs ranges, response
-    // sizes, and any retry/throttle behaviour so we can see why it never commits.
+    // silent. rindexer controls its log level via RINDEXER_LOG (not RUST_LOG, which
+    // it ignores), so crank that up to capture the actual eth_getLogs ranges,
+    // response sizes, and any retry/throttle behaviour and see why it never commits.
     // Remove once the root cause is understood.
-    RUST_LOG: "debug",
+    RINDEXER_LOG: "debug",
   };
   // PostGraphile exposes allTransfers from the auto-generated schema
   // (raw event table `transfer` in schema erc20indexer_usdc).
