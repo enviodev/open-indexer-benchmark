@@ -41,10 +41,10 @@ You can enter the `cases` directory to see code, setup instructions, and run the
 Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Stores decoded event logs and aggregates account balances. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
 
 <!-- BENCHMARK:erc20-account-balances:START -->
-| | Envio | Envio - RPC (24.1x slower) | Rindexer (32.3x slower) | Ponder (178.1x slower) | SubQuery (30853.0x slower) | Sqd (Infinityx slower) |
+| | Envio | Sqd (13.3x slower) | Rindexer (35.9x slower) | Envio - RPC (36.5x slower) | Ponder (238.7x slower) | SubQuery (34535.4x slower) |
 | --- | --- | --- | --- | --- | --- | --- |
-| blocks/s | 98,729.7 | 4,100.0 | 3,061.3 | 554.3 | 3.2 | 0.0 |
-| events/s | 12,300.8 | 492.2 | 216.1 | 47.0 | 0.1 | 0.0 |
+| blocks/s | 127,780.9 | 9,595.5 | 3,559.0 | 3,500.0 | 535.4 | 3.7 |
+| events/s | 18,127.6 | 1,314.8 | 227.8 | 265.7 | 46.8 | 0.2 |
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md).
@@ -55,7 +55,10 @@ See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc
 Results of indexing raw Transfer event logs from the USDC token contract on Ethereum Mainnet, starting at block 18,600,000. Stores every decoded Transfer event with no aggregation — a pure write-only ingestion throughput test.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
-_No results yet — run the benchmark to populate this table._
+| | Envio | Rindexer (5.3x slower) | Sqd (15.0x slower) | Envio - RPC (29.6x slower) | Ponder (266.3x slower) | SubQuery (2101.6x slower) |
+| --- | --- | --- | --- | --- | --- | --- |
+| blocks/s | 5,884.4 | 1,117.8 | 392.4 | 198.7 | 22.1 | 2.8 |
+| events/s | 51,742.1 | 8,775.2 | 3,321.9 | 1,404.2 | 180.4 | 23.9 |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
