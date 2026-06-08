@@ -123,6 +123,11 @@ jobs:
           node cases/${{ matrix.case }}/run.ts ${{ matrix.indexer }} --duration="${{ needs.setup.outputs.duration }}" 2>&1 | tee /tmp/benchmark-output.txt
         env:
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
+          # Sqd's archive (v2.archive.subsquid.io) requires an API key as of
+          # 19 May 2026. The @subsquid archive client reads it from SQD_API_KEY.
+          # Get a key at https://portal.sqd.dev and add it as the SQD_API_KEY
+          # repo secret. Without it, the sqd jobs report 0 (CREDENTIALS_INVALID).
+          SQD_API_KEY: ${{ secrets.SQD_API_KEY }}
 
       - name: Post results to job summary
         if: always()

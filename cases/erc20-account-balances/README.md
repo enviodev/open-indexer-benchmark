@@ -34,7 +34,7 @@ For each **Approval** event:
 
 ## Running the Benchmark
 
-Requires Node 23.6+, Docker, and an [Envio](https://envio.dev) API token for the RPC endpoint.
+Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
 
 ```bash
 ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts
@@ -73,6 +73,8 @@ Runs a native binary (`rindexer start all`) with a separate Postgres container. 
 ### Sqd (Subsquid)
 
 Runs the processor and GraphQL server as separate native Node.js processes. Uses a Docker Postgres instance for storage. The handler batches all events in memory per block range, then flushes accounts, allowances, transfer events, and approval events concurrently via `Promise.all`.
+
+Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
 
 ### SubQuery
 
