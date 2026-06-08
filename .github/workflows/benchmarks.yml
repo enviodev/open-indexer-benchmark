@@ -57,6 +57,12 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # Cap concurrency so the matrix (cases x indexers) doesn't overload the
+      # shared Envio RPC/HyperSync token. With two cases the matrix is 12 jobs;
+      # running them all at once starves the RPC-bound indexers (envio-rpc,
+      # rindexer) with HTTP 503s and produces 0-progress results. 4 keeps the
+      # concurrent RPC load comfortably below the level that ran cleanly before.
+      max-parallel: 4
       matrix:
         case: ${{ fromJSON(needs.setup.outputs.cases) }}
         indexer: ${{ fromJSON(needs.setup.outputs.matrix) }}
