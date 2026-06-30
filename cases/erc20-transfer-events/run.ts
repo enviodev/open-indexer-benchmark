@@ -392,9 +392,16 @@ async function benchmarkRindexer(rpcUrl: string): Promise<BenchmarkResult> {
   );
   if (!existsSync(rindexerBin)) {
     console.log("Installing rindexer CLI...\n");
+    // install.sh resolves "latest" via an unauthenticated GitHub API call that
+    // is occasionally throttled (empty version -> 404 download). Retry a few
+    // times so a transient hiccup doesn't fail the whole benchmark.
     await exec(
       "bash",
-      ["-c", "curl -L https://rindexer.xyz/install.sh | bash"],
+      [
+        "-c",
+        "for i in 1 2 3; do curl -L https://rindexer.xyz/install.sh | bash && break; " +
+          'echo "rindexer install attempt $i failed; retrying..." >&2; sleep $((i * 5)); done',
+      ],
       RINDEXER_DIR,
       rindexerEnv
     );

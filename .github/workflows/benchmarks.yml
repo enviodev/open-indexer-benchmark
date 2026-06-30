@@ -95,6 +95,8 @@ jobs:
           node-version: 24
 
       - name: Prepare services
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           INDEXER="${{ matrix.indexer }}"
           CASE_DIR="cases/${{ matrix.case }}"
@@ -106,7 +108,30 @@ jobs:
               ;;
             rindexer)
               docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
-              curl -L https://rindexer.xyz/install.sh | bash
+              # install.sh resolves "latest" via an UNAUTHENTICATED GitHub API
+              # call (60 req/h, shared across Actions runners) and does not guard
+              # an empty result: when throttled the version is blank and the
+              # download URL 404s (".../releases/download/v/..."), failing the job
+              # and silently dropping rindexer from the table. Resolve the tag
+              # ourselves with an authenticated call (5000 req/h) and pin it via
+              # --version, which still tracks the latest release.
+              RINDEXER_VERSION=""
+              for i in 1 2 3; do
+                RINDEXER_VERSION=$(curl -fsSL \
+                  -H "Authorization: Bearer $GITHUB_TOKEN" \
+                  -H "Accept: application/vnd.github+json" \
+                  https://api.github.com/repos/joshstevens19/rindexer/releases/latest \
+                  | jq -r '.tag_name // empty' | sed 's/^v//') || true
+                [ -n "$RINDEXER_VERSION" ] && break
+                echo "rindexer version lookup attempt $i failed; retrying..." >&2
+                sleep $((i * 5))
+              done
+              if [ -z "$RINDEXER_VERSION" ]; then
+                echo "Failed to resolve latest rindexer version" >&2
+                exit 1
+              fi
+              echo "Installing rindexer v$RINDEXER_VERSION"
+              curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$RINDEXER_VERSION"
               ;;
             subquery)
               docker compose -f "$CASE_DIR/subquery/docker-compose.yml" pull
@@ -173,6 +198,13 @@ jobs:
             const cases = JSON.parse(process.env.CASES);
             const resultsDir = 'results';
 
+            // The checked-out README holds the currently published tables; we
+            // read it so we can carry forward any indexer that produced no fresh
+            // result this run (see the carry-forward block below).
+            const readmeText = fs.existsSync('README.md')
+              ? fs.readFileSync('README.md', 'utf8')
+              : '';
+
             // Summary lines look like:
             //   "Summary — Envio (40s): 77,177.0 blocks/s, 9,984.0 events/s"
             //   "Summary — Ponder: 502.0 blocks/s, 44.0 events/s"
@@ -184,6 +216,42 @@ jobs:
 
             const titleCase = c =>
               c.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+            // Extract { name: {blocksPerSec, eventsPerSec} } from a case's
+            // published table (between its BENCHMARK markers in the README), so a
+            // missing indexer can be carried forward instead of silently dropped.
+            const parsePublishedTable = (md, benchCase) => {
+              const startMarker = `<!-- BENCHMARK:${benchCase}:START -->`;
+              const endMarker = `<!-- BENCHMARK:${benchCase}:END -->`;
+              const start = md.indexOf(startMarker);
+              const end = md.indexOf(endMarker);
+              if (start === -1 || end === -1 || end < start) return {};
+              const rows = md.slice(start + startMarker.length, end)
+                .split('\n')
+                .filter(l => l.trim().startsWith('|'));
+              const cellsOf = l => l.split('|').slice(1, -1).map(s => s.trim());
+              let header, blocks, events;
+              for (const l of rows) {
+                const c = cellsOf(l);
+                if (c[0] === '') header = c;
+                else if (/^blocks\/s$/i.test(c[0])) blocks = c;
+                else if (/^events\/s$/i.test(c[0])) events = c;
+              }
+              if (!header || !blocks || !events) return {};
+              const names = header.slice(1).map(n => n
+                .replace(/\s*⚠️\s*$/, '')
+                .replace(/\s*\(\d+(?:\.\d+)?x slower\)\s*$/, '')
+                .trim());
+              const out = {};
+              for (let i = 0; i < names.length; i++) {
+                const b = parseFloat((blocks[i + 1] || '').replace(/,/g, ''));
+                const e = parseFloat((events[i + 1] || '').replace(/,/g, ''));
+                if (names[i] && Number.isFinite(b) && Number.isFinite(e)) {
+                  out[names[i]] = { blocksPerSec: b, eventsPerSec: e };
+                }
+              }
+              return out;
+            };
 
             // Artifact dirs are named "benchmark-<case>--<indexer>".
             const dirs = fs.existsSync(resultsDir)
@@ -211,6 +279,25 @@ jobs:
 
               const heading = titleCase(benchCase);
 
+              // Carry forward any previously published indexer with no fresh
+              // result this run (failed job / no Summary line). Rebuilding the
+              // table only from successful runs would silently drop the column.
+              const prior = parsePublishedTable(readmeText, benchCase);
+              const haveNames = new Set(results.map(r => r.name));
+              const carried = [];
+              for (const [name, vals] of Object.entries(prior)) {
+                if (!haveNames.has(name)) {
+                  results.push({ name, blocksPerSec: vals.blocksPerSec, eventsPerSec: vals.eventsPerSec, carriedOver: true });
+                  carried.push(name);
+                }
+              }
+              if (carried.length) {
+                core.warning(
+                  `${heading}: no fresh result for ${carried.join(', ')} this run — ` +
+                  `carried forward the last published value(s). Check the failed benchmark job(s).`
+                );
+              }
+
               if (results.length === 0) {
                 core.summary.addRaw(`## ${heading} Benchmark\n\n_No results collected._\n`);
                 continue;
@@ -220,17 +307,28 @@ jobs:
               const firstRate = results[0].blocksPerSec;
               const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
               const label = (r, i) => {
-                if (i === 0 || results.length === 1) return r.name;
-                const ratio = firstRate / r.blocksPerSec;
-                const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
-                return `${r.name} (${n}x slower)`;
+                let s;
+                if (i === 0 || results.length === 1) {
+                  s = r.name;
+                } else {
+                  const ratio = firstRate / r.blocksPerSec;
+                  const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
+                  s = `${r.name} (${n}x slower)`;
+                }
+                // Flag carried-forward columns as stale in the rendered table.
+                return r.carriedOver ? `${s} ⚠️` : s;
               };
 
               const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
               const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
               const blocksRow = `| blocks/s | ${results.map(r => fmtRate(r.blocksPerSec)).join(' | ')} |`;
               const eventsRow = `| events/s | ${results.map(r => fmtRate(r.eventsPerSec)).join(' | ')} |`;
-              const table = [header, sep, blocksRow, eventsRow].join('\n');
+              let table = [header, sep, blocksRow, eventsRow].join('\n');
+              if (carried.length) {
+                // Explain the ⚠️ marker right under the table so it travels with
+                // the README, PR comment, and job summary alike.
+                table += `\n\n> ⚠️ ${carried.join(', ')} — carried forward from a previous run; the latest run produced no fresh result.`;
+              }
 
               core.summary.addRaw(`## ${heading} Benchmark\n\n${table}\n`);
               fs.writeFileSync(`/tmp/benchmark-table-${benchCase}.md`, table);
