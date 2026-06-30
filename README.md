@@ -55,10 +55,12 @@ See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc
 Results of indexing raw Transfer event logs from the USDC token contract on Ethereum Mainnet, starting at block 18,600,000. Stores every decoded Transfer event with no aggregation — a pure write-only ingestion throughput test.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
-| | Envio | Sqd (2.8x slower) | Rindexer (5.1x slower) | Envio - RPC (53.2x slower) | Ponder (283.9x slower) | SubQuery (1622.5x slower) |
+| | Envio | Sqd (2.8x slower) | Rindexer (5.1x slower) ⚠️ | Envio - RPC (53.2x slower) | Ponder (283.9x slower) | SubQuery (1622.5x slower) |
 | --- | --- | --- | --- | --- | --- | --- |
 | blocks/s | 5,678.7 | 2,063.1 | 1,117.8 | 106.7 | 20.0 | 3.5 |
 | events/s | 49,798.5 | 16,803.2 | 8,775.2 | 742.3 | 162.8 | 28.7 |
+
+> ⚠️ Rindexer — carried forward from a previous run; the latest run produced no fresh result.
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).

@@ -238,7 +238,10 @@ jobs:
                 else if (/^events\/s$/i.test(c[0])) events = c;
               }
               if (!header || !blocks || !events) return {};
-              const names = header.slice(1).map(n => n.replace(/\s*\(\d+(?:\.\d+)?x slower\)\s*$/, '').trim());
+              const names = header.slice(1).map(n => n
+                .replace(/\s*⚠️\s*$/, '')
+                .replace(/\s*\(\d+(?:\.\d+)?x slower\)\s*$/, '')
+                .trim());
               const out = {};
               for (let i = 0; i < names.length; i++) {
                 const b = parseFloat((blocks[i + 1] || '').replace(/,/g, ''));
@@ -284,7 +287,7 @@ jobs:
               const carried = [];
               for (const [name, vals] of Object.entries(prior)) {
                 if (!haveNames.has(name)) {
-                  results.push({ name, blocksPerSec: vals.blocksPerSec, eventsPerSec: vals.eventsPerSec });
+                  results.push({ name, blocksPerSec: vals.blocksPerSec, eventsPerSec: vals.eventsPerSec, carriedOver: true });
                   carried.push(name);
                 }
               }
@@ -304,22 +307,30 @@ jobs:
               const firstRate = results[0].blocksPerSec;
               const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
               const label = (r, i) => {
-                if (i === 0 || results.length === 1) return r.name;
-                const ratio = firstRate / r.blocksPerSec;
-                const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
-                return `${r.name} (${n}x slower)`;
+                let s;
+                if (i === 0 || results.length === 1) {
+                  s = r.name;
+                } else {
+                  const ratio = firstRate / r.blocksPerSec;
+                  const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
+                  s = `${r.name} (${n}x slower)`;
+                }
+                // Flag carried-forward columns as stale in the rendered table.
+                return r.carriedOver ? `${s} ⚠️` : s;
               };
 
               const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
               const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
               const blocksRow = `| blocks/s | ${results.map(r => fmtRate(r.blocksPerSec)).join(' | ')} |`;
               const eventsRow = `| events/s | ${results.map(r => fmtRate(r.eventsPerSec)).join(' | ')} |`;
-              const table = [header, sep, blocksRow, eventsRow].join('\n');
+              let table = [header, sep, blocksRow, eventsRow].join('\n');
+              if (carried.length) {
+                // Explain the ⚠️ marker right under the table so it travels with
+                // the README, PR comment, and job summary alike.
+                table += `\n\n> ⚠️ ${carried.join(', ')} — carried forward from a previous run; the latest run produced no fresh result.`;
+              }
 
               core.summary.addRaw(`## ${heading} Benchmark\n\n${table}\n`);
-              if (carried.length) {
-                core.summary.addRaw(`\n> ⚠️ Carried forward last published value(s) for **${carried.join(', ')}** — no fresh result this run.\n`);
-              }
               fs.writeFileSync(`/tmp/benchmark-table-${benchCase}.md`, table);
             }
 
