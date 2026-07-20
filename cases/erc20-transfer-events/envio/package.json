@@ -14,7 +14,7 @@
     "vitest": "4.1.6"
   },
   "dependencies": {
-    "envio": "3.2.0"
+    "envio": "3.3.0-rc.0"
   },
   "engines": {
     "node": ">=22.0.0"
