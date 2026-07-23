@@ -1,0 +1,6 @@
+allowBuilds:
+  '@apollo/protobufjs': true
+  bufferutil: true
+  es5-ext: true
+  keccak: true
+  utf-8-validate: true

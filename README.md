@@ -89,6 +89,61 @@ Six real-world indexing scenarios covering events, blocks, transactions, and tra
 See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md).
 
 
+### sqd-go — Final Comparison
+
+[sqd-go](https://github.com/subsquid-labs/sqd-go) is a from-scratch Go
+indexer, benchmarked here two ways: **sqd-go** (out-of-the-box defaults,
+`--restart` only) and **sqd-go-max** (tuned — see "Config settings" below).
+`Sqd (TS)` is the original TypeScript Subsquid SDK entry already in the
+tables above, kept alongside for reference. `case_1`/`case_2` are
+time-to-complete (lower is better, capped at the reference `Sqd (TS)`
+duration for that case); the two `erc20-*` cases are steady-state
+throughput (blocks/s, higher is better).
+
+| Case (metric) | sqd-go | sqd-go-max | Envio | Sqd (TS) | Ponder | Rindexer | SubQuery | Sentio | Subgraph |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| case_1_lbtc_event_only (time) | 10m 0s (cap — 1,040,134/1,599,998 blocks) | 3m 35s ✓ complete | 3m | 10m | 1h40m | — | — | 8m | 3h9m |
+| case_2_lbtc_full (time) | 9m 45s ✓ complete | 4m 31s ✓ complete | 1m | 34m | 45m | — | — | 5–7m | 1h3m |
+| erc20-transfer-events (blocks/s) | 2,860.7 | 7,528.1 | 7,145.5 | 1,430.9 | 22.3 | 934.3 | 3.2 | — | — |
+| erc20-account-balances (blocks/s) | 3,644.4 | 7,185.7 | 97,873.1 | 4,957.8 | 519.5 | 4,362.5 | 447.2 | — | — |
+
+CPU (user+sys time) and peak RSS during each run — only measured for
+sqd-go/sqd-go-max; the other indexers' resource usage isn't captured by
+this runner:
+
+| Case | sqd-go CPU / RSS | sqd-go-max CPU / RSS |
+| --- | --- | --- |
+| case_1_lbtc_event_only | 9s / 106MB | 12s / 159MB |
+| case_2_lbtc_full | 17s / 433MB | 18s / 589MB |
+| erc20-transfer-events | 8s / 621MB | 19s / 2,053MB |
+| erc20-account-balances | 4s / 436MB | 6s / 433MB |
+
+**Config settings.** `sqd-go` runs with plain `--restart` (every default
+left as-is). `sqd-go-max` adds:
+
+```
+sqd-go start <project> --restart --parallel-fetch --no-replay
+SQD_PARALLEL_FETCHERS=12
+SQD_PARALLEL_RPS=10
+```
+
+`--parallel-fetch` fans block fetching out across `SQD_PARALLEL_FETCHERS`
+concurrent workers (12 here), each rate-limited to `SQD_PARALLEL_RPS`
+requests/s (10 here, i.e. up to 120 req/s aggregate against the RPC/portal
+endpoint); `--no-replay` skips sqd-go's replay-safety buffering, which
+otherwise re-validates recent blocks against reorgs at the cost of
+throughput. The CPU/RSS table shows the trade-off directly: sqd-go-max is
+consistently faster but not free — `erc20-transfer-events` in particular
+goes from 621MB to over 2GB peak RSS for the extra throughput, since more
+parallel in-flight fetches means more buffered block data resident at once.
+
+See the full runner implementations in
+[`cases/erc20-account-balances/run.ts`](./cases/erc20-account-balances/run.ts),
+[`cases/erc20-transfer-events/run.ts`](./cases/erc20-transfer-events/run.ts),
+[`sentio-benchmarks-may-2025/case_1_lbtc_event_only/run.ts`](./sentio-benchmarks-may-2025/case_1_lbtc_event_only/run.ts),
+and [`sentio-benchmarks-may-2025/case_2_lbtc_full/run.ts`](./sentio-benchmarks-may-2025/case_2_lbtc_full/run.ts).
+
+
 ## Running the benchmarks
 
 See the README in each case directory for setup instructions and requirements:

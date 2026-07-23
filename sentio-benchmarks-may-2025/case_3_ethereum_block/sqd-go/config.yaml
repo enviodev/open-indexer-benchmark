@@ -1,0 +1,9 @@
+name: case_3_ethereum_block
+description: >
+  Block-level indexing: block number, hash, timestamp, parent hash, etc. for
+  every block in the range. No contracts/events, no RPC calls.
+chains:
+  - id: 1
+    start_block: 0
+    end_block: 100000
+store_blocks: true

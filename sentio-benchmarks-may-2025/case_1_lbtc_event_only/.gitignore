@@ -17,4 +17,7 @@ build/
 *.swo
 
 # Logs
-*.log 
+*.log
+
+# Local benchmark run output — regenerated per run, not committed.
+results.json 

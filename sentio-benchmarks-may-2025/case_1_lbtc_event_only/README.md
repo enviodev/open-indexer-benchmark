@@ -41,7 +41,8 @@ Each subdirectory contains the implementation for a specific indexing platform:
 - `/sentio`: Sentio implementation
 - `/envio`: Envio implementation
 - `/ponder`: Ponder implementation
-- `/sqd`: Subsquid implementation
+- `/sqd`: Subsquid (TypeScript SDK) implementation
+- `/sqd-go`: [sqd-go](https://github.com/subsquid-labs/sqd-go) implementation — see [`sqd-go/README.md`](./sqd-go/README.md). Driven by [`run.ts`](./run.ts) (`bun run.ts`), which runs it for a fixed duration and reports blocks/s and events/s, the same methodology as `cases/*/run.ts`.
 - `/subgraph`: The Graph subgraph implementation
 
 ## Running the Benchmark

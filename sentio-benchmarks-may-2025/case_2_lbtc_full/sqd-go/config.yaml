@@ -1,0 +1,21 @@
+name: case_2_lbtc_full
+description: >
+  LBTC balance + points accrual, derived entirely from Transfer event deltas
+  (no RPC balanceOf calls). Indexing starts at the LBTC contract's effective
+  genesis block so derived balances are exact by the official case_2 window
+  (22,400,000-22,500,000); see README.md for why.
+chains:
+  - id: 1
+    start_block: 20600000
+    end_block: 22500000
+    contracts:
+      - name: LBTC
+        address: "0x8236a87084f8B84306f72007F36F2618A5634494"
+        events:
+          - event: Transfer(address indexed from, address indexed to, uint256 value)
+state:
+  - name: Account
+    source_table: accounts
+    key:
+      - Address
+    mode: hotstate

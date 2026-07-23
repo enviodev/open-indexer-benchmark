@@ -1,0 +1,14 @@
+name: case_1_lbtc_event_only
+description: >
+  LBTC Transfer event indexing, write-only, no RPC calls. Matches this
+  case's benchmark spec: decode and store raw Transfer events only, no
+  derived state.
+chains:
+  - id: 1
+    start_block: 20600000
+    end_block: 22200000
+    contracts:
+      - name: LBTC
+        address: "0x8236a87084f8B84306f72007F36F2618A5634494"
+        events:
+          - event: Transfer(address indexed from, address indexed to, uint256 value)

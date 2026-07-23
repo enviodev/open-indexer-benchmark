@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+
+# Generated/scaffolded by `sqd-go start --state` — never committed.
+generated/
+.sqd/
+go.mod
+go.sum
+main_gen.go
+tmp_runner/
+tmp_runner_bin

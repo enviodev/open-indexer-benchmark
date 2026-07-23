@@ -2,7 +2,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { rmSync, existsSync, writeFileSync } from "node:fs";
+import { rmSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 
 // ── Config ─────────────────────────────────────────────────────────────
 
@@ -12,6 +12,8 @@ const ENVIO_DIR = resolve(__dirname, "envio");
 const RINDEXER_DIR = resolve(__dirname, "rindexer");
 const SUBQUERY_DIR = resolve(__dirname, "subquery");
 const SQUID_DIR = resolve(__dirname, "sqd");
+const SQD_GO_DIR = resolve(process.env.SQD_GO_DIR ?? resolve(__dirname, "../../../sqd-go"));
+const SQD_GO_CASE_DIR = resolve(__dirname, "sqd-go");
 const START_BLOCK = 18_600_000;
 const BENCHMARK_PORT = 19_876;
 
@@ -41,17 +43,22 @@ interface BenchmarkResult {
   durationS: number;
   blocksPerSec: number;
   eventsPerSec: number;
+  // Only populated for benchmarks wired through startTimed(); null means
+  // "not measured for this indexer", not "zero resource usage".
+  resourceStats: ResourceStats | null;
 }
 
 function buildResult(
   name: string,
   totalBlocks: number,
   totalEvents: number,
-  durationS: number
+  durationS: number,
+  resourceStats: ResourceStats | null = null
 ): BenchmarkResult {
   return {
     name,
     durationS,
+    resourceStats,
     blocksPerSec: durationS > 0 ? totalBlocks / durationS : 0,
     eventsPerSec: durationS > 0 ? totalEvents / durationS : 0,
   };
@@ -96,6 +103,76 @@ function start(
     });
   }
   return p;
+}
+
+interface ResourceStats {
+  cpuUserS: number;
+  cpuSysS: number;
+  peakRssMB: number;
+}
+
+const TIME_FLAG = process.platform === "darwin" ? "-l" : "-v";
+
+/** Parse `/usr/bin/time`'s trailing report — BSD/macOS `-l` and GNU `-v`
+ * have different formats, so both are tried. Returns null if neither
+ * matches (e.g. the process was killed before `time` could report). */
+function parseTimeStats(text: string): ResourceStats | null {
+  const user = text.match(/([\d.]+)\s+user/);
+  const sys = text.match(/([\d.]+)\s+sys/);
+  const rss = text.match(/(\d+)\s+maximum resident set size/);
+  if (user && sys && rss) {
+    return {
+      cpuUserS: parseFloat(user[1]),
+      cpuSysS: parseFloat(sys[1]),
+      peakRssMB: parseInt(rss[1], 10) / (1024 * 1024),
+    };
+  }
+  const userGnu = text.match(/User time \(seconds\):\s*([\d.]+)/);
+  const sysGnu = text.match(/System time \(seconds\):\s*([\d.]+)/);
+  const rssGnu = text.match(/Maximum resident set size \(kbytes\):\s*(\d+)/);
+  if (userGnu && sysGnu && rssGnu) {
+    return {
+      cpuUserS: parseFloat(userGnu[1]),
+      cpuSysS: parseFloat(sysGnu[1]),
+      peakRssMB: parseInt(rssGnu[1], 10) / 1024,
+    };
+  }
+  return null;
+}
+
+/** Spawn `cmd` wrapped in `/usr/bin/time` + `timeout capS`, forwarding
+ * output like start() but also retaining the tail of it to parse the
+ * resource report from once the process exits. Using `timeout` (not a
+ * manual sleep+SIGTERM) is what makes the report reliable: `time` only
+ * prints once ITS direct child exits, and `timeout` — not an external
+ * signal to the whole process group — is what cleanly ends that child. */
+function startTimed(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv | undefined,
+  capS: number
+): { proc: ChildProcess; exited: Promise<void>; getStats: () => ResourceStats | null } {
+  const p = spawn("/usr/bin/time", [TIME_FLAG, "timeout", String(capS), cmd, ...args], {
+    cwd,
+    stdio: "pipe",
+    env,
+  });
+  let tail = "";
+  for (const stream of [p.stdout, p.stderr]) {
+    stream?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      tail = (tail + text).slice(-4_000);
+      for (const line of text.split("\n")) {
+        if (line) console.log(`  ${line}`);
+      }
+    });
+  }
+  // Captured eagerly, right at spawn — if a caller instead did
+  // `p.once("exit", ...)` later (e.g. after an intervening await), the
+  // event may have already fired and been missed, hanging forever.
+  const exited = new Promise<void>((res) => p.once("exit", () => res()));
+  return { proc: p, exited, getStats: () => parseTimeStats(tail) };
 }
 
 /** Kill a process and its entire process group. */
@@ -609,11 +686,24 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
   console.log("Building squid project...\n");
   await exec("pnpm", ["build"], SQUID_DIR);
 
+  // As of 19 May 2026 the SQD archive requires an API key
+  // (ArchiveCredentialsError / CREDENTIALS_INVALID without one). Reuses the
+  // same key as the sqd-go entry's .env, since both hit the same SQD
+  // backend; never hardcode the key itself here.
+  const sqdApiKey =
+    process.env.SQD_API_KEY ?? readEnvFile(resolve(SQD_GO_CASE_DIR, ".env")).SQD_API_TOKEN;
+  if (!sqdApiKey) {
+    throw new Error(
+      `SQD_API_KEY missing — set it, or set SQD_API_TOKEN in ${resolve(SQD_GO_CASE_DIR, ".env")}`
+    );
+  }
+
   // Start Postgres via Docker
   console.log("Starting PostgreSQL database...\n");
   const squidEnv = {
     ...process.env,
     RPC_ENDPOINT: rpcUrl,
+    SQD_API_KEY: sqdApiKey,
     DB_PORT: "23798",
     DB_HOST: "localhost",
     DB_NAME: "squid",
@@ -638,21 +728,24 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
   console.log("Applying migrations...\n");
   await exec("npx", ["squid-typeorm-migration", "apply"], SQUID_DIR, squidEnv);
 
-  const durationPromise = sleep(DURATION_S * 1_000);
-
-  // Start the GraphQL server and processor as separate processes
+  // Start the GraphQL server (untimed — just serves queries) and the
+  // processor (timed: this is the actual indexing work) as separate
+  // processes. The processor is capped via `timeout` inside startTimed, not
+  // a manual sleep+kill, so /usr/bin/time's report is reliable.
   console.log(`\nStarting squid for ${DURATION_S}s...\n`);
   const gqlServer = start("npx", ["squid-graphql-server"], SQUID_DIR, squidEnv);
-  const processor = start(
+  const { proc: processor, exited: processorExited, getStats } = startTimed(
     "node",
     ["--require=dotenv/config", "lib/main.js"],
     SQUID_DIR,
-    squidEnv
+    squidEnv,
+    DURATION_S
   );
   activeProc = processor;
 
-  // Wait for GraphQL to become ready, sleep concurrently
-  await Promise.all([waitReady(GRAPHQL_URL, QUERY, 60_000), durationPromise]);
+  await waitReady(GRAPHQL_URL, QUERY, 60_000);
+  await processorExited;
+  const resourceStats = getStats();
 
   // Snapshot results
   const data: any = await gql(GRAPHQL_URL, QUERY);
@@ -661,7 +754,6 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
     blockData = await gql(GRAPHQL_URL, BLOCK_QUERY);
   } catch {}
 
-  await kill(processor);
   await kill(gqlServer);
   activeProc = null;
 
@@ -683,7 +775,118 @@ async function benchmarkSqd(rpcUrl: string): Promise<BenchmarkResult> {
     }
   }
 
-  return buildResult("Sqd", totalBlocks, totalEvents, DURATION_S);
+  return buildResult("Sqd", totalBlocks, totalEvents, DURATION_S, resourceStats);
+}
+
+// ── Sqd-Go Benchmark ───────────────────────────────────────────────────
+
+/** Minimal .env parser — just KEY=VALUE lines, good enough for the case's
+ * own .env (SQD_API_TOKEN + ClickHouse settings). */
+function readEnvFile(path: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (!existsSync(path)) return env;
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+  }
+  return env;
+}
+
+function chQuery(container: string, password: string, query: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const p = spawn(
+      "docker",
+      ["exec", container, "clickhouse-client", "--password", password, "--query", query],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    let stdout = "";
+    let stderr = "";
+    p.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    p.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    p.on("exit", (code) =>
+      code === 0 ? resolve(stdout.trim()) : reject(new Error(`clickhouse-client failed (${code}): ${stderr}`))
+    );
+  });
+}
+
+// sqd-go reads from the SQD Portal (same lineage as Sqd's archive endpoint
+// above), so rpcUrl is unused — it's only a parameter to match the shared
+// BENCHMARKS registry signature.
+//
+// `tuned` selects between two labeled entries: "sqd-go" runs with plain
+// --restart (out-of-the-box defaults), "sqd-go-max" adds --parallel-fetch
+// with sqd-go's own Makefile ("uniswap-fast") preset. The gap between them
+// is real — the tuned run is roughly 2x on this case.
+async function benchmarkSqdGoImpl(tuned: boolean): Promise<BenchmarkResult> {
+  const label = tuned ? "Sqd-Go-Max" : "Sqd-Go";
+  console.log(`\n--- ${label} ---\n`);
+
+  const caseEnv = readEnvFile(resolve(SQD_GO_CASE_DIR, ".env"));
+  if (!caseEnv.SQD_API_TOKEN) {
+    throw new Error(`SQD_API_TOKEN missing — set it in ${resolve(SQD_GO_CASE_DIR, ".env")}`);
+  }
+  const rootEnv = readEnvFile(resolve(SQD_GO_DIR, ".env"));
+  const chPassword = rootEnv.CLICKHOUSE_PASSWORD ?? caseEnv.CLICKHOUSE_PASSWORD ?? "sqd-clickhouse";
+
+  console.log("Building sqd-go...");
+  await exec("go", ["build", "-o", "tmp/sqd-go-bench", "."], SQD_GO_DIR);
+
+  console.log("Starting local ClickHouse...");
+  await exec("docker", ["compose", "up", "-d", "clickhouse"], SQD_GO_DIR);
+  let chContainer = "";
+  for (let i = 0; i < 30; i++) {
+    chContainer = await new Promise<string>((res) => {
+      const p = spawn("docker", ["compose", "ps", "-q", "clickhouse"], { cwd: SQD_GO_DIR });
+      let out = "";
+      p.stdout?.on("data", (c: Buffer) => (out += c.toString()));
+      p.on("exit", () => res(out.trim()));
+    });
+    if (chContainer) {
+      try {
+        await chQuery(chContainer, chPassword, "SELECT 1");
+        break;
+      } catch {}
+    }
+    await sleep(1_000);
+  }
+
+  const args = ["start", SQD_GO_CASE_DIR, "--restart"];
+  const env = { ...process.env };
+  if (tuned) {
+    args.push("--parallel-fetch", "--no-replay");
+    Object.assign(env, { SQD_PARALLEL_FETCHERS: "12", SQD_PARALLEL_RPS: "10" });
+  }
+  console.log(`\nStarting ${label}, capped at ${DURATION_S}s...\n`);
+  const { proc, exited, getStats } = startTimed("./tmp/sqd-go-bench", args, SQD_GO_DIR, env, DURATION_S);
+  activeProc = proc;
+
+  await exited;
+  const resourceStats = getStats();
+  activeProc = null;
+
+  console.log("Measuring results...");
+  const result = await chQuery(
+    chContainer,
+    chPassword,
+    "SELECT count(), max(block_number) FROM erc20_transfer_events_sqd_go.usdc_transfer_events"
+  ).catch(() => "0\t0");
+  const [eventsStr, blockStr] = result.split("\t");
+  const totalEvents = parseInt(eventsStr, 10) || 0;
+  const maxBlock = parseInt(blockStr, 10) || 0;
+  const totalBlocks = maxBlock > START_BLOCK ? maxBlock - START_BLOCK : 0;
+
+  return buildResult(label, totalBlocks, totalEvents, DURATION_S, resourceStats);
+}
+
+async function benchmarkSqdGo(_rpcUrl: string): Promise<BenchmarkResult> {
+  return benchmarkSqdGoImpl(false);
+}
+
+async function benchmarkSqdGoMax(_rpcUrl: string): Promise<BenchmarkResult> {
+  return benchmarkSqdGoImpl(true);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
@@ -696,6 +899,8 @@ const BENCHMARKS: Record<string, (rpcUrl: string) => Promise<BenchmarkResult>> =
     rindexer: benchmarkRindexer,
     subquery: benchmarkSubQuery,
     sqd: benchmarkSqd,
+    "sqd-go": benchmarkSqdGo,
+    "sqd-go-max": benchmarkSqdGoMax,
   };
 
 function formatRate(n: number): string {
@@ -703,6 +908,14 @@ function formatRate(n: number): string {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
+}
+
+/** Always "Nm Ss" (or "Ss" under a minute) — never bare seconds. */
+function formatDuration(s: number): string {
+  const total = Math.round(s);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
 }
 
 async function main() {
@@ -722,13 +935,15 @@ async function main() {
     }
   }
 
-  // Validate ENVIO_API_TOKEN
+  // Validate ENVIO_API_TOKEN — not needed when only running sqd-go, which
+  // reads from the SQD Portal instead of an RPC endpoint.
+  const needsEnvioToken = selected.some((name) => name !== "sqd-go" && name !== "sqd-go-max");
   const apiToken = process.env.ENVIO_API_TOKEN;
-  if (!apiToken) {
+  if (needsEnvioToken && !apiToken) {
     console.error("Error: ENVIO_API_TOKEN environment variable is required.");
     process.exit(1);
   }
-  const rpcUrl = `https://1.rpc.hypersync.xyz/${apiToken}`;
+  const rpcUrl = apiToken ? `https://1.rpc.hypersync.xyz/${apiToken}` : "";
 
   console.log("=== ERC20 Transfer Events Benchmark ===");
   console.log(`Duration: ${DURATION_S}s · Start block: ${START_BLOCK}`);
@@ -736,21 +951,33 @@ async function main() {
 
   const results: BenchmarkResult[] = [];
 
-  // Add a "(40s)" suffix to the indexer name when the run window differs from
-  // the baseline so the reader can see which entries are normalised over a
-  // non-default duration.
+  // Add a "(1m 40s)" suffix to the indexer name when the run window differs
+  // from the baseline so the reader can see which entries are normalised
+  // over a non-default duration.
   const labelWithDuration = (r: BenchmarkResult): string =>
-    r.durationS === DURATION_S ? r.name : `${r.name} (${r.durationS}s)`;
+    Math.round(r.durationS) === DURATION_S ? r.name : `${r.name} (${formatDuration(r.durationS)})`;
+
+  // Persisted after every benchmark (not just at the end): a killed/crashed
+  // run still leaves whatever completed so far on disk, not just in
+  // console output that a flaky capture can lose.
+  const resultsLogPath = resolve(__dirname, "results.json");
+  const persistResults = () =>
+    writeFileSync(resultsLogPath, JSON.stringify({ case: "erc20-transfer-events", updatedAt: new Date().toISOString(), results }, null, 2));
 
   // Run selected benchmarks sequentially to avoid resource contention
   for (const name of selected) {
     const result = await BENCHMARKS[name](rpcUrl);
     results.push(result);
+    persistResults();
     await sleep(SUMMARY_DELAY_MS);
+    const res = result.resourceStats;
+    const resSuffix = res
+      ? ` · CPU ${(res.cpuUserS + res.cpuSysS).toFixed(1)}s (${res.cpuUserS.toFixed(1)}u+${res.cpuSysS.toFixed(1)}s) · peak RSS ${res.peakRssMB.toFixed(0)}MB`
+      : "";
     console.log(
       `\nSummary — ${labelWithDuration(result)}: ${formatRate(
         result.blocksPerSec
-      )} blocks/s, ${formatRate(result.eventsPerSec)} events/s\n`
+      )} blocks/s, ${formatRate(result.eventsPerSec)} events/s${resSuffix}\n`
     );
     await sleep(SUMMARY_DELAY_MS);
   }
@@ -786,9 +1013,21 @@ async function main() {
     "| events/s |",
     ...results.map((r) => ` ${formatRate(r.eventsPerSec)} |`),
   ].join("");
+  const cpuRow = [
+    "| CPU (user+sys) |",
+    ...results.map((r) =>
+      r.resourceStats
+        ? ` ${formatDuration(r.resourceStats.cpuUserS + r.resourceStats.cpuSysS)} |`
+        : " — |"
+    ),
+  ].join("");
+  const memRow = [
+    "| peak RSS |",
+    ...results.map((r) => (r.resourceStats ? ` ${r.resourceStats.peakRssMB.toFixed(0)}MB |` : " — |")),
+  ].join("");
 
   console.log(`\n=== Markdown ===\n`);
-  console.log([header, sep, blocksRow, eventsRow].join("\n"));
+  console.log([header, sep, blocksRow, eventsRow, cpuRow, memRow].join("\n"));
 }
 
 main().catch(async (err) => {

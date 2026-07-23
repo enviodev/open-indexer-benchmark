@@ -30,6 +30,7 @@ For each **Approval** event:
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
 - **Sqd** — [sqd/](./sqd/)
+- **Sqd-Go** — [sqd-go/](./sqd-go/) (requires a sibling [sqd-go](https://github.com/subsquid-labs/sqd-go) checkout and its own `SQD_API_TOKEN`; derives balances/allowances from event deltas, no RPC — see [sqd-go/README.md](./sqd-go/README.md))
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark

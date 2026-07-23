@@ -1,0 +1,13 @@
+name: erc20_transfer_events_sqd_go
+description: >
+  USDC Transfer event indexing, write-only, no aggregation. No RPC calls —
+  reads from the SQD Portal, same data source as the sibling `sqd/` (TS)
+  implementation's archive endpoint.
+chains:
+  - id: 1
+    start_block: 18600000
+    contracts:
+      - name: USDC
+        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        events:
+          - event: Transfer(address indexed from, address indexed to, uint256 value)

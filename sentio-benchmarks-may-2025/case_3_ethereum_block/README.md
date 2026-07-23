@@ -85,6 +85,7 @@ Each subdirectory contains the implementation for a specific indexing platform:
 - `/sqd`: Subsquid implementation
 - `/subgraph`: The Graph subgraph implementation
 - `/envio`: Envio implementation using HyperSync (not traditional block handlers)
+- `/sqd-go`: [sqd-go](https://github.com/subsquid-labs/sqd-go) implementation — see [`sqd-go/README.md`](./sqd-go/README.md). Driven by [`run.ts`](./run.ts) (`bun run.ts`).
 
 ## Platform Notes
 

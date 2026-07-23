@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+generated/
+.sqd/
+go.mod
+go.sum
+tmp_runner/
+tmp_runner_bin

@@ -1,0 +1,27 @@
+name: erc20_account_balances_sqd_go
+description: >
+  RocketTokenRETH Transfer + Approval event indexing with derived account
+  balances and allowances. No RPC calls — balances/allowances derive purely
+  from event deltas, matching this case's own reference logic (upsert with
+  zero-balance default), not a balanceOf()/allowance() RPC call.
+chains:
+  - id: 1
+    start_block: 18600000
+    contracts:
+      - name: RocketTokenRETH
+        address: "0xae78736cd615f374d3085123a210448e74fc6393"
+        events:
+          - event: Transfer(address indexed from, address indexed to, uint256 value)
+          - event: Approval(address indexed owner, address indexed spender, uint256 value)
+state:
+  - name: Account
+    source_table: accounts
+    key:
+      - Address
+    mode: hotstate
+  - name: Allowance
+    source_table: allowances
+    key:
+      - Owner
+      - Spender
+    mode: hotstate
