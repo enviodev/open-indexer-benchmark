@@ -54,7 +54,7 @@ export const caseConfig: CaseConfig = {
       tableCandidates: ["Account", "account"],
       keyFieldCount: 1,
       fields: [
-        { role: "address", kind: "address", candidates: ["address", "holder", "id"] },
+        { role: "id", kind: "address", candidates: ["id", "address", "holder"] },
         { role: "balance", kind: "amount", candidates: ["balance"] },
       ],
     },

@@ -25,9 +25,9 @@ contracts:
       - Transfer
       - Approval
     tables:
-      - name: accounts
+      - name: account
         columns:
-          - name: holder
+          - name: id
           - name: balance
             default: "0"
         events:
@@ -35,19 +35,19 @@ contracts:
             operations:
               - type: upsert
                 where:
-                  holder: $to
+                  id: $to
                 set:
                   - column: balance
                     action: add
                     value: $value
               - type: upsert
                 where:
-                  holder: $from
+                  id: $from
                 set:
                   - column: balance
                     action: subtract
                     value: $value
-      - name: allowances
+      - name: allowance
         columns:
           - name: owner
           - name: spender
