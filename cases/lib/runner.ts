@@ -410,7 +410,7 @@ const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
   let done = false;
 
   return {
-    name: "Envio",
+    name: "Envio Indexer",
     dbUrl: ENVIO_DB_URL,
     async prepare() {
       console.log("Cleaning envio cache...");

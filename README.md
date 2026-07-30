@@ -37,7 +37,7 @@ Each case runs in two phases.
 
 **Storage**: size on disk of the tables the case defines, including their indexes, at the identical data state the verification phase produces, prefixed with the storage engine. Each tool's internal bookkeeping is recorded in the run output rather than the table, since it varies with how much a tool caches or retains.
 
-**Source**: where a tool reads chain data from. Tools with their own pipeline use it — Envio reads HyperSync, SQD reads the SQD network — and everything else reads a plain RPC endpoint, which is [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) here. Envio appears twice, once per source, which isolates the data source from the tool: the same indexer against HyperSync and against a plain RPC endpoint.
+**Source**: where a tool reads chain data from. Tools with their own pipeline use it — Envio reads HyperSync, SQD reads the SQD network — and everything else reads a plain RPC endpoint, which is [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) here. Envio Indexer appears twice, once per source, which isolates the data source from the tool: the same indexer against HyperSync and against a plain RPC endpoint.
 
 All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per case.
 
