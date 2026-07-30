@@ -23,6 +23,39 @@ export interface DecodedLog {
   value: bigint;
 }
 
+const MAX_ATTEMPTS = 5;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * POST with retries. Transient DNS failures and 5xx responses are common
+ * enough that without this a whole benchmark job can fail before it starts.
+ */
+async function post(url: string, token: string, body?: unknown): Promise<any> {
+  let lastError = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      if (res.ok) return await res.json();
+      lastError = `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      // Anything other than a server-side or rate-limit response is a request
+      // the caller got wrong; retrying it just delays the error.
+      if (res.status < 500 && res.status !== 429) break;
+    } catch (err: any) {
+      lastError = String(err.message ?? err);
+    }
+    if (attempt < MAX_ATTEMPTS) await sleep(attempt * 2_000);
+  }
+  throw new Error(`HyperSync request failed after ${MAX_ATTEMPTS} attempts — ${lastError}`);
+}
+
 /** `0x…32 bytes` topic → lowercase 20-byte address. */
 function topicToAddress(topic: string): string {
   return `0x${topic.slice(-40).toLowerCase()}`;
@@ -64,20 +97,7 @@ export async function fetchLogs(opts: {
       },
     };
 
-    const res = await fetch(HYPERSYNC_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      throw new Error(
-        `HyperSync HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`
-      );
-    }
-    const json: any = await res.json();
+    const json = await post(HYPERSYNC_URL, token, body);
 
     const timestamps = new Map<number, number>();
     for (const batch of json.data ?? []) {
@@ -126,10 +146,6 @@ export async function fetchLogs(opts: {
 
 /** Current chain height as seen by HyperSync. */
 export async function fetchChainHeight(token: string): Promise<number> {
-  const res = await fetch("https://eth.hypersync.xyz/height", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`HyperSync height HTTP ${res.status}`);
-  const json: any = await res.json();
+  const json = await post("https://eth.hypersync.xyz/height", token);
   return Number(json.height);
 }
