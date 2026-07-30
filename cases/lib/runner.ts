@@ -44,7 +44,7 @@ const SQD_NETWORK_URL = "https://docs.sqd.ai/subsquid-network/overview/";
  * column distinguishes a tool's own pipeline from a plain RPC endpoint.
  */
 const TOOLS: Record<
-  string,
+  keyof typeof DRIVERS,
   { url: string; source: string; sourceUrl: string; storage: string }
 > = {
   envio: {
@@ -795,7 +795,14 @@ async function benchmarkIndexer(
   headEndBlock: number
 ): Promise<BenchmarkResult> {
   const factory = DRIVERS[key];
+  // Two different quantities that differ by one. The inclusive range holds
+  // this many blocks, which is what the rate is computed over…
   const rangeBlocks = config.verifyEndBlock - config.startBlock + 1;
+  // …while snapshots report `latestIndexedBlock - startBlock`, so reaching the
+  // final block yields one less than that. Comparing progress against the
+  // inclusive count would mean block-based completion could never fire, leaving
+  // completion to hinge entirely on the event count matching exactly.
+  const rangeTargetBlocks = config.verifyEndBlock - config.startBlock;
 
   // ── Phase A: bounded verification run ──
   const phaseA = factory({ config, rpcUrl, endBlock: config.verifyEndBlock });
@@ -810,7 +817,7 @@ async function benchmarkIndexer(
 
   await phaseA.prepare();
   const rangeRun = await runPhase(phaseA, {
-    targetBlocks: rangeBlocks,
+    targetBlocks: rangeTargetBlocks,
     targetEvents: expected.totalEvents,
     maxSeconds: PHASE_A_TIMEOUT_S,
   });

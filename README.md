@@ -41,6 +41,8 @@ Each case runs in two phases.
 
 All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per case.
 
+One caveat worth stating plainly: Ponder runs under `ponder dev` rather than `ponder start`. Its documented production command exits immediately under the flags used here, and `dev` watches the filesystem and hot-reloads, so Ponder carries overhead no other tool's invocation does. Its throughput is not a like-for-like comparison until that is resolved.
+
 You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 
 
