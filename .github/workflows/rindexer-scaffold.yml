@@ -43,7 +43,9 @@ jobs:
       - name: Scaffold a stock rust project
         run: |
           mkdir -p /tmp/stock
-          printf 'erc20-indexer\nbenchmark\n1\n\n\n\n\n\n\n\n' \
+          # Prompts, in order: project name (hyphens rejected), description,
+          # repository, storages, then graphql.
+          printf 'erc20indexer\n\n\npostgres\nyes\nyes\nyes\n' \
             | timeout 60 rindexer new -p /tmp/stock rust 2>&1 | head -c 4000 || true
           echo "===== TREE ====="
           find /tmp/stock -type f -not -path '*/target/*' | sort | head -50
