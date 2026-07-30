@@ -51,37 +51,37 @@ const TOOLS: Record<
     url: "https://envio.dev",
     source: "HyperSync",
     sourceUrl: HYPERSYNC_URL,
-    storage: "PG",
+    storage: "Postgres",
   },
   "envio-rpc": {
     url: "https://envio.dev",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
-    storage: "PG",
+    storage: "Postgres",
   },
   ponder: {
     url: "https://ponder.sh",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
-    storage: "PG",
+    storage: "Postgres",
   },
   rindexer: {
     url: "https://rindexer.xyz",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
-    storage: "PG",
+    storage: "Postgres",
   },
   sqd: {
     url: "https://www.sqd.ai",
     source: "SQD",
     sourceUrl: SQD_NETWORK_URL,
-    storage: "PG",
+    storage: "Postgres",
   },
   subquery: {
     url: "https://subquery.network",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
-    storage: "PG",
+    storage: "Postgres",
   },
 };
 
@@ -410,7 +410,7 @@ const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
   let done = false;
 
   return {
-    name: mode === "rpc" ? "Envio - RPC" : "Envio",
+    name: "Envio",
     dbUrl: ENVIO_DB_URL,
     async prepare() {
       console.log("Cleaning envio cache...");
@@ -990,9 +990,10 @@ async function benchmarkIndexer(
 
 // ── Result presentation ────────────────────────────────────────────────
 
+/** Status marker only; the explanation becomes a note under the table. */
 function correctnessCell(result: BenchmarkResult): string {
   if (result.correctness === "ok") return "✅";
-  return `${result.correctness === "mismatch" ? "❌" : "❓"} ${result.correctnessDetail}`;
+  return result.correctness === "mismatch" ? "❌" : "❓";
 }
 
 export function toTableRow(result: BenchmarkResult): TableRow {
@@ -1006,6 +1007,7 @@ export function toTableRow(result: BenchmarkResult): TableRow {
       blocks: formatRate(result.blocksPerSec),
       events: formatRate(result.eventsPerSec),
       correctness: correctnessCell(result),
+      correctnessDetail: result.correctness === "ok" ? "" : result.correctnessDetail,
       dbSize: size === "—" ? size : `${result.storage} ${size}`,
     },
   };

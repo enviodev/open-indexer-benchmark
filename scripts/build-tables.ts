@@ -9,7 +9,7 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildTable, parsePublishedTable, type TableRow } from "../cases/lib/table.ts";
+import { buildTable, parsePublishedTable, rowKey, type TableRow } from "../cases/lib/table.ts";
 import { toTableRow, type BenchmarkResult } from "../cases/lib/runner.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -62,12 +62,12 @@ for (const benchCase of cases) {
   // Re-publish any indexer that produced no fresh result this run. Rebuilding
   // from successful jobs alone would silently drop its row, which reads as
   // "no longer benchmarked" rather than "this job failed".
-  const fresh = new Set(rows.map((r) => r.name));
+  const fresh = new Set(rows.map(rowKey));
   const carried: string[] = [];
   for (const prior of parsePublishedTable(readme, benchCase)) {
-    if (fresh.has(prior.name)) continue;
+    if (fresh.has(rowKey(prior))) continue;
     rows.push({ ...prior, carriedOver: true });
-    carried.push(prior.name);
+    carried.push(rowKey(prior).replace("|", " via "));
   }
   if (carried.length > 0) {
     console.log(
