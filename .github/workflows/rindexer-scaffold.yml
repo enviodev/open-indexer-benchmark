@@ -31,19 +31,40 @@ jobs:
 
       - name: Print the CLI surface
         run: |
-          for cmd in "" "new" "codegen"; do
+          for cmd in "" "new" "new rust" "codegen"; do
             echo "───────── rindexer $cmd --help ─────────"
             rindexer $cmd --help < /dev/null 2>&1 | head -c 4000
           done
 
-      # Every rindexer invocation gets stdin closed: `rindexer new` prompts for a
-      # project name and, without a TTY, spins forever re-printing the prompt.
+      # `rindexer new rust` prompts for project details and, with no TTY, loops
+      # re-printing the prompt — so it gets canned answers, a timeout, and a
+      # capped log. What matters here is the shape of the crate it lays down:
+      # Cargo.toml, main.rs, and where the generated modules land.
+      - name: Scaffold a stock rust project
+        run: |
+          mkdir -p /tmp/stock
+          printf 'erc20-indexer\nbenchmark\n1\n\n\n\n\n\n\n\n' \
+            | timeout 60 rindexer new rust -p /tmp/stock 2>&1 | head -c 4000 || true
+          echo "===== TREE ====="
+          find /tmp/stock -type f -not -path '*/target/*' | sort | head -50
+          for f in $(find /tmp/stock -name '*.rs' -o -name 'Cargo.toml' -o -name 'rindexer.yaml' | sort); do
+            echo "───────── $f ─────────"
+            head -c 8000 "$f"
+            echo
+          done
+
       - name: Generate typings for the account-balances config
         run: |
           set -x
           mkdir -p /tmp/scaffold
           cp -r cases/erc20-account-balances/rindexer/. /tmp/scaffold/
           cd /tmp/scaffold
+          # codegen runs `cargo fmt`, which needs to be inside a crate. A stub
+          # manifest is enough — formatting only cares about syntax, and the
+          # real dependency set comes from the stock scaffold above.
+          printf '[package]\nname = "erc20-indexer"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n' > Cargo.toml
+          mkdir -p src
+          echo 'fn main() {}' > src/main.rs
           sed -i 's/^project_type: no-code/project_type: rust/' rindexer.yaml
           # A rust project rejects `tables:` outright — declarative table
           # operations are a no-code-only feature, and the aggregation moves
@@ -58,6 +79,7 @@ jobs:
           timeout 180 rindexer codegen indexer < /dev/null
 
       - name: Print what was generated
+        if: always()
         run: |
           cd /tmp/scaffold
           echo "===== TREE ====="
