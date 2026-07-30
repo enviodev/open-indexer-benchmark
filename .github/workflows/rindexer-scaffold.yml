@@ -29,6 +29,13 @@ jobs:
           curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$VERSION"
           echo "$HOME/.config/.rindexer/bin" >> "$GITHUB_PATH"
 
+      - name: Print the CLI surface
+        run: |
+          for cmd in "" "new" "codegen"; do
+            echo "───────── rindexer $cmd --help ─────────"
+            rindexer $cmd --help < /dev/null 2>&1 | head -c 4000
+          done
+
       # Every rindexer invocation gets stdin closed: `rindexer new` prompts for a
       # project name and, without a TTY, spins forever re-printing the prompt.
       - name: Generate typings for the account-balances config
@@ -38,13 +45,17 @@ jobs:
           cp -r cases/erc20-account-balances/rindexer/. /tmp/scaffold/
           cd /tmp/scaffold
           sed -i 's/^project_type: no-code/project_type: rust/' rindexer.yaml
+          # A rust project rejects `tables:` outright — declarative table
+          # operations are a no-code-only feature, and the aggregation moves
+          # into handler code instead.
+          sed -i '/^    tables:/,/^graphql:/{/^graphql:/!d}' rindexer.yaml
           cat rindexer.yaml
 
           export RINDEXER_END_BLOCK=18600100
           export ETHEREUM_RPC="https://ethereum-rpc.publicnode.com"
           export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
-          timeout 180 rindexer codegen typings < /dev/null || \
-            timeout 180 rindexer codegen indexer < /dev/null || true
+          timeout 180 rindexer codegen typings < /dev/null
+          timeout 180 rindexer codegen indexer < /dev/null
 
       - name: Print what was generated
         run: |
