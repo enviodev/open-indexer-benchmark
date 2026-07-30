@@ -842,7 +842,7 @@ async function benchmarkIndexer(
 function correctnessCell(result: BenchmarkResult): string {
   if (result.correctness === "ok") return "✅";
   const detail = result.correctnessDetail.split(";")[0].trim();
-  const short = detail.length > 44 ? `${detail.slice(0, 43)}…` : detail;
+  const short = detail.length > 36 ? `${detail.slice(0, 35)}…` : detail;
   return `${result.correctness === "mismatch" ? "❌" : "❓"} ${short}`;
 }
 

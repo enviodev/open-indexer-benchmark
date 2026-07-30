@@ -27,9 +27,17 @@ Indexers included in this benchmark (alphabetical order):
 
 ## Methodology
 
-**Backfill speed**: each indexer runs for 60 seconds (SubQuery runs for 180s to amortise its slower startup; the summary divides by each indexer's actual duration). We measure how many blocks and events were indexed per second. Results are sorted by the most efficient indexer in each category.
+Every indexer runs each case twice.
 
-All benchmarks run in GitHub CI on `ubuntu-latest` runners. Indexers without built-in data source support use [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) as the RPC provider.
+**Verification run**: the indexer indexes a small, fixed block range to completion. The resulting database is then checked against ground truth, and the size of the data it produced is measured. Both only mean something when every indexer holds exactly the same data, which a fixed block range guarantees and a fixed time window does not.
+
+**Throughput run**: the indexer then re-runs from a clean database for 60 seconds, stopping early if it reaches a block just short of the chain head. That cap keeps the measurement in the backfill path — the fastest indexers otherwise catch up to the head mid-window and start measuring head tracking instead. Indexers that could not finish the verification range within the window skip this run; their rate comes from the verification run, where the block count and event count are known exactly.
+
+**Data correctness**: ground truth is built from [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs by replaying each case's documented logic, and is committed as `expected.json` in the case directory. Rather than storing every expected row, each entity is reduced to a row count and a checksum: every row is encoded canonically, hashed, and the hashes summed. The result is independent of row order but still catches missing rows, duplicated rows, and wrong values. The identical encoding is computed in SQL against the indexer's own database, and the two must agree exactly. A ✅ means every entity matched; ❓ means the check could not be completed (for example, the indexer did not finish the range in time).
+
+**DB size**: total size on disk of the tables the case defines, including their indexes — measured at the identical data state the verification run produces. Each indexer's internal bookkeeping is recorded separately in the run output rather than in the table, since it varies with how much an indexer caches or retains.
+
+All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per indexer per case. Indexers without built-in data source support use [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) as the RPC provider.
 
 You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 
@@ -41,10 +49,7 @@ You can enter the `cases` directory to see code, setup instructions, and run the
 Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Stores decoded event logs and aggregates account balances. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
 
 <!-- BENCHMARK:erc20-account-balances:START -->
-| | Envio | Rindexer (29.5x slower) | Sqd (34.3x slower) | Envio - RPC (161.7x slower) | Ponder (247.8x slower) | SubQuery (486.7x slower) |
-| --- | --- | --- | --- | --- | --- | --- |
-| blocks/s | 129,365.7 | 4,391.5 | 3,776.9 | 800.0 | 522.1 | 265.8 |
-| events/s | 18,395.8 | 418.3 | 399.9 | 71.5 | 45.9 | 23.8 |
+_Awaiting the first run under the two-phase methodology._
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md).
@@ -55,10 +60,7 @@ See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc
 Results of indexing raw Transfer event logs from the USDC token contract on Ethereum Mainnet, starting at block 18,600,000. Stores every decoded Transfer event with no aggregation — a pure write-only ingestion throughput test.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
-| | Envio | Sqd (3.8x slower) | Rindexer (5.0x slower) | Envio - RPC (21.4x slower) | Ponder (337.2x slower) | SubQuery (2339.1x slower) |
-| --- | --- | --- | --- | --- | --- | --- |
-| blocks/s | 7,485.0 | 1,994.5 | 1,484.8 | 349.8 | 22.2 | 3.2 |
-| events/s | 68,315.5 | 16,064.4 | 11,775.1 | 2,814.3 | 180.8 | 26.6 |
+_Awaiting the first run under the two-phase methodology._
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).

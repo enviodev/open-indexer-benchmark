@@ -50,6 +50,39 @@ jobs:
           DURATION="${{ inputs.duration }}"
           echo "duration=${DURATION:-60}" >> "$GITHUB_OUTPUT"
 
+  verify-harness:
+    name: Verification harness tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testing
+          POSTGRES_DB: envio-dev
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # If table resolution or a canonical SQL expression breaks, every indexer
+      # is reported as "unknown" or uniformly wrong, which reads like a data
+      # problem rather than a harness problem. Catch that here instead.
+      - name: Test the verification layer
+        env:
+          ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
+        run: node scripts/test-verification.ts
+
   benchmark:
     name: "Benchmark: ${{ matrix.case }} / ${{ matrix.indexer }}"
     needs: setup
@@ -57,15 +90,10 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # Run benchmark jobs strictly one at a time. GitHub gives each matrix job
-      # its own runner VM, so local compute (CPU/RAM/Postgres) is already
-      # isolated — but every job shares one Envio RPC/HyperSync token, and that
-      # shared endpoint is the resource the per-job VMs do NOT isolate. Running
-      # jobs concurrently makes them compete for it, starving the RPC-bound
-      # indexers (HTTP 503s, 0-progress results). Serialising gives each indexer
-      # the full, uncontended endpoint — the fair, reproducible condition a
-      # benchmark needs. The cost is CI wall-clock time, which is acceptable here.
-      max-parallel: 1
+      # Jobs run concurrently. GitHub gives each matrix job its own runner VM,
+      # so compute (CPU/RAM/Postgres/Docker) is isolated already, and the shared
+      # Envio endpoint is not rate limited, so concurrent jobs do not compete
+      # for it. Wall-clock time is the slowest single job rather than the sum.
       matrix:
         case: ${{ fromJSON(needs.setup.outputs.cases) }}
         indexer: ${{ fromJSON(needs.setup.outputs.matrix) }}
@@ -185,156 +213,14 @@ jobs:
           path: results
           pattern: benchmark-*
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Build comparison tables
-        id: build-table
-        uses: actions/github-script@v7
         env:
           CASES: ${{ needs.setup.outputs.cases }}
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            const cases = JSON.parse(process.env.CASES);
-            const resultsDir = 'results';
-
-            // The checked-out README holds the currently published tables; we
-            // read it so we can carry forward any indexer that produced no fresh
-            // result this run (see the carry-forward block below).
-            const readmeText = fs.existsSync('README.md')
-              ? fs.readFileSync('README.md', 'utf8')
-              : '';
-
-            // Summary lines look like:
-            //   "Summary — Envio (40s): 77,177.0 blocks/s, 9,984.0 events/s"
-            //   "Summary — Ponder: 502.0 blocks/s, 44.0 events/s"
-            // The "(40s)" suffix is part of the local Summary line so non-
-            // baseline windows are visible in CI logs, but the table column
-            // headers strip it to keep names tidy.
-            const SUMMARY_RE = /Summary — (.+?): ([\d,.]+) blocks\/s, ([\d,.]+) events\/s/;
-            const stripDurationTag = name => name.replace(/\s\(\d+s\)$/, '');
-
-            const titleCase = c =>
-              c.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
-            // Extract { name: {blocksPerSec, eventsPerSec} } from a case's
-            // published table (between its BENCHMARK markers in the README), so a
-            // missing indexer can be carried forward instead of silently dropped.
-            const parsePublishedTable = (md, benchCase) => {
-              const startMarker = `<!-- BENCHMARK:${benchCase}:START -->`;
-              const endMarker = `<!-- BENCHMARK:${benchCase}:END -->`;
-              const start = md.indexOf(startMarker);
-              const end = md.indexOf(endMarker);
-              if (start === -1 || end === -1 || end < start) return {};
-              const rows = md.slice(start + startMarker.length, end)
-                .split('\n')
-                .filter(l => l.trim().startsWith('|'));
-              const cellsOf = l => l.split('|').slice(1, -1).map(s => s.trim());
-              let header, blocks, events;
-              for (const l of rows) {
-                const c = cellsOf(l);
-                if (c[0] === '') header = c;
-                else if (/^blocks\/s$/i.test(c[0])) blocks = c;
-                else if (/^events\/s$/i.test(c[0])) events = c;
-              }
-              if (!header || !blocks || !events) return {};
-              const names = header.slice(1).map(n => n
-                .replace(/\s*⚠️\s*$/, '')
-                .replace(/\s*\(\d+(?:\.\d+)?x slower\)\s*$/, '')
-                .trim());
-              const out = {};
-              for (let i = 0; i < names.length; i++) {
-                const b = parseFloat((blocks[i + 1] || '').replace(/,/g, ''));
-                const e = parseFloat((events[i + 1] || '').replace(/,/g, ''));
-                if (names[i] && Number.isFinite(b) && Number.isFinite(e)) {
-                  out[names[i]] = { blocksPerSec: b, eventsPerSec: e };
-                }
-              }
-              return out;
-            };
-
-            // Artifact dirs are named "benchmark-<case>--<indexer>".
-            const dirs = fs.existsSync(resultsDir)
-              ? fs.readdirSync(resultsDir).sort()
-              : [];
-
-            for (const benchCase of cases) {
-              const prefix = `benchmark-${benchCase}--`;
-              const results = [];
-
-              for (const dir of dirs) {
-                if (!dir.startsWith(prefix)) continue;
-                const file = path.join(resultsDir, dir, 'benchmark-output.txt');
-                if (!fs.existsSync(file)) continue;
-                const content = fs.readFileSync(file, 'utf8');
-                const match = content.match(SUMMARY_RE);
-                if (match) {
-                  results.push({
-                    name: stripDurationTag(match[1]),
-                    blocksPerSec: parseFloat(match[2].replace(/,/g, '')),
-                    eventsPerSec: parseFloat(match[3].replace(/,/g, '')),
-                  });
-                }
-              }
-
-              const heading = titleCase(benchCase);
-
-              // Carry forward any previously published indexer with no fresh
-              // result this run (failed job / no Summary line). Rebuilding the
-              // table only from successful runs would silently drop the column.
-              const prior = parsePublishedTable(readmeText, benchCase);
-              const haveNames = new Set(results.map(r => r.name));
-              const carried = [];
-              for (const [name, vals] of Object.entries(prior)) {
-                if (!haveNames.has(name)) {
-                  results.push({ name, blocksPerSec: vals.blocksPerSec, eventsPerSec: vals.eventsPerSec, carriedOver: true });
-                  carried.push(name);
-                }
-              }
-              if (carried.length) {
-                core.warning(
-                  `${heading}: no fresh result for ${carried.join(', ')} this run — ` +
-                  `carried forward the last published value(s). Check the failed benchmark job(s).`
-                );
-              }
-
-              if (results.length === 0) {
-                core.summary.addRaw(`## ${heading} Benchmark\n\n_No results collected._\n`);
-                continue;
-              }
-
-              results.sort((a, b) => b.blocksPerSec - a.blocksPerSec);
-              const firstRate = results[0].blocksPerSec;
-              const fmtRate = n => n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-              const label = (r, i) => {
-                let s;
-                if (i === 0 || results.length === 1) {
-                  s = r.name;
-                } else {
-                  const ratio = firstRate / r.blocksPerSec;
-                  const n = ratio % 1 === 0 ? String(Math.round(ratio)) : ratio.toFixed(1);
-                  s = `${r.name} (${n}x slower)`;
-                }
-                // Flag carried-forward columns as stale in the rendered table.
-                return r.carriedOver ? `${s} ⚠️` : s;
-              };
-
-              const header = `| | ${results.map((r, i) => label(r, i)).join(' | ')} |`;
-              const sep = `| --- | ${results.map(() => '---').join(' | ')} |`;
-              const blocksRow = `| blocks/s | ${results.map(r => fmtRate(r.blocksPerSec)).join(' | ')} |`;
-              const eventsRow = `| events/s | ${results.map(r => fmtRate(r.eventsPerSec)).join(' | ')} |`;
-              let table = [header, sep, blocksRow, eventsRow].join('\n');
-              if (carried.length) {
-                // Explain the ⚠️ marker right under the table so it travels with
-                // the README, PR comment, and job summary alike.
-                table += `\n\n> ⚠️ ${carried.join(', ')} — carried forward from a previous run; the latest run produced no fresh result.`;
-              }
-
-              core.summary.addRaw(`## ${heading} Benchmark\n\n${table}\n`);
-              fs.writeFileSync(`/tmp/benchmark-table-${benchCase}.md`, table);
-            }
-
-            await core.summary.write();
+        run: node scripts/build-tables.ts
 
       - name: Comment results on PR
         if: github.event_name == 'pull_request' && !cancelled()
