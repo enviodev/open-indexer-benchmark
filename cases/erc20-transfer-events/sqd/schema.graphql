@@ -2,6 +2,6 @@ type TransferEvent @entity {
   id: ID!
   amount: BigInt!
   timestamp: Int!
-  from: String! @index
-  to: String! @index
+  from: String!
+  to: String!
 }
