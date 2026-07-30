@@ -8,12 +8,10 @@ indexer.onEvent(
       context.Account.getOrCreate({ id: event.params.to, balance: 0n }),
     ]);
 
-    if (event.params.from === event.params.to) {
-      // Both reads observed the same pre-transfer balance, so writing the debit
-      // and the credit separately would keep only the credit. Sending to
-      // yourself leaves the balance unchanged.
-      context.Account.set(sender);
-    } else {
+    // Sending to yourself leaves the balance unchanged. Both reads observed the
+    // same pre-transfer balance, so applying the debit and the credit as two
+    // writes would keep only the credit.
+    if (event.params.from !== event.params.to) {
       context.Account.set({
         ...sender,
         balance: sender.balance - event.params.value,

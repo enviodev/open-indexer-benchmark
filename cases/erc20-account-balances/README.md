@@ -75,8 +75,6 @@ Runs natively via `envio start -r`. Manages its own Docker infrastructure intern
 
 The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
 
-Envio used to run on a shortened window because HyperSync caught up to the chain head partway through and the measurement drifted into head tracking. The throughput run now stops just short of the head for every indexer, so no per-indexer window remains.
-
 ### Ponder
 
 Runs natively via `ponder dev` backed by a Postgres container. The `--port` flag binds the GraphQL server to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
@@ -96,6 +94,6 @@ Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an A
 Runs entirely via Docker Compose (postgres + subquery-node + graphql-engine). This has the heaviest startup overhead:
 
 - **Docker/DB pre-initialization**: Postgres is started and health-checked _before_ the benchmark timer begins. Image pulls also happen beforehand. This is not counted toward the benchmark duration.
-- **Startup cost**: SubQuery's `subquery-node` takes ~25 seconds to boot inside Docker. It no longer runs on an extended window to amortise this; because it cannot finish the verification range within the throughput window, its rate is measured over that range instead, where startup is a known and honestly included fraction of a multi-minute run.
-- **`project.ts` env vars**: The `project.ts` config reads `process.env.ETHEREUM_RPC_URL` and `process.env.SUBQUERY_END_BLOCK`, both baked into `project.yaml` at codegen/build time. The benchmark passes them during `codegen` and `build`, otherwise the endpoint resolves to `null` and the run is unbounded.
+- **Startup cost**: SubQuery's `subquery-node` takes ~25 seconds to boot inside Docker. Because SubQuery is too slow to index the verification range within the throughput window, its rate is measured over that range, where the boot time is a small and honestly counted fraction of a multi-minute run.
+- **`project.ts` env vars**: The `project.ts` config reads `ETHEREUM_RPC_URL` and `SUBQUERY_END_BLOCK`, both baked into `project.yaml` at codegen/build time, so the benchmark passes them during `codegen` and `build`. A missing end block throws rather than defaulting, since an unbounded run would never complete the verification phase.
 - **Dictionary errors**: The SubQuery node logs `dictionary-v1` warnings (backend error 1601). This is a known issue with the default dictionary endpoint and doesn't prevent indexing, but may slow it down slightly as the node falls back to direct RPC fetching.

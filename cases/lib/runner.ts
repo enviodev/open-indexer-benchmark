@@ -15,9 +15,9 @@
 //     window instead have their rate derived from phase A, where the range and
 //     event count are known exactly.
 //
-// The end block below the head replaces what used to be per-indexer duration
-// tweaks: the fastest indexers previously ran past the chain head inside the
-// window and started measuring head-tracking rather than backfill.
+// Stopping below the chain head keeps every indexer on the same footing: the
+// fastest ones would otherwise catch up mid-window and spend the rest of it
+// measuring head tracking rather than backfill.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -849,7 +849,7 @@ function correctnessCell(result: BenchmarkResult): string {
 export function toTableRow(result: BenchmarkResult): TableRow {
   return {
     name: result.name,
-    blocksPerSec: result.blocksPerSec,
+    eventsPerSec: result.eventsPerSec,
     cells: {
       blocks: formatRate(result.blocksPerSec),
       events: formatRate(result.eventsPerSec),
@@ -931,8 +931,8 @@ async function run(config: CaseConfig) {
 
     console.log(
       `\nSummary — ${result.name}: ${formatRate(
-        result.blocksPerSec
-      )} blocks/s, ${formatRate(result.eventsPerSec)} events/s, ` +
+        result.eventsPerSec
+      )} events/s, ${formatRate(result.blocksPerSec)} blocks/s, ` +
         `data ${result.correctness}, db ${formatBytes(result.dbSizeBytes)}\n`
     );
     // Machine-readable line consumed by the CI summary job.

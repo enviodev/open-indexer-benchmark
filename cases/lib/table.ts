@@ -15,13 +15,13 @@ export interface ResultCells {
 export interface TableRow {
   name: string;
   /** Sort key; also drives the "vs best" column. */
-  blocksPerSec: number;
+  eventsPerSec: number;
   cells: ResultCells;
   /** True when re-published from the README because this run produced none. */
   carriedOver?: boolean;
 }
 
-const COLUMNS = ["Indexer", "blocks/s", "events/s", "vs best", "Data", "DB size"];
+const COLUMNS = ["Indexer", "events/s", "blocks/s", "vs best", "Data", "DB size"];
 
 export function formatRate(n: number): string {
   return n.toLocaleString("en-US", {
@@ -41,8 +41,8 @@ function relative(best: number, rate: number): string {
 export function buildTable(rows: TableRow[]): string {
   if (rows.length === 0) return "_No results collected._";
 
-  const sorted = [...rows].sort((a, b) => b.blocksPerSec - a.blocksPerSec);
-  const best = sorted[0].blocksPerSec;
+  const sorted = [...rows].sort((a, b) => b.eventsPerSec - a.eventsPerSec);
+  const best = sorted[0].eventsPerSec;
 
   const lines = [
     `| ${COLUMNS.join(" | ")} |`,
@@ -53,9 +53,9 @@ export function buildTable(rows: TableRow[]): string {
     lines.push(
       `| ${[
         name,
-        row.cells.blocks,
         row.cells.events,
-        relative(best, row.blocksPerSec),
+        row.cells.blocks,
+        relative(best, row.eventsPerSec),
         row.cells.correctness,
         row.cells.dbSize,
       ].join(" | ")} |`
@@ -97,15 +97,15 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
     if (cells[0] === COLUMNS[0] || /^-+$/.test(cells[1] ?? "")) continue;
 
     const name = cells[0].replace(/\s*⚠️\s*$/, "").trim();
-    const blocksPerSec = parseFloat(cells[1].replace(/,/g, ""));
-    if (!name || !Number.isFinite(blocksPerSec)) continue;
+    const eventsPerSec = parseFloat(cells[1].replace(/,/g, ""));
+    if (!name || !Number.isFinite(eventsPerSec)) continue;
 
     rows.push({
       name,
-      blocksPerSec,
+      eventsPerSec,
       cells: {
-        blocks: cells[1],
-        events: cells[2],
+        events: cells[1],
+        blocks: cells[2],
         correctness: cells[4],
         dbSize: cells[5],
       },

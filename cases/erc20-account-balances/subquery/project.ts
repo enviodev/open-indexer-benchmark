@@ -4,6 +4,18 @@ import {
   EthereumHandlerKind,
 } from "@subql/types-ethereum";
 
+// The benchmark runner always supplies an end block; without one the indexer
+// would silently run unbounded and the verification phase would never finish.
+function requireEndBlock(): number {
+  const value = Number(process.env.SUBQUERY_END_BLOCK);
+  if (!Number.isInteger(value)) {
+    throw new Error(
+      "SUBQUERY_END_BLOCK must be set to the block to stop at (the benchmark runner sets it)"
+    );
+  }
+  return value;
+}
+
 const project: EthereumProject = {
   specVersion: "1.0.0",
   version: "0.0.1",
@@ -31,7 +43,7 @@ const project: EthereumProject = {
     {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 18600000,
-      endBlock: Number(process.env.SUBQUERY_END_BLOCK) || undefined,
+      endBlock: requireEndBlock(),
       options: {
         abi: "erc20",
         address: "0xae78736cd615f374d3085123a210448e74fc6393",
