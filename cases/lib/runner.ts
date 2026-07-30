@@ -11,9 +11,11 @@
 //   Phase B (throughput) — only for indexers that finished phase A in under
 //     the benchmark window. Wipe state and re-run with an end block just below
 //     the chain head, stopping at whichever comes first: the window elapsing or
-//     the end block being reached. Indexers too slow to finish phase A in the
-//     window instead have their rate derived from phase A, where the range and
-//     event count are known exactly.
+//     the end block being reached. The window is run more than once and the
+//     best rate reported, because a single window on a shared CI runner is
+//     noisy enough to reorder the middle of the table. Indexers too slow to
+//     finish phase A in the window instead have their rate derived from phase
+//     A, where the range and event count are known exactly.
 //
 // Stopping below the chain head keeps every indexer on the same footing: the
 // fastest ones would otherwise catch up mid-window and spend the rest of it
@@ -32,6 +34,57 @@ import { formatBytes, verify, type Verification } from "./verify.ts";
 
 const BENCHMARK_PORT = 19_876;
 
+const HYPERSYNC_URL = "https://docs.envio.dev/docs/HyperSync/overview";
+const HYPERRPC_URL = "https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc";
+const SQD_NETWORK_URL = "https://docs.sqd.ai/subsquid-network/overview/";
+
+/**
+ * Where each tool's project lives and which network it reads chain data from.
+ * Tools without their own data source read from Envio HyperRPC, so the source
+ * column distinguishes a tool's own pipeline from a plain RPC endpoint.
+ */
+const TOOLS: Record<
+  string,
+  { url: string; source: string; sourceUrl: string; storage: string }
+> = {
+  envio: {
+    url: "https://envio.dev",
+    source: "HyperSync",
+    sourceUrl: HYPERSYNC_URL,
+    storage: "PG",
+  },
+  "envio-rpc": {
+    url: "https://envio.dev",
+    source: "RPC",
+    sourceUrl: HYPERRPC_URL,
+    storage: "PG",
+  },
+  ponder: {
+    url: "https://ponder.sh",
+    source: "RPC",
+    sourceUrl: HYPERRPC_URL,
+    storage: "PG",
+  },
+  rindexer: {
+    url: "https://rindexer.xyz",
+    source: "RPC",
+    sourceUrl: HYPERRPC_URL,
+    storage: "PG",
+  },
+  sqd: {
+    url: "https://www.sqd.ai",
+    source: "SQD",
+    sourceUrl: SQD_NETWORK_URL,
+    storage: "PG",
+  },
+  subquery: {
+    url: "https://subquery.network",
+    source: "RPC",
+    sourceUrl: HYPERRPC_URL,
+    storage: "PG",
+  },
+};
+
 /**
  * How far below the chain head the throughput run stops. Keeps the whole run
  * in the backfill path, clear of each indexer's unfinalised-block handling.
@@ -40,6 +93,15 @@ const HEAD_OFFSET = 500;
 
 /** Give up on the verification range after this long and report no result. */
 const PHASE_A_TIMEOUT_S = 900;
+
+/**
+ * How many throughput windows to run for indexers fast enough to get one.
+ * A single window is noticeably noisy on shared CI runners — repeat rates have
+ * been seen to differ by ~30% — so the window is run more than once and the
+ * best result is reported. Interference only ever slows a run down, so the
+ * fastest of the samples is the one least polluted by it.
+ */
+const THROUGHPUT_RUNS = 2;
 
 const ENVIO_PG_PORT = 5433;
 const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${ENVIO_PG_PORT}/envio-dev`;
@@ -57,6 +119,13 @@ const SUBQUERY_DB_URL = `postgresql://postgres:postgres@localhost:${SUBQUERY_PG_
 
 export interface BenchmarkResult {
   name: string;
+  /** Project page for the tool. */
+  toolUrl: string;
+  /** Chain data source the tool ingested from. */
+  source: string;
+  sourceUrl: string;
+  /** Storage engine the measured size belongs to. */
+  storage: string;
   blocksPerSec: number;
   eventsPerSec: number;
   /** Which phase the rate came from. */
@@ -69,8 +138,10 @@ export interface BenchmarkResult {
   dbTotalBytes: number | null;
   /** Seconds taken to index the verification range, if it completed. */
   rangeSeconds: number | null;
-  /** Length of the throughput window, when one ran. */
+  /** Length of the throughput window that produced the reported rate. */
   windowSeconds: number | null;
+  /** Every throughput window run, for transparency about run-to-run spread. */
+  windowRuns?: { eventsPerSec: number; blocksPerSec: number; seconds: number }[];
 }
 
 interface Snapshot {
@@ -276,9 +347,12 @@ const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       await waitPg(PONDER_DB_URL, "SELECT 1");
     },
     async launch() {
+      // `ponder start` is the production command: it builds once and ignores
+      // file changes. `ponder dev` watches the filesystem and hot-reloads,
+      // which is overhead no production deployment would carry.
       proc = start(
         "pnpm",
-        ["ponder", "dev", "--disable-ui", `--port=${BENCHMARK_PORT}`],
+        ["ponder", "start", "--disable-ui", `--port=${BENCHMARK_PORT}`],
         dir,
         env
       );
@@ -802,6 +876,8 @@ async function benchmarkIndexer(
     );
     return {
       name: phaseA.name,
+      ...TOOLS[key],
+      toolUrl: TOOLS[key].url,
       blocksPerSec: seconds > 0 ? blocks / seconds : 0,
       eventsPerSec: seconds > 0 ? events / seconds : 0,
       throughputSource: "range",
@@ -814,44 +890,87 @@ async function benchmarkIndexer(
     };
   }
 
-  const phaseB = factory({ config, rpcUrl, endBlock: headEndBlock });
-  activeDriver = phaseB;
-  console.log(`\n--- ${phaseB.name} — throughput ---\n`);
-  console.log(
-    `Running for up to ${windowS}s, stopping at block ${headEndBlock.toLocaleString(
-      "en-US"
-    )}\n`
-  );
+  const windowRuns: {
+    eventsPerSec: number;
+    blocksPerSec: number;
+    seconds: number;
+  }[] = [];
+  let name = phaseA.name;
 
-  await phaseB.prepare();
-  const windowRun = await runPhase(phaseB, {
-    targetBlocks: headEndBlock - config.startBlock,
-    targetEvents: Number.POSITIVE_INFINITY,
-    maxSeconds: windowS,
-  });
-  await phaseB.stop();
-  await phaseB.cleanup();
-  activeDriver = null;
-
-  if (windowRun.completed) {
+  for (let attempt = 1; attempt <= THROUGHPUT_RUNS; attempt++) {
+    const phaseB = factory({ config, rpcUrl, endBlock: headEndBlock });
+    activeDriver = phaseB;
+    name = phaseB.name;
     console.log(
-      `\nReached the end block after ${windowRun.elapsedS.toFixed(
-        1
-      )}s — rate computed over that time.\n`
+      `\n--- ${phaseB.name} — throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
+    );
+    console.log(
+      `Running for up to ${windowS}s, stopping at block ${headEndBlock.toLocaleString(
+        "en-US"
+      )}\n`
+    );
+
+    await phaseB.prepare();
+    const windowRun = await runPhase(phaseB, {
+      targetBlocks: headEndBlock - config.startBlock,
+      targetEvents: Number.POSITIVE_INFINITY,
+      maxSeconds: windowS,
+    });
+    await phaseB.stop();
+    await phaseB.cleanup();
+    activeDriver = null;
+
+    if (windowRun.completed) {
+      console.log(
+        `\nReached the end block after ${windowRun.elapsedS.toFixed(
+          1
+        )}s — rate computed over that time.`
+      );
+    }
+
+    const seconds = windowRun.elapsedS;
+    const run = {
+      eventsPerSec: seconds > 0 ? windowRun.events / seconds : 0,
+      blocksPerSec: seconds > 0 ? windowRun.blocks / seconds : 0,
+      seconds,
+    };
+    windowRuns.push(run);
+    console.log(
+      `Run ${attempt}: ${formatRate(run.eventsPerSec)} events/s, ${formatRate(
+        run.blocksPerSec
+      )} blocks/s\n`
+    );
+  }
+
+  // Report the best sample. Contention on a shared runner only ever costs
+  // throughput, so the fastest run is the one least distorted by it.
+  const best = windowRuns.reduce((a, b) => (b.eventsPerSec > a.eventsPerSec ? b : a));
+  const spread =
+    Math.max(...windowRuns.map((r) => r.eventsPerSec)) -
+    Math.min(...windowRuns.map((r) => r.eventsPerSec));
+  if (best.eventsPerSec > 0) {
+    console.log(
+      `Spread across ${THROUGHPUT_RUNS} runs: ${(
+        (spread / best.eventsPerSec) *
+        100
+      ).toFixed(1)}% of the best rate\n`
     );
   }
 
   return {
-    name: phaseB.name,
-    blocksPerSec: windowRun.elapsedS > 0 ? windowRun.blocks / windowRun.elapsedS : 0,
-    eventsPerSec: windowRun.elapsedS > 0 ? windowRun.events / windowRun.elapsedS : 0,
+    name,
+    ...TOOLS[key],
+    toolUrl: TOOLS[key].url,
+    blocksPerSec: best.blocksPerSec,
+    eventsPerSec: best.eventsPerSec,
     throughputSource: "window",
     correctness: verification.status,
     correctnessDetail: verification.detail,
     dbSizeBytes: verification.dbSizeBytes,
     dbTotalBytes: verification.dbTotalBytes,
     rangeSeconds: rangeRun.elapsedS,
-    windowSeconds: windowRun.elapsedS,
+    windowSeconds: best.seconds,
+    windowRuns,
   };
 }
 
@@ -863,14 +982,17 @@ function correctnessCell(result: BenchmarkResult): string {
 }
 
 export function toTableRow(result: BenchmarkResult): TableRow {
+  const size = formatBytes(result.dbSizeBytes);
   return {
     name: result.name,
     eventsPerSec: result.eventsPerSec,
     cells: {
+      tool: `[${result.name}](${result.toolUrl})`,
+      source: `[${result.source}](${result.sourceUrl})`,
       blocks: formatRate(result.blocksPerSec),
       events: formatRate(result.eventsPerSec),
       correctness: correctnessCell(result),
-      dbSize: formatBytes(result.dbSizeBytes),
+      dbSize: size === "—" ? size : `${result.storage} ${size}`,
     },
   };
 }

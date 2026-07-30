@@ -77,7 +77,7 @@ The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync
 
 ### Ponder
 
-Runs natively via `ponder dev` backed by a Postgres container. The `--port` flag binds the GraphQL server to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
+Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. The `--port` flag binds the GraphQL server to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
 
 ### Rindexer
 

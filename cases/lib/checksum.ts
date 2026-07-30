@@ -93,6 +93,11 @@ export function summarise(rows: string[]): EntityExpectation {
   return { rowCount: rows.length, checksum: checksum.toString() };
 }
 
+/** The canonical row text as SQL, shared by the checksum and the row diff. */
+export function canonicalExprSql(fieldExprs: string[]): string {
+  return `concat_ws('|', ${fieldExprs.map((e) => `coalesce(${e}, '')`).join(", ")})`;
+}
+
 /**
  * SQL that reproduces `summarise` for a table, given per-field expressions in
  * canonical order. `substr(md5(…), 1, 15)` is read as a 60-bit integer, which
@@ -100,9 +105,7 @@ export function summarise(rows: string[]): EntityExpectation {
  * never overflows.
  */
 export function checksumSql(qualifiedTable: string, fieldExprs: string[]): string {
-  const canonical = `concat_ws('|', ${fieldExprs
-    .map((e) => `coalesce(${e}, '')`)
-    .join(", ")})`;
+  const canonical = canonicalExprSql(fieldExprs);
   return (
     `SELECT count(*)::text, ` +
     `coalesce(sum(('x' || substr(md5(${canonical}), 1, ${HASH_HEX_CHARS}))` +

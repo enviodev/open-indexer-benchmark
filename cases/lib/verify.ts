@@ -14,6 +14,7 @@
 // hold the wrong value, for example 0x1234… ".
 
 import {
+  canonicalExprSql,
   checksumSql,
   type EntitySpec,
   type Expected,
@@ -238,9 +239,7 @@ async function fetchActualRows(
   sql: SqlRunner,
   entity: ResolvedEntity
 ): Promise<string[]> {
-  const canonical = `concat_ws('|', ${entity.fieldExprs
-    .map((e) => `coalesce(${e}, '')`)
-    .join(", ")})`;
+  const canonical = canonicalExprSql(entity.fieldExprs);
   const out = await sql(`SELECT ${canonical} FROM ${entity.qualified}${entity.where}`);
   return out.split("\n").filter((line) => line.length > 0);
 }
@@ -295,10 +294,15 @@ function diffRows(spec: EntitySpec, expected: string[], actual: string[]): Diff 
     const remaining = new Map<string, number>();
     for (const row of expectedRows) remaining.set(row, (remaining.get(row) ?? 0) + 1);
     let differing = 0;
+    const unpaired: string[] = [];
     for (const row of actualRows) {
       const count = remaining.get(row) ?? 0;
-      if (count > 0) remaining.set(row, count - 1);
-      else differing++;
+      if (count > 0) {
+        remaining.set(row, count - 1);
+      } else {
+        differing++;
+        unpaired.push(row);
+      }
     }
     const unmatchedExpected = [...remaining.values()].reduce((a, b) => a + b, 0);
     const paired = Math.min(differing, unmatchedExpected);
@@ -306,9 +310,8 @@ function diffRows(spec: EntitySpec, expected: string[], actual: string[]): Diff 
     unexpected += differing - paired;
     missing += unmatchedExpected - paired;
     if (paired > 0 && examples.length < MAX_EXAMPLES) {
-      const got = actualRows.find((r) => !expectedRows.includes(r));
       const want = [...remaining.entries()].find(([, n]) => n > 0)?.[0];
-      examples.push(`got ${got}, expected ${want}`);
+      examples.push(`got ${unpaired[0]}, expected ${want}`);
     }
   }
   for (const [key, actualRows] of actualByKey) {

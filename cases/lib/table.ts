@@ -6,6 +6,10 @@
 // grow.
 
 export interface ResultCells {
+  /** Markdown link to the tool's project page. */
+  tool: string;
+  /** Markdown link to the data source the tool ingests from. */
+  source: string;
   blocks: string;
   events: string;
   correctness: string;
@@ -13,6 +17,7 @@ export interface ResultCells {
 }
 
 export interface TableRow {
+  /** Bare tool name, used to match a fresh result against a published row. */
   name: string;
   /** Sort key; also drives the "vs best" column. */
   eventsPerSec: number;
@@ -21,7 +26,7 @@ export interface TableRow {
   carriedOver?: boolean;
 }
 
-const COLUMNS = ["Indexer", "events/s", "blocks/s", "vs best", "Data", "DB size"];
+const COLUMNS = ["tool", "source", "events/s", "blocks/s", "vs best", "data", "storage"];
 
 export function formatRate(n: number): string {
   return n.toLocaleString("en-US", {
@@ -49,10 +54,12 @@ export function buildTable(rows: TableRow[]): string {
     `| ${COLUMNS.map(() => "---").join(" | ")} |`,
   ];
   for (const row of sorted) {
-    const name = row.carriedOver ? `${row.name} ⚠️` : row.name;
+    const tool = row.cells.tool || row.name;
+    const name = row.carriedOver ? `${tool} ⚠️` : tool;
     lines.push(
       `| ${[
         name,
+        row.cells.source,
         row.cells.events,
         row.cells.blocks,
         relative(best, row.eventsPerSec),
@@ -96,18 +103,22 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
     // Skip the header and its separator.
     if (cells[0] === COLUMNS[0] || /^-+$/.test(cells[1] ?? "")) continue;
 
-    const name = cells[0].replace(/\s*⚠️\s*$/, "").trim();
-    const eventsPerSec = parseFloat(cells[1].replace(/,/g, ""));
+    const label = cells[0].replace(/\s*⚠️\s*$/, "").trim();
+    // The tool cell is a markdown link; the bare name is what identifies a row.
+    const name = (label.match(/^\[([^\]]+)\]/)?.[1] ?? label).trim();
+    const eventsPerSec = parseFloat(cells[2].replace(/,/g, ""));
     if (!name || !Number.isFinite(eventsPerSec)) continue;
 
     rows.push({
       name,
       eventsPerSec,
       cells: {
-        events: cells[1],
-        blocks: cells[2],
-        correctness: cells[4],
-        dbSize: cells[5],
+        tool: label,
+        source: cells[1],
+        events: cells[2],
+        blocks: cells[3],
+        correctness: cells[5],
+        dbSize: cells[6],
       },
     });
   }
