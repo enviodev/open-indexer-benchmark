@@ -1,6 +1,6 @@
-# Temporary: dumps what `rindexer new --rust` generates for the account-balances
-# config, so the rust handlers can be written against the real generated
-# typings rather than guessed. Delete once the rust implementation lands.
+# Temporary: prints the rust typings `rindexer codegen` generates for the
+# account-balances config, so the rust handlers can be written against the real
+# generated API rather than guessed. Delete once the rust implementation lands.
 name: Scaffold rindexer rust project
 
 on:
@@ -12,7 +12,7 @@ on:
 jobs:
   scaffold:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -29,38 +29,32 @@ jobs:
           curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$VERSION"
           echo "$HOME/.config/.rindexer/bin" >> "$GITHUB_PATH"
 
-      - name: Show CLI surface
-        run: |
-          rindexer --help || true
-          echo "=== new --help ==="
-          rindexer new --help || true
-          echo "=== codegen --help ==="
-          rindexer codegen --help || true
-
-      # Generate typings for the real config, which is what the handlers must
-      # import. Copied into a scratch project so the benchmark config is
-      # untouched.
+      # Every rindexer invocation gets stdin closed: `rindexer new` prompts for a
+      # project name and, without a TTY, spins forever re-printing the prompt.
       - name: Generate typings for the account-balances config
         run: |
+          set -x
           mkdir -p /tmp/scaffold
-          cp -r cases/erc20-account-balances/rindexer/* /tmp/scaffold/
+          cp -r cases/erc20-account-balances/rindexer/. /tmp/scaffold/
           cd /tmp/scaffold
           sed -i 's/^project_type: no-code/project_type: rust/' rindexer.yaml
-          RINDEXER_END_BLOCK=18600100 ETHEREUM_RPC="https://ethereum-rpc.publicnode.com" \
-            rindexer codegen typings || rindexer codegen || true
-          echo "=== tree ==="
-          find . -type f -not -path './abis/*' | sort
-          echo "=== generated files ==="
-          for f in $(find . -name '*.rs' | sort); do
-            echo "───────── $f ─────────"
-            cat "$f"
-          done
+          cat rindexer.yaml
 
-      - name: Scaffold a fresh rust project for comparison
+          export RINDEXER_END_BLOCK=18600100
+          export ETHEREUM_RPC="https://ethereum-rpc.publicnode.com"
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          timeout 180 rindexer codegen typings < /dev/null || \
+            timeout 180 rindexer codegen indexer < /dev/null || true
+
+      - name: Print what was generated
         run: |
-          cd /tmp
-          rindexer new --path /tmp/fresh rust || rindexer new rust --path /tmp/fresh || true
-          find /tmp/fresh -type f -not -path '*/target/*' | sort | head -40
-          for f in /tmp/fresh/Cargo.toml /tmp/fresh/src/main.rs; do
-            echo "───────── $f ─────────"; cat "$f" 2>/dev/null || true
+          cd /tmp/scaffold
+          echo "===== TREE ====="
+          find . -type f -not -path './abis/*' | sort
+          echo "===== SOURCES ====="
+          # Bounded so an unexpected file cannot flood the log again.
+          for f in $(find . -name '*.rs' -o -name 'Cargo.toml' | sort); do
+            echo "───────── $f ─────────"
+            head -c 20000 "$f"
+            echo
           done
