@@ -416,6 +416,17 @@ const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
       console.log("Cleaning envio cache...");
       rmSync(resolve(dir, ".envio"), { recursive: true, force: true });
 
+      // Envio is the only driver that reuses one database across phases, and
+      // `envio start -r` resets it asynchronously after launch. A snapshot taken
+      // before that reset lands reads the previous phase's progress — and when
+      // the previous phase reached its end block, that stale reading satisfies
+      // the completion check immediately and yields an absurd rate. Drop the
+      // schema up front so no prior state can be observed at all.
+      await psql(ENVIO_DB_URL, "DROP SCHEMA IF EXISTS public CASCADE").catch(
+        () => {}
+      );
+      await psql(ENVIO_DB_URL, "CREATE SCHEMA public").catch(() => {});
+
       console.log("Installing dependencies...\n");
       await exec("pnpm", ["install", "--frozen-lockfile"], dir);
       await exec("pnpm", ["envio", "codegen"], dir, env);
@@ -751,6 +762,24 @@ async function runPhase(
   const deadline = startedAt + maxSeconds * 1_000;
 
   let last: Snapshot = { blocks: 0, events: 0 };
+
+  // Progress is read as an absolute position, so anything left over from a
+  // previous phase would be counted as work done in this one. Every driver is
+  // supposed to start from an empty database; say so loudly if one does not,
+  // rather than silently reporting a rate for work it never did.
+  try {
+    const baseline = await driver.snapshot();
+    if (baseline && (baseline.blocks > 0 || baseline.events > 0)) {
+      console.log(
+        `  Warning: ${driver.name} already reports ${baseline.blocks.toLocaleString(
+          "en-US"
+        )} blocks / ${baseline.events.toLocaleString("en-US")} events at launch — ` +
+          `its database was not empty, so this run's rate is not trustworthy.`
+      );
+    }
+  } catch {
+    // Not queryable yet, which is the normal case for a clean start.
+  }
 
   while (performance.now() < deadline) {
     // Exiting is a reason to stop waiting, not evidence of success: an indexer
