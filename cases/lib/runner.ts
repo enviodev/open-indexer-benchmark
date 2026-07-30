@@ -24,7 +24,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CaseConfig } from "./case.ts";
 import type { Expected } from "./checksum.ts";
-import { fetchChainHeight } from "./hypersync.ts";
+import { fetchChainHeight, fetchLogs } from "./hypersync.ts";
 import { buildTable, formatRate, type TableRow } from "./table.ts";
 import { formatBytes, verify, type Verification } from "./verify.ts";
 
@@ -715,6 +715,7 @@ async function benchmarkIndexer(
   config: CaseConfig,
   expected: Expected,
   rpcUrl: string,
+  apiToken: string,
   windowS: number,
   headEndBlock: number
 ): Promise<BenchmarkResult> {
@@ -748,9 +749,27 @@ async function benchmarkIndexer(
     verification = await verify(
       (query) => psql(phaseA.dbUrl, query),
       config.entities,
-      expected
+      expected,
+      {
+        // Only reached when something mismatched: rebuild the expected rows so
+        // the report can name what differs instead of just that a checksum did.
+        fetchExpectedRows: async () => {
+          console.log("  Mismatch found — rebuilding ground truth to diff it...");
+          const logs = await fetchLogs({
+            token: apiToken,
+            address: config.contract,
+            topics: config.topics,
+            fromBlock: config.startBlock,
+            toBlock: config.verifyEndBlock,
+          });
+          return config.computeExpected(logs).entities;
+        },
+      }
     );
     console.log(`  ${verification.status}: ${verification.detail}`);
+    for (const entity of verification.entities) {
+      for (const example of entity.examples) console.log(`    ${example}`);
+    }
   } else {
     // Verifying a partial database would report missing rows, which reads as a
     // data bug rather than what it is: the indexer ran out of time.
@@ -838,12 +857,9 @@ async function benchmarkIndexer(
 
 // ── Result presentation ────────────────────────────────────────────────
 
-/** Compact correctness cell; the full detail goes in the run log. */
 function correctnessCell(result: BenchmarkResult): string {
   if (result.correctness === "ok") return "✅";
-  const detail = result.correctnessDetail.split(";")[0].trim();
-  const short = detail.length > 36 ? `${detail.slice(0, 35)}…` : detail;
-  return `${result.correctness === "mismatch" ? "❌" : "❓"} ${short}`;
+  return `${result.correctness === "mismatch" ? "❌" : "❓"} ${result.correctnessDetail}`;
 }
 
 export function toTableRow(result: BenchmarkResult): TableRow {
@@ -924,6 +940,7 @@ async function run(config: CaseConfig) {
       config,
       expected,
       rpcUrl,
+      apiToken,
       windowS,
       headEndBlock
     );

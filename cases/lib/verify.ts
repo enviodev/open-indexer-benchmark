@@ -7,6 +7,11 @@
 // indexer. When resolution is ambiguous or a column is missing, the result is
 // reported as "unknown" with the reason — never as a correctness failure, so a
 // schema change in an indexer cannot be mistaken for a data bug.
+//
+// A checksum tells you that something is wrong but not what, so when an entity
+// mismatches the ground-truth rows are rebuilt and diffed against the indexer's
+// rows. That turns "the checksum differs" into "512 of 1,747 account balances
+// hold the wrong value, for example 0x1234… ".
 
 import {
   checksumSql,
@@ -18,11 +23,22 @@ import {
 /** Runs a SQL statement and returns psql's `-t -A` output. */
 export type SqlRunner = (query: string) => Promise<string>;
 
+export interface VerifyOptions {
+  /**
+   * Rebuilds the expected rows per entity key, in the same canonical encoding
+   * the checksum uses. Called at most once, and only when something mismatched,
+   * so the happy path stays a single cheap aggregate per entity.
+   */
+  fetchExpectedRows?: () => Promise<Record<string, string[]>>;
+}
+
 export interface EntityVerification {
   key: string;
   label: string;
   status: "ok" | "mismatch" | "unknown";
   detail: string;
+  /** Concrete differing rows, for the run log. */
+  examples: string[];
   table?: string;
   expectedRows?: number;
   actualRows?: number;
@@ -31,7 +47,7 @@ export interface EntityVerification {
 
 export interface Verification {
   status: "ok" | "mismatch" | "unknown";
-  /** Short human-readable summary, e.g. "12 transfer events missing". */
+  /** Short human-readable summary, e.g. "465 account balances are missing". */
   detail: string;
   entities: EntityVerification[];
   /** Size of the entity tables (data + indexes + TOAST). */
@@ -48,7 +64,28 @@ interface ColumnInfo {
   isBaseTable: boolean;
 }
 
+interface ResolvedTable {
+  schema: string;
+  table: string;
+  isBaseTable: boolean;
+  columns: Map<string, ColumnInfo>;
+}
+
+/** A resolved entity: where its rows live and how to encode them. */
+interface ResolvedEntity {
+  qualified: string;
+  displayName: string;
+  fieldExprs: string[];
+  where: string;
+}
+
 const SYSTEM_SCHEMAS = ["pg_catalog", "information_schema"];
+const MAX_EXAMPLES = 3;
+
+const count = (n: number) => n.toLocaleString("en-US");
+/** Entity labels are plural ("account balances"); singularise for a count of one. */
+const noun = (n: number, label: string) =>
+  n === 1 ? label.replace(/s$/, "") : label;
 
 /** `transfer_event`, `TransferEvent` and `transferEvents` all normalise alike. */
 function normalise(name: string): string {
@@ -83,13 +120,6 @@ async function introspect(sql: SqlRunner): Promise<ColumnInfo[]> {
   return out;
 }
 
-interface ResolvedTable {
-  schema: string;
-  table: string;
-  isBaseTable: boolean;
-  columns: Map<string, ColumnInfo>;
-}
-
 /** Group flat introspection rows into tables. */
 function groupTables(columns: ColumnInfo[]): ResolvedTable[] {
   const byTable = new Map<string, ResolvedTable>();
@@ -110,10 +140,7 @@ function groupTables(columns: ColumnInfo[]): ResolvedTable[] {
   return [...byTable.values()];
 }
 
-function findColumn(
-  table: ResolvedTable,
-  field: FieldSpec
-): ColumnInfo | undefined {
+function findColumn(table: ResolvedTable, field: FieldSpec): ColumnInfo | undefined {
   for (const candidate of field.candidates) {
     const found = table.columns.get(candidate.toLowerCase());
     if (found) return found;
@@ -147,10 +174,10 @@ function fieldExpr(field: FieldSpec, col: ColumnInfo): string {
  * required field are considered, and anything still ambiguous is rejected
  * rather than guessed at.
  */
-function resolveTable(
+function resolveEntity(
   spec: EntitySpec,
   tables: ResolvedTable[]
-): { table: ResolvedTable } | { error: string } {
+): ResolvedEntity | { error: string } {
   const candidates = spec.tableCandidates.map(normalise);
   let best: { rank: number; matches: ResolvedTable[] } | null = null;
 
@@ -167,9 +194,7 @@ function resolveTable(
 
   let matches = best.matches;
   if (matches.length > 1) {
-    const complete = matches.filter((t) =>
-      spec.fields.every((f) => findColumn(t, f))
-    );
+    const complete = matches.filter((t) => spec.fields.every((f) => findColumn(t, f)));
     if (complete.length > 0) matches = complete;
   }
   if (matches.length > 1) {
@@ -180,100 +205,151 @@ function resolveTable(
     const names = matches.map((t) => `${t.schema}.${t.table}`).join(", ");
     return { error: `ambiguous table for ${spec.key}: ${names}` };
   }
-  return { table: matches[0] };
-}
 
-async function verifyEntity(
-  sql: SqlRunner,
-  spec: EntitySpec,
-  expectation: { rowCount: number; checksum: string },
-  tables: ResolvedTable[]
-): Promise<EntityVerification> {
-  const base: EntityVerification = {
-    key: spec.key,
-    label: spec.label,
-    status: "unknown",
-    detail: "",
-    expectedRows: expectation.rowCount,
-  };
-
-  const resolved = resolveTable(spec, tables);
-  if ("error" in resolved) {
-    return { ...base, detail: resolved.error };
-  }
-  const { table } = resolved;
-  const qualified = `${quoteIdent(table.schema)}.${quoteIdent(table.table)}`;
+  const table = matches[0];
   const displayName = `${table.schema}.${table.table}`;
-
-  const exprs: string[] = [];
+  const fieldExprs: string[] = [];
   for (const field of spec.fields) {
     const col = findColumn(table, field);
     if (!col) {
       return {
-        ...base,
-        table: displayName,
-        detail: `${displayName} has no column for "${field.role}" (tried ${field.candidates.join(
-          " / "
-        )})`,
+        error:
+          `${displayName} has no column for "${field.role}" ` +
+          `(tried ${field.candidates.join(" / ")})`,
       };
     }
-    exprs.push(fieldExpr(field, col));
+    fieldExprs.push(fieldExpr(field, col));
   }
 
-  // SubQuery keeps historical entity versions in the same table; restrict to
-  // the current version so counts and checksums describe present state. The
-  // discarded history still shows up in the measured table size, which is the
-  // honest way to report the cost of keeping it.
-  const where = table.columns.has("_block_range")
-    ? " WHERE upper_inf(_block_range)"
-    : "";
+  return {
+    qualified: `${quoteIdent(table.schema)}.${quoteIdent(table.table)}`,
+    displayName,
+    fieldExprs,
+    // SubQuery keeps historical entity versions in the same table; restrict to
+    // the current version so counts and checksums describe present state. The
+    // discarded history still shows up in the measured table size, which is the
+    // honest way to report the cost of keeping it.
+    where: table.columns.has("_block_range") ? " WHERE upper_inf(_block_range)" : "",
+  };
+}
 
-  let row: string;
-  try {
-    row = await sql(checksumSql(qualified, exprs) + where);
-  } catch (err: any) {
-    return {
-      ...base,
-      table: displayName,
-      detail: `query failed: ${String(err.message ?? err).slice(0, 160)}`,
-    };
+/** Every row of an entity, in the same canonical encoding the checksum hashes. */
+async function fetchActualRows(
+  sql: SqlRunner,
+  entity: ResolvedEntity
+): Promise<string[]> {
+  const canonical = `concat_ws('|', ${entity.fieldExprs
+    .map((e) => `coalesce(${e}, '')`)
+    .join(", ")})`;
+  const out = await sql(`SELECT ${canonical} FROM ${entity.qualified}${entity.where}`);
+  return out.split("\n").filter((line) => line.length > 0);
+}
+
+interface Diff {
+  missing: number;
+  unexpected: number;
+  wrongValue: number;
+  examples: string[];
+}
+
+/**
+ * Compare actual against expected rows. Rows are keyed on their leading
+ * identity fields where the entity has them, so an account whose balance is
+ * wrong reads as one wrong value rather than as one missing plus one
+ * unexpected row.
+ */
+function diffRows(spec: EntitySpec, expected: string[], actual: string[]): Diff {
+  const keyOf = (row: string) => {
+    if (!spec.keyFieldCount) return row;
+    return row.split("|").slice(0, spec.keyFieldCount).join("|");
+  };
+
+  const groupByKey = (rows: string[]) => {
+    const grouped = new Map<string, string[]>();
+    for (const row of rows) {
+      const key = keyOf(row);
+      const bucket = grouped.get(key);
+      if (bucket) bucket.push(row);
+      else grouped.set(key, [row]);
+    }
+    return grouped;
+  };
+  const expectedByKey = groupByKey(expected);
+  const actualByKey = groupByKey(actual);
+
+  let missing = 0;
+  let unexpected = 0;
+  let wrongValue = 0;
+  const examples: string[] = [];
+
+  for (const [key, expectedRows] of expectedByKey) {
+    const actualRows = actualByKey.get(key);
+    if (!actualRows) {
+      missing += expectedRows.length;
+      if (examples.length < MAX_EXAMPLES) {
+        examples.push(`missing: ${expectedRows[0]}`);
+      }
+      continue;
+    }
+    // Same key on both sides: pair them up and report leftovers.
+    const remaining = new Map<string, number>();
+    for (const row of expectedRows) remaining.set(row, (remaining.get(row) ?? 0) + 1);
+    let differing = 0;
+    for (const row of actualRows) {
+      const count = remaining.get(row) ?? 0;
+      if (count > 0) remaining.set(row, count - 1);
+      else differing++;
+    }
+    const unmatchedExpected = [...remaining.values()].reduce((a, b) => a + b, 0);
+    const paired = Math.min(differing, unmatchedExpected);
+    wrongValue += paired;
+    unexpected += differing - paired;
+    missing += unmatchedExpected - paired;
+    if (paired > 0 && examples.length < MAX_EXAMPLES) {
+      const got = actualRows.find((r) => !expectedRows.includes(r));
+      const want = [...remaining.entries()].find(([, n]) => n > 0)?.[0];
+      examples.push(`got ${got}, expected ${want}`);
+    }
+  }
+  for (const [key, actualRows] of actualByKey) {
+    if (expectedByKey.has(key)) continue;
+    unexpected += actualRows.length;
+    if (examples.length < MAX_EXAMPLES) examples.push(`unexpected: ${actualRows[0]}`);
   }
 
-  const [countStr, checksumStr] = row.trim().split("|");
-  const actualRows = parseInt(countStr, 10);
+  return { missing, unexpected, wrongValue, examples };
+}
 
-  let sizeBytes: number | undefined;
-  try {
-    const size = await sql(
-      `SELECT pg_total_relation_size('${qualified.replace(/'/g, "''")}'::regclass)::text`
+/** Plain-language summary of a diff, e.g. "465 of 1,747 account balances are missing". */
+function describeDiff(spec: EntitySpec, diff: Diff, expectedTotal: number): string {
+  const parts: string[] = [];
+  if (diff.missing > 0) {
+    parts.push(`${count(diff.missing)} of ${count(expectedTotal)} ${spec.label} missing`);
+  }
+  if (diff.wrongValue > 0) {
+    parts.push(
+      `${count(diff.wrongValue)} of ${count(expectedTotal)} ${spec.label} with the wrong value`
     );
-    sizeBytes = parseInt(size.trim(), 10);
-  } catch {
-    // Size is a nice-to-have; a failure here must not fail verification.
   }
+  if (diff.unexpected > 0) {
+    parts.push(`${count(diff.unexpected)} unexpected ${noun(diff.unexpected, spec.label)}`);
+  }
+  return parts.join(" and ");
+}
 
-  const result = { ...base, table: displayName, actualRows, sizeBytes };
-
-  if (actualRows !== expectation.rowCount) {
-    const delta = actualRows - expectation.rowCount;
-    return {
-      ...result,
-      status: "mismatch",
-      detail: `${Math.abs(delta).toLocaleString("en-US")} ${
-        delta < 0 ? "missing" : "extra"
-      } ${spec.label} (${actualRows.toLocaleString(
-        "en-US"
-      )} vs ${expectation.rowCount.toLocaleString("en-US")} expected)`,
-    };
+/** Summary used when the ground-truth rows could not be rebuilt. */
+function describeCounts(
+  spec: EntitySpec,
+  actualRows: number,
+  expectedRows: number
+): string {
+  if (actualRows === expectedRows) {
+    return `all ${count(expectedRows)} ${spec.label} present but some hold the wrong value`;
   }
-  if (checksumStr !== expectation.checksum) {
-    return {
-      ...result,
-      status: "mismatch",
-      detail: `${spec.label}: row count matches but values differ (checksum mismatch)`,
-    };
-  }
-  return { ...result, status: "ok", detail: `${spec.label} match` };
+  const delta = actualRows - expectedRows;
+  return delta < 0
+    ? `${count(-delta)} of ${count(expectedRows)} ${spec.label} missing`
+    : `${count(delta)} unexpected ${noun(delta, spec.label)} (${count(actualRows)} vs ${count(expectedRows)} expected)`;
 }
 
 /** Total size of every non-system relation in the database. */
@@ -296,7 +372,8 @@ async function totalSize(sql: SqlRunner): Promise<number | null> {
 export async function verify(
   sql: SqlRunner,
   specs: EntitySpec[],
-  expected: Expected
+  expected: Expected,
+  options: VerifyOptions = {}
 ): Promise<Verification> {
   let tables: ResolvedTable[];
   try {
@@ -312,23 +389,104 @@ export async function verify(
   }
 
   const entities: EntityVerification[] = [];
+  const resolved = new Map<string, ResolvedEntity>();
+
   for (const spec of specs) {
+    const base: EntityVerification = {
+      key: spec.key,
+      label: spec.label,
+      status: "unknown",
+      detail: "",
+      examples: [],
+      expectedRows: expected.entities[spec.key]?.rowCount,
+    };
+
     const expectation = expected.entities[spec.key];
     if (!expectation) {
       entities.push({
-        key: spec.key,
-        label: spec.label,
-        status: "unknown",
+        ...base,
         detail: `no ground truth for "${spec.key}" in expected.json`,
       });
       continue;
     }
-    entities.push(await verifyEntity(sql, spec, expectation, tables));
+
+    const entity = resolveEntity(spec, tables);
+    if ("error" in entity) {
+      entities.push({ ...base, detail: entity.error });
+      continue;
+    }
+    resolved.set(spec.key, entity);
+
+    let row: string;
+    try {
+      row = await sql(
+        checksumSql(entity.qualified, entity.fieldExprs) + entity.where
+      );
+    } catch (err: any) {
+      entities.push({
+        ...base,
+        table: entity.displayName,
+        detail: `query failed: ${String(err.message ?? err).slice(0, 160)}`,
+      });
+      continue;
+    }
+
+    const [countStr, checksumStr] = row.trim().split("|");
+    const actualRows = parseInt(countStr, 10);
+
+    let sizeBytes: number | undefined;
+    try {
+      const size = await sql(
+        `SELECT pg_total_relation_size('${entity.qualified.replace(/'/g, "''")}'::regclass)::text`
+      );
+      sizeBytes = parseInt(size.trim(), 10);
+    } catch {
+      // Size is a nice-to-have; a failure here must not fail verification.
+    }
+
+    const matches =
+      actualRows === expectation.rowCount && checksumStr === expectation.checksum;
+
+    entities.push({
+      ...base,
+      table: entity.displayName,
+      actualRows,
+      sizeBytes,
+      status: matches ? "ok" : "mismatch",
+      detail: matches
+        ? `all ${count(expectation.rowCount)} ${spec.label} match`
+        : describeCounts(spec, actualRows, expectation.rowCount),
+    });
   }
 
+  // Only now, and only once, rebuild the ground-truth rows to turn each
+  // mismatch into a precise description.
   const mismatched = entities.filter((e) => e.status === "mismatch");
-  const unknown = entities.filter((e) => e.status === "unknown");
+  if (mismatched.length > 0 && options.fetchExpectedRows) {
+    try {
+      const expectedRows = await options.fetchExpectedRows();
+      for (const entity of mismatched) {
+        const spec = specs.find((s) => s.key === entity.key)!;
+        const target = resolved.get(entity.key);
+        const rows = expectedRows[entity.key];
+        if (!target || !rows) continue;
+        const diff = diffRows(spec, rows, await fetchActualRows(sql, target));
+        const detail = describeDiff(spec, diff, rows.length);
+        if (detail) {
+          entity.detail = detail;
+          entity.examples = diff.examples;
+        }
+      }
+    } catch (err: any) {
+      console.log(
+        `  Could not rebuild ground-truth rows for a detailed diff: ${String(
+          err.message ?? err
+        ).slice(0, 160)}`
+      );
+    }
+  }
 
+  const unknown = entities.filter((e) => e.status === "unknown");
   let status: Verification["status"];
   let detail: string;
   if (mismatched.length > 0) {

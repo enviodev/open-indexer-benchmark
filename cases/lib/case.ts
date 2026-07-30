@@ -1,9 +1,10 @@
 import type { DecodedLog } from "./hypersync.ts";
-import type { EntityExpectation, EntitySpec } from "./checksum.ts";
+import type { EntitySpec } from "./checksum.ts";
 
 export interface ExpectedData {
   totalEvents: number;
-  entities: Record<string, EntityExpectation>;
+  /** Canonical rows per entity key, in the encoding the checksum hashes. */
+  entities: Record<string, string[]>;
 }
 
 export interface CaseConfig {
@@ -24,7 +25,7 @@ export interface CaseConfig {
   topics: string[];
   /** Entities checked against the ground truth. */
   entities: EntitySpec[];
-  /** Replays the case logic over raw logs to produce the ground truth. */
+  /** Replays the case logic over raw logs to produce the expected rows. */
   computeExpected(logs: DecodedLog[]): ExpectedData;
 
   /** Ponder tables whose row counts sum to the processed-event count. */

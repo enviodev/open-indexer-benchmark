@@ -16,11 +16,11 @@ Index the Rocket Pool ERC20 token contract (RocketTokenRETH) on Ethereum Mainnet
 
 For each **Transfer** event:
 
-1. Upsert the sender account: if it exists, subtract the transfer value from its balance; otherwise, create it with a zero balance.
-2. Upsert the recipient account: if it exists, add the transfer value to its balance; otherwise, create it with a zero balance.
+1. Upsert the sender account: create it with a zero balance if it does not exist, then subtract the transfer value from its balance. An account seen for the first time as a sender therefore ends up with a negative balance, not a zero one.
+2. Upsert the recipient account: create it with a zero balance if it does not exist, then add the transfer value to its balance.
 3. Insert a transfer event record with the event id, amount, timestamp, sender, and recipient.
 
-Because the debit and the credit are applied to the same running balance, a transfer where sender and recipient are the same address leaves that balance unchanged. The verification range contains three such transfers, so this is checked rather than assumed.
+Every address that appears as either sender or recipient gets an account row, and because the debit and the credit are applied to the same running balance, a transfer where sender and recipient are the same address leaves that balance unchanged. The verification range contains 1,747 accounts and three self-transfers, so both are checked rather than assumed.
 
 For each **Approval** event:
 

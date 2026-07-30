@@ -1,4 +1,5 @@
 import { TypeormDatabase } from "@subsquid/typeorm-store";
+import { In } from "typeorm";
 import { processor } from "./processor";
 import { Account, TransferEvent, Allowance, ApprovalEvent } from "./model";
 import { events } from "./abi/ERC20";
@@ -59,8 +60,11 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
     (async () => {
       if (accountUpdates.size > 0) {
         const accountIds = [...accountUpdates.keys()];
+        // Must be In(...): a bare array is not a valid TypeORM predicate, and
+        // silently matching nothing would reset each account to the current
+        // batch's delta and discard its balance so far.
         const existingAccounts = await ctx.store.findBy(Account, {
-          id: accountIds as any,
+          id: In(accountIds),
         });
         const existingMap = new Map(existingAccounts.map((a) => [a.id, a]));
 

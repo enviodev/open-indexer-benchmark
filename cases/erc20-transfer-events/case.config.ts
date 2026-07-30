@@ -6,7 +6,6 @@ import {
   encodeAddress,
   encodeAmount,
   encodeSeconds,
-  summarise,
 } from "../lib/checksum.ts";
 import { TRANSFER_TOPIC } from "../lib/hypersync.ts";
 
@@ -49,10 +48,7 @@ export const caseConfig: CaseConfig = {
         encodeSeconds(log.timestamp),
       ])
     );
-    return {
-      totalEvents: logs.length,
-      entities: { transferEvent: summarise(rows) },
-    };
+    return { totalEvents: logs.length, entities: { transferEvent: rows } };
   },
 
   ponderTables: ["transfer_event"],

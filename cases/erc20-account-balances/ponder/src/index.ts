@@ -10,7 +10,7 @@ ponder.on("RocketTokenRETH:Transfer", async ({ event, context }) => {
   // Account upserts must be sequential (could be same address in self-transfer)
   await context.db
     .insert(account)
-    .values({ address: event.args.from, balance: 0n })
+    .values({ address: event.args.from, balance: -event.args.value })
     .onConflictDoUpdate((row) => ({
       balance: row.balance - event.args.value,
     }));

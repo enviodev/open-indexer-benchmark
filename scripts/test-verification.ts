@@ -77,6 +77,9 @@ if (logs.length !== expected.totalEvents) {
 }
 console.log(`${logs.length} logs\n`);
 
+const expectedRows = caseConfig.computeExpected(logs).entities;
+const withRows = { fetchExpectedRows: async () => expectedRows };
+
 const ROWS = logs.map((log) => ({
   id: `${log.blockNumber}-${log.logIndex}`,
   from: log.arg0,
@@ -233,36 +236,53 @@ const sql = sqlOn(url);
 const table = `public."TransferEvent"`;
 
 await sql(`DELETE FROM ${table} WHERE id = ${quote(ROWS[0].id)}`);
-let result = await verify(sql, caseConfig.entities, expected);
-check("missing row is detected", result.status === "mismatch", result.detail);
+let result = await verify(sql, caseConfig.entities, expected, withRows);
+check(
+  "missing row is detected and described",
+  result.status === "mismatch" && /1 of [\d,]+ transfer events missing/.test(result.detail),
+  result.detail
+);
 
 await sql(
   `INSERT INTO ${table} VALUES (${quote(ROWS[0].id)},${quote(ROWS[0].from)},${quote(
     ROWS[0].to
   )},${ROWS[0].value},${ROWS[0].timestamp})`
 );
-result = await verify(sql, caseConfig.entities, expected);
+result = await verify(sql, caseConfig.entities, expected, withRows);
 check("restored row passes again", result.status === "ok", result.detail);
 
 await sql(`INSERT INTO ${table} VALUES ('duplicate',${quote(ROWS[0].from)},${quote(
   ROWS[0].to
 )},${ROWS[0].value},${ROWS[0].timestamp})`);
-result = await verify(sql, caseConfig.entities, expected);
-check("duplicated row is detected", result.status === "mismatch", result.detail);
+result = await verify(sql, caseConfig.entities, expected, withRows);
+check(
+  "duplicated row is detected and described",
+  result.status === "mismatch" && /1 unexpected transfer event/.test(result.detail),
+  result.detail
+);
 await sql(`DELETE FROM ${table} WHERE id = 'duplicate'`);
 
 // Row count still matches — only the checksum can catch these two.
 await sql(`UPDATE ${table} SET amount = amount + 1 WHERE id = ${quote(ROWS[1].id)}`);
-result = await verify(sql, caseConfig.entities, expected);
-check("wrong value is detected", result.status === "mismatch", result.detail);
+result = await verify(sql, caseConfig.entities, expected, withRows);
+check(
+  "wrong value is detected and described",
+  result.status === "mismatch" && !/checksum/i.test(result.detail),
+  result.detail
+);
+check(
+  "wrong value reports a concrete example",
+  (result.entities.find((e) => e.status === "mismatch")?.examples.length ?? 0) > 0,
+  JSON.stringify(result.entities.find((e) => e.status === "mismatch")?.examples ?? [])
+);
 await sql(`UPDATE ${table} SET amount = amount - 1 WHERE id = ${quote(ROWS[1].id)}`);
 
 await sql(`UPDATE ${table} SET "from" = "to", "to" = "from" WHERE id = ${quote(ROWS[2].id)}`);
-result = await verify(sql, caseConfig.entities, expected);
+result = await verify(sql, caseConfig.entities, expected, withRows);
 check("swapped fields are detected", result.status === "mismatch", result.detail);
 
 const emptyUrl = await createDb("verify_test_empty", "SELECT 1");
-result = await verify(sqlOn(emptyUrl), caseConfig.entities, expected);
+result = await verify(sqlOn(emptyUrl), caseConfig.entities, expected, withRows);
 check(
   "missing table reports unknown, not a failure",
   result.status === "unknown",

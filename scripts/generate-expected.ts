@@ -12,7 +12,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchLogs } from "../cases/lib/hypersync.ts";
 import type { CaseConfig } from "../cases/lib/case.ts";
-import type { Expected } from "../cases/lib/checksum.ts";
+import { summarise, type Expected } from "../cases/lib/checksum.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ALL_CASES = ["erc20-transfer-events", "erc20-account-balances"];
@@ -53,7 +53,10 @@ async function generate(name: string, token: string) {
     );
   }
 
-  const { totalEvents, entities } = config.computeExpected(logs);
+  const { totalEvents, entities: rows } = config.computeExpected(logs);
+  const entities = Object.fromEntries(
+    Object.entries(rows).map(([key, value]) => [key, summarise(value)])
+  );
   if (totalEvents !== logs.length) {
     throw new Error(
       `${name}: case logic accounted for ${totalEvents} of ${logs.length} logs — ` +

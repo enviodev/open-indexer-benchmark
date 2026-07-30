@@ -36,6 +36,13 @@ export interface EntitySpec {
   tableCandidates: string[];
   /** Canonical field order. Both sides must encode fields in this order. */
   fields: FieldSpec[];
+  /**
+   * How many leading fields identify a row. Set it when an entity has a
+   * natural key, so a differing row is reported as one wrong value instead of
+   * a missing row plus an unexpected one. Omit when the whole row is the
+   * identity, as for append-only event tables.
+   */
+  keyFieldCount?: number;
 }
 
 export interface EntityExpectation {

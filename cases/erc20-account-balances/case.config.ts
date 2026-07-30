@@ -6,7 +6,6 @@ import {
   encodeAddress,
   encodeAmount,
   encodeSeconds,
-  summarise,
 } from "../lib/checksum.ts";
 import { APPROVAL_TOPIC, TRANSFER_TOPIC } from "../lib/hypersync.ts";
 
@@ -53,6 +52,7 @@ export const caseConfig: CaseConfig = {
       key: "account",
       label: "account balances",
       tableCandidates: ["Account", "account"],
+      keyFieldCount: 1,
       fields: [
         { role: "address", kind: "address", candidates: ["address", "holder", "id"] },
         { role: "balance", kind: "amount", candidates: ["balance"] },
@@ -62,6 +62,7 @@ export const caseConfig: CaseConfig = {
       key: "allowance",
       label: "allowances",
       tableCandidates: ["Allowance", "allowance"],
+      keyFieldCount: 2,
       fields: [
         { role: "owner", kind: "address", candidates: ["owner", "owner_address"] },
         { role: "spender", kind: "address", candidates: ["spender", "spender_address"] },
@@ -122,10 +123,10 @@ export const caseConfig: CaseConfig = {
     return {
       totalEvents: transferRows.length + approvalRows.length,
       entities: {
-        transferEvent: summarise(transferRows),
-        approvalEvent: summarise(approvalRows),
-        account: summarise(accountRows),
-        allowance: summarise(allowanceRows),
+        transferEvent: transferRows,
+        approvalEvent: approvalRows,
+        account: accountRows,
+        allowance: allowanceRows,
       },
     };
   },
