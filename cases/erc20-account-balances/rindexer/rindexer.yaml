@@ -40,6 +40,19 @@ contracts:
                   - column: balance
                     action: add
                     value: $value
+              # Create the sender's row before debiting it. A balance is only
+              # ever wrong for addresses that exclusively send, whose row is
+              # therefore created by the debit itself — the row appears but the
+              # subtraction does not, leaving the column default. Adding zero
+              # first is arithmetically a no-op and makes the debit an update,
+              # which is the path that already produces correct values.
+              - type: upsert
+                where:
+                  holder: $from
+                set:
+                  - column: balance
+                    action: add
+                    value: "0"
               - type: upsert
                 where:
                   holder: $from
