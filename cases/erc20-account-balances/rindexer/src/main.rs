@@ -12,6 +12,16 @@ mod rindexer_lib;
 
 #[tokio::main]
 async fn main() {
+    // rindexer's dependency graph enables both of rustls' crypto providers, so
+    // rustls refuses to choose one and panics on the first TLS connection —
+    // which, for an indexer, is immediately. Pick one up front.
+    if rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .is_err()
+    {
+        eprintln!("a rustls crypto provider was already installed");
+    }
+
     let args: Vec<String> = env::args().collect();
 
     let mut enable_graphql = false;
