@@ -347,12 +347,13 @@ const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       await waitPg(PONDER_DB_URL, "SELECT 1");
     },
     async launch() {
-      // `ponder start` is the production command: it builds once and ignores
-      // file changes. `ponder dev` watches the filesystem and hot-reloads,
-      // which is overhead no production deployment would carry.
+      // Ponder's docs describe `ponder start` as the production command, and
+      // `dev` carries file watching and hot reload that no deployment would.
+      // `start` with these flags exits immediately though, so it needs the
+      // right invocation worked out before the benchmark can use it.
       proc = start(
         "pnpm",
-        ["ponder", "start", "--disable-ui", `--port=${BENCHMARK_PORT}`],
+        ["ponder", "dev", "--disable-ui", `--port=${BENCHMARK_PORT}`],
         dir,
         env
       );
@@ -847,9 +848,15 @@ async function benchmarkIndexer(
   } else {
     // Verifying a partial database would report missing rows, which reads as a
     // data bug rather than what it is: the indexer ran out of time.
+    const timedOut = rangeRun.elapsedS >= PHASE_A_TIMEOUT_S - 1;
     verification = {
       status: "unknown",
-      detail: `did not finish the verification range within ${PHASE_A_TIMEOUT_S}s`,
+      detail: timedOut
+        ? `did not finish the verification range within ${PHASE_A_TIMEOUT_S}s`
+        : `stopped after ${rangeRun.elapsedS.toFixed(0)}s having indexed ` +
+          `${rangeRun.events.toLocaleString("en-US")} of ` +
+          `${expected.totalEvents.toLocaleString("en-US")} events — ` +
+          `the indexer exited before completing the range`,
       entities: [],
       dbSizeBytes: null,
       dbTotalBytes: null,

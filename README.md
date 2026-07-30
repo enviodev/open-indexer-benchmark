@@ -39,7 +39,7 @@ Each case runs in two phases.
 
 **Source**: where a tool reads chain data from. Tools with their own pipeline use it — Envio reads HyperSync, SQD reads the SQD network — and everything else reads a plain RPC endpoint, which is [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) here. `Envio - RPC` is Envio forced onto RPC rather than HyperSync, so the two rows isolate the data source from the tool.
 
-Every tool runs the command its own documentation recommends for production. All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per case.
+All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per case.
 
 You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 
