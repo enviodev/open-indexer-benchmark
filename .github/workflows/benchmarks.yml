@@ -127,6 +127,21 @@ jobs:
         with:
           node-version: 24
 
+      # The rust rindexer project pulls in alloy and the rindexer crate, which
+      # is several minutes of compilation from cold. It happens before the
+      # timer starts, so it costs CI wall clock rather than benchmark
+      # accuracy — the cache keeps that cost off most runs.
+      - name: Cache cargo build
+        if: matrix.indexer == 'rindexer'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cases/${{ matrix.case }}/rindexer/target
+          key: cargo-${{ matrix.case }}-${{ hashFiles(format('cases/{0}/rindexer/Cargo.toml', matrix.case)) }}
+          restore-keys: cargo-${{ matrix.case }}-
+
       - name: Prepare services
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -141,30 +156,39 @@ jobs:
               ;;
             rindexer)
               docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
-              # install.sh resolves "latest" via an UNAUTHENTICATED GitHub API
-              # call (60 req/h, shared across Actions runners) and does not guard
-              # an empty result: when throttled the version is blank and the
-              # download URL 404s (".../releases/download/v/..."), failing the job
-              # and silently dropping rindexer from the table. Resolve the tag
-              # ourselves with an authenticated call (5000 req/h) and pin it via
-              # --version, which still tracks the latest release.
-              RINDEXER_VERSION=""
-              for i in 1 2 3; do
-                RINDEXER_VERSION=$(curl -fsSL \
-                  -H "Authorization: Bearer $GITHUB_TOKEN" \
-                  -H "Accept: application/vnd.github+json" \
-                  https://api.github.com/repos/joshstevens19/rindexer/releases/latest \
-                  | jq -r '.tag_name // empty' | sed 's/^v//') || true
-                [ -n "$RINDEXER_VERSION" ] && break
-                echo "rindexer version lookup attempt $i failed; retrying..." >&2
-                sleep $((i * 5))
-              done
-              if [ -z "$RINDEXER_VERSION" ]; then
-                echo "Failed to resolve latest rindexer version" >&2
-                exit 1
+              # A rust project is a crate of its own and runs its own binary,
+              # so it is compiled here rather than installing the CLI. The
+              # build is outside the benchmark timer either way.
+              if [ -f "$CASE_DIR/rindexer/Cargo.toml" ]; then
+                rustup update stable
+                rustup default stable
+                cargo build --release --manifest-path "$CASE_DIR/rindexer/Cargo.toml"
+              else
+                # install.sh resolves "latest" via an UNAUTHENTICATED GitHub API
+                # call (60 req/h, shared across Actions runners) and does not guard
+                # an empty result: when throttled the version is blank and the
+                # download URL 404s (".../releases/download/v/..."), failing the job
+                # and silently dropping rindexer from the table. Resolve the tag
+                # ourselves with an authenticated call (5000 req/h) and pin it via
+                # --version, which still tracks the latest release.
+                RINDEXER_VERSION=""
+                for i in 1 2 3; do
+                  RINDEXER_VERSION=$(curl -fsSL \
+                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    https://api.github.com/repos/joshstevens19/rindexer/releases/latest \
+                    | jq -r '.tag_name // empty' | sed 's/^v//') || true
+                  [ -n "$RINDEXER_VERSION" ] && break
+                  echo "rindexer version lookup attempt $i failed; retrying..." >&2
+                  sleep $((i * 5))
+                done
+                if [ -z "$RINDEXER_VERSION" ]; then
+                  echo "Failed to resolve latest rindexer version" >&2
+                  exit 1
+                fi
+                echo "Installing rindexer v$RINDEXER_VERSION"
+                curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$RINDEXER_VERSION"
               fi
-              echo "Installing rindexer v$RINDEXER_VERSION"
-              curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$RINDEXER_VERSION"
               ;;
             subquery)
               docker compose -f "$CASE_DIR/subquery/docker-compose.yml" pull

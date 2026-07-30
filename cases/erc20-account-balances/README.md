@@ -37,7 +37,7 @@ For each **Approval** event:
 
 ## Running the Benchmark
 
-Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
+Requires Node 23.6+, Docker, a Rust toolchain (for the rindexer implementation), an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
 
 ```bash
 ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts
@@ -81,7 +81,9 @@ Runs natively via `ponder start` — the production command, which builds once a
 
 ### Rindexer
 
-Runs a native binary (`rindexer start all`) with a separate Postgres container. Postgres is started via Docker Compose before the timer begins, then the rindexer binary launches with the timer. Uses `no-code` mode with declarative YAML config.
+A `rust` project rather than a `no-code` one: the event tables and their inserts come from `rindexer codegen`, and the balance and allowance aggregation is written as handler code in `src/rindexer_lib/indexers/`. rindexer's declarative `tables:` operations are a no-code-only feature and cannot express the read-modify-write a running balance needs, so each batch is summed in memory and applied as a single upsert whose arithmetic runs in SQL.
+
+The crate is compiled with `cargo build --release` before the timer begins; the timer starts when the resulting binary launches. Postgres runs in a separate container, also started beforehand.
 
 ### Sqd (Subsquid)
 

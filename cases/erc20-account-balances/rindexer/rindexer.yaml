@@ -1,6 +1,6 @@
 name: erc20-indexer
 description: ERC-20 Transfer and Approval event indexer for RocketTokenRETH
-project_type: no-code
+project_type: rust
 timestamps: true
 
 networks:
@@ -24,59 +24,6 @@ contracts:
     include_events:
       - Transfer
       - Approval
-    tables:
-      - name: account
-        columns:
-          - name: holder
-          - name: balance
-            default: "0"
-        events:
-          - event: Transfer
-            operations:
-              - type: upsert
-                where:
-                  holder: $to
-                set:
-                  - column: balance
-                    action: add
-                    value: $value
-              # Create the sender's row before debiting it. A balance is only
-              # ever wrong for addresses that exclusively send, whose row is
-              # therefore created by the debit itself — the row appears but the
-              # subtraction does not, leaving the column default. Adding zero
-              # first is arithmetically a no-op and makes the debit an update,
-              # which is the path that already produces correct values.
-              - type: upsert
-                where:
-                  holder: $from
-                set:
-                  - column: balance
-                    action: add
-                    value: "0"
-              - type: upsert
-                where:
-                  holder: $from
-                set:
-                  - column: balance
-                    action: subtract
-                    value: $value
-      - name: allowance
-        columns:
-          - name: owner
-          - name: spender
-          - name: amount
-            default: "0"
-        events:
-          - event: Approval
-            operations:
-              - type: upsert
-                where:
-                  owner: $owner
-                  spender: $spender
-                set:
-                  - column: amount
-                    action: set
-                    value: $value
 
 graphql:
   port: 19876

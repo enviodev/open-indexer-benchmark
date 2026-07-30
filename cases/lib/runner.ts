@@ -451,6 +451,12 @@ const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     "bin",
     "rindexer"
   );
+  // A no-code project is driven entirely by rindexer.yaml and run through the
+  // CLI. A rust project is a crate of its own: the aggregation lives in handler
+  // code, so it is compiled ahead of the timer and the resulting binary is what
+  // gets launched.
+  const isRustProject = existsSync(resolve(dir, "Cargo.toml"));
+  const rustBin = resolve(dir, "target", "release", "erc20indexer");
   let proc: ChildProcess | null = null;
   let done = false;
 
@@ -470,7 +476,9 @@ const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     name: "Rindexer",
     dbUrl: RINDEXER_DB_URL,
     async prepare() {
-      if (!existsSync(bin)) {
+      // A rust project runs its own binary, so the CLI is only needed to drive
+      // a no-code one.
+      if (!isRustProject && !existsSync(bin)) {
         console.log("Installing rindexer CLI...\n");
         // install.sh resolves "latest" via an unauthenticated GitHub API call
         // that is occasionally throttled (empty version -> 404 download).
@@ -487,13 +495,20 @@ const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
         );
       }
 
+      if (isRustProject) {
+        console.log("Building the rindexer rust project...\n");
+        await exec("cargo", ["build", "--release"], dir, env);
+      }
+
       console.log("Starting PostgreSQL via docker compose...");
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
       await exec("docker", ["compose", "up", "-d"], dir, env);
       await waitPg(RINDEXER_DB_URL, "SELECT 1");
     },
     async launch() {
-      proc = start(bin, ["start", "all"], dir, env);
+      proc = isRustProject
+        ? start(rustBin, [], dir, env)
+        : start(bin, ["start", "all"], dir, env);
       proc.on("exit", () => (done = true));
     },
     async snapshot() {
