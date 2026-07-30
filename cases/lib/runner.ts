@@ -930,9 +930,23 @@ async function benchmarkIndexer(
       targetEvents: Number.POSITIVE_INFINITY,
       maxSeconds: windowS,
     });
+    // The end block sits millions of blocks ahead, so nothing reaches it inside
+    // the window: exiting without completing means the indexer died. Whatever
+    // partial work it did is not a throughput measurement, and keeping it risks
+    // publishing a rate from a broken run.
+    const died = phaseB.exited() && !windowRun.completed;
     await phaseB.stop();
     await phaseB.cleanup();
     activeDriver = null;
+
+    if (died) {
+      console.log(
+        `\nRun ${attempt}: the indexer exited after ${windowRun.elapsedS.toFixed(
+          1
+        )}s without reaching the end block — discarding this sample.\n`
+      );
+      continue;
+    }
 
     if (windowRun.completed) {
       console.log(
@@ -954,6 +968,30 @@ async function benchmarkIndexer(
         run.blocksPerSec
       )} blocks/s\n`
     );
+  }
+
+  // Every throughput run died. Phase A completed, so its rate is still sound —
+  // fall back to it rather than reporting nothing or a rate from a broken run.
+  if (windowRuns.length === 0) {
+    console.log(
+      `\n${name}: no throughput run survived — reporting the rate from the ` +
+        `verification range instead.\n`
+    );
+    return {
+      name,
+      ...TOOLS[key],
+      toolUrl: TOOLS[key].url,
+      blocksPerSec: rangeRun.elapsedS > 0 ? rangeBlocks / rangeRun.elapsedS : 0,
+      eventsPerSec:
+        rangeRun.elapsedS > 0 ? expected.totalEvents / rangeRun.elapsedS : 0,
+      throughputSource: "range",
+      correctness: verification.status,
+      correctnessDetail: verification.detail,
+      dbSizeBytes: verification.dbSizeBytes,
+      dbTotalBytes: verification.dbTotalBytes,
+      rangeSeconds: rangeRun.elapsedS,
+      windowSeconds: null,
+    };
   }
 
   // Report the best sample. Contention on a shared runner only ever costs
