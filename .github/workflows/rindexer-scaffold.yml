@@ -1,0 +1,66 @@
+# Temporary: dumps what `rindexer new --rust` generates for the account-balances
+# config, so the rust handlers can be written against the real generated
+# typings rather than guessed. Delete once the rust implementation lands.
+name: Scaffold rindexer rust project
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/rindexer-scaffold.yml
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rindexer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(curl -fsSL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/joshstevens19/rindexer/releases/latest \
+            | jq -r '.tag_name // empty' | sed 's/^v//')
+          echo "rindexer version: $VERSION"
+          curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$VERSION"
+          echo "$HOME/.config/.rindexer/bin" >> "$GITHUB_PATH"
+
+      - name: Show CLI surface
+        run: |
+          rindexer --help || true
+          echo "=== new --help ==="
+          rindexer new --help || true
+          echo "=== codegen --help ==="
+          rindexer codegen --help || true
+
+      # Generate typings for the real config, which is what the handlers must
+      # import. Copied into a scratch project so the benchmark config is
+      # untouched.
+      - name: Generate typings for the account-balances config
+        run: |
+          mkdir -p /tmp/scaffold
+          cp -r cases/erc20-account-balances/rindexer/* /tmp/scaffold/
+          cd /tmp/scaffold
+          sed -i 's/^project_type: no-code/project_type: rust/' rindexer.yaml
+          RINDEXER_END_BLOCK=18600100 ETHEREUM_RPC="https://ethereum-rpc.publicnode.com" \
+            rindexer codegen typings || rindexer codegen || true
+          echo "=== tree ==="
+          find . -type f -not -path './abis/*' | sort
+          echo "=== generated files ==="
+          for f in $(find . -name '*.rs' | sort); do
+            echo "───────── $f ─────────"
+            cat "$f"
+          done
+
+      - name: Scaffold a fresh rust project for comparison
+        run: |
+          cd /tmp
+          rindexer new --path /tmp/fresh rust || rindexer new rust --path /tmp/fresh || true
+          find /tmp/fresh -type f -not -path '*/target/*' | sort | head -40
+          for f in /tmp/fresh/Cargo.toml /tmp/fresh/src/main.rs; do
+            echo "───────── $f ─────────"; cat "$f" 2>/dev/null || true
+          done
