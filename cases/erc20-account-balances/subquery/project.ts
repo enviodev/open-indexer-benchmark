@@ -31,6 +31,7 @@ const project: EthereumProject = {
     {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 18600000,
+      endBlock: Number(process.env.SUBQUERY_END_BLOCK) || undefined,
       options: {
         abi: "erc20",
         address: "0xae78736cd615f374d3085123a210448e74fc6393",

@@ -9,6 +9,7 @@ contracts:
 chains:
   - id: 1 # Ethereum Mainnet
     start_block: 18600000
+    end_block: ${ENVIO_END_BLOCK:-999999999}
     rpc:
       url: ${ENVIO_RPC_URL}
       for: ${ENVIO_RPC_FOR:-fallback}

@@ -31,6 +31,7 @@ export const processor = new EvmBatchProcessor()
     })
     .setBlockRange({
         from: 18_600_000,
+        to: Number(process.env.SQD_END_BLOCK) || undefined,
     })
     .addLog({
         address: [CONTRACT_ADDRESS],
