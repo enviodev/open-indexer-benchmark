@@ -347,13 +347,15 @@ const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       await waitPg(PONDER_DB_URL, "SELECT 1");
     },
     async launch() {
-      // Ponder's docs describe `ponder start` as the production command, and
-      // `dev` carries file watching and hot reload that no deployment would.
-      // `start` with these flags exits immediately though, so it needs the
-      // right invocation worked out before the benchmark can use it.
+      // The production command: builds once and ignores file changes, where
+      // `dev` watches the filesystem and hot-reloads. `start` rejects
+      // `--disable-ui` (a dev-only flag) and refuses to boot without an
+      // explicit schema, so both differ from the dev invocation. `public` keeps
+      // the entity tables on the default search path, where snapshot() reads
+      // them unqualified.
       proc = start(
         "pnpm",
-        ["ponder", "dev", "--disable-ui", `--port=${BENCHMARK_PORT}`],
+        ["ponder", "start", `--port=${BENCHMARK_PORT}`, "--schema=public"],
         dir,
         env
       );
