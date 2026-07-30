@@ -83,6 +83,11 @@ jobs:
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
         run: node scripts/test-verification.ts
 
+      # Carry-forward re-reads the published table, so a parsing regression
+      # would drop a tool from the results rather than fail loudly.
+      - name: Test result table rendering
+        run: node scripts/test-tables.ts
+
   benchmark:
     name: "Benchmark: ${{ matrix.case }} / ${{ matrix.indexer }}"
     needs: setup

@@ -64,7 +64,7 @@ All indexers share port `19876` for their GraphQL endpoint. Within a single run 
 
 ### Envio
 
-Runs natively via `envio start -r`. Manages its own Docker infrastructure internally (Hasura). The benchmark timer starts when the process launches; Envio's internal Docker init is fast enough that it doesn't materially affect the measurement.
+Runs natively via `envio start -r`, which resets the database on each start. Hasura is disabled (`ENVIO_HASURA=false`) since the benchmark reads PostgreSQL directly. The benchmark timer starts when the process launches; Envio's internal init is fast enough that it doesn't materially affect the measurement.
 
 The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
 

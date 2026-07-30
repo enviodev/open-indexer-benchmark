@@ -17,7 +17,8 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchLogs, TRANSFER_TOPIC } from "../cases/lib/hypersync.ts";
-import { verify, formatBytes } from "../cases/lib/verify.ts";
+import { verify } from "../cases/lib/verify.ts";
+import { formatBytes } from "../cases/lib/table.ts";
 import { caseConfig } from "../cases/erc20-transfer-events/case.config.ts";
 import type { Expected } from "../cases/lib/checksum.ts";
 

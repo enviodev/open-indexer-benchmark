@@ -27,8 +27,9 @@ import { resolve } from "node:path";
 import type { CaseConfig } from "./case.ts";
 import type { Expected } from "./checksum.ts";
 import { fetchChainHeight, fetchLogs } from "./hypersync.ts";
-import { buildTable, formatRate, type TableRow } from "./table.ts";
-import { formatBytes, verify, type Verification } from "./verify.ts";
+import { type BenchmarkResult, toTableRow } from "./result.ts";
+import { buildTable, formatBytes, formatRate } from "./table.ts";
+import { verify, type Verification } from "./verify.ts";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -45,40 +46,40 @@ const SQD_NETWORK_URL = "https://docs.sqd.ai/subsquid-network/overview/";
  */
 const TOOLS: Record<
   keyof typeof DRIVERS,
-  { url: string; source: string; sourceUrl: string; storage: string }
+  { toolUrl: string; source: string; sourceUrl: string; storage: string }
 > = {
   envio: {
-    url: "https://envio.dev",
+    toolUrl: "https://envio.dev",
     source: "HyperSync",
     sourceUrl: HYPERSYNC_URL,
     storage: "Postgres",
   },
   "envio-rpc": {
-    url: "https://envio.dev",
+    toolUrl: "https://envio.dev",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   ponder: {
-    url: "https://ponder.sh",
+    toolUrl: "https://ponder.sh",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   rindexer: {
-    url: "https://rindexer.xyz",
+    toolUrl: "https://rindexer.xyz",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   sqd: {
-    url: "https://www.sqd.ai",
+    toolUrl: "https://www.sqd.ai",
     source: "SQD",
     sourceUrl: SQD_NETWORK_URL,
     storage: "Postgres",
   },
   subquery: {
-    url: "https://subquery.network",
+    toolUrl: "https://subquery.network",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
@@ -116,33 +117,6 @@ const SUBQUERY_PG_PORT = 5432;
 const SUBQUERY_DB_URL = `postgresql://postgres:postgres@localhost:${SUBQUERY_PG_PORT}/postgres`;
 
 // ── Types ──────────────────────────────────────────────────────────────
-
-export interface BenchmarkResult {
-  name: string;
-  /** Project page for the tool. */
-  toolUrl: string;
-  /** Chain data source the tool ingested from. */
-  source: string;
-  sourceUrl: string;
-  /** Storage engine the measured size belongs to. */
-  storage: string;
-  blocksPerSec: number;
-  eventsPerSec: number;
-  /** Which phase the rate came from. */
-  throughputSource: "window" | "range";
-  correctness: Verification["status"];
-  correctnessDetail: string;
-  /** Size of the entity tables the indexer produced. */
-  dbSizeBytes: number | null;
-  /** Whole-database size, including each indexer's internal bookkeeping. */
-  dbTotalBytes: number | null;
-  /** Seconds taken to index the verification range, if it completed. */
-  rangeSeconds: number | null;
-  /** Length of the throughput window that produced the reported rate. */
-  windowSeconds: number | null;
-  /** Every throughput window run, for transparency about run-to-run spread. */
-  windowRuns?: { eventsPerSec: number; blocksPerSec: number; seconds: number }[];
-}
 
 interface Snapshot {
   /** Blocks indexed past the case's start block. */
@@ -816,6 +790,42 @@ async function runPhase(
 
 // ── Benchmark ──────────────────────────────────────────────────────────
 
+/**
+ * Assemble a result from the parts that vary. Every exit reports the same
+ * fourteen fields, and building them in one place means a new field cannot be
+ * added to two of the three paths and forgotten in the third.
+ */
+function buildResult(
+  key: string,
+  verification: Verification,
+  parts: {
+    name: string;
+    blocks: number;
+    events: number;
+    seconds: number;
+    throughputSource: BenchmarkResult["throughputSource"];
+    rangeSeconds: number | null;
+    windowSeconds: number | null;
+    windowRuns?: BenchmarkResult["windowRuns"];
+  }
+): BenchmarkResult {
+  const { seconds } = parts;
+  return {
+    name: parts.name,
+    ...TOOLS[key],
+    blocksPerSec: seconds > 0 ? parts.blocks / seconds : 0,
+    eventsPerSec: seconds > 0 ? parts.events / seconds : 0,
+    throughputSource: parts.throughputSource,
+    correctness: verification.status,
+    correctnessDetail: verification.detail,
+    dbSizeBytes: verification.dbSizeBytes,
+    dbTotalBytes: verification.dbTotalBytes,
+    rangeSeconds: parts.rangeSeconds,
+    windowSeconds: parts.windowSeconds,
+    ...(parts.windowRuns ? { windowRuns: parts.windowRuns } : {}),
+  };
+}
+
 async function benchmarkIndexer(
   key: string,
   config: CaseConfig,
@@ -919,20 +929,15 @@ async function benchmarkIndexer(
       `\n${phaseA.name}: slower than the ${windowS}s window over the ` +
         `verification range — reporting its rate from that run.\n`
     );
-    return {
+    return buildResult(key, verification, {
       name: phaseA.name,
-      ...TOOLS[key],
-      toolUrl: TOOLS[key].url,
-      blocksPerSec: seconds > 0 ? blocks / seconds : 0,
-      eventsPerSec: seconds > 0 ? events / seconds : 0,
+      blocks,
+      events,
+      seconds,
       throughputSource: "range",
-      correctness: verification.status,
-      correctnessDetail: verification.detail,
-      dbSizeBytes: verification.dbSizeBytes,
-      dbTotalBytes: verification.dbTotalBytes,
       rangeSeconds: rangeRun.completed ? rangeRun.elapsedS : null,
       windowSeconds: null,
-    };
+    });
   }
 
   const windowRuns: {
@@ -1008,21 +1013,15 @@ async function benchmarkIndexer(
       `\n${name}: no throughput run survived — reporting the rate from the ` +
         `verification range instead.\n`
     );
-    return {
+    return buildResult(key, verification, {
       name,
-      ...TOOLS[key],
-      toolUrl: TOOLS[key].url,
-      blocksPerSec: rangeRun.elapsedS > 0 ? rangeBlocks / rangeRun.elapsedS : 0,
-      eventsPerSec:
-        rangeRun.elapsedS > 0 ? expected.totalEvents / rangeRun.elapsedS : 0,
+      blocks: rangeBlocks,
+      events: expected.totalEvents,
+      seconds: rangeRun.elapsedS,
       throughputSource: "range",
-      correctness: verification.status,
-      correctnessDetail: verification.detail,
-      dbSizeBytes: verification.dbSizeBytes,
-      dbTotalBytes: verification.dbTotalBytes,
       rangeSeconds: rangeRun.elapsedS,
       windowSeconds: null,
-    };
+    });
   }
 
   // Report the best sample. Contention on a shared runner only ever costs
@@ -1040,47 +1039,19 @@ async function benchmarkIndexer(
     );
   }
 
-  return {
+  return buildResult(key, verification, {
     name,
-    ...TOOLS[key],
-    toolUrl: TOOLS[key].url,
-    blocksPerSec: best.blocksPerSec,
-    eventsPerSec: best.eventsPerSec,
+    blocks: best.blocksPerSec * best.seconds,
+    events: best.eventsPerSec * best.seconds,
+    seconds: best.seconds,
     throughputSource: "window",
-    correctness: verification.status,
-    correctnessDetail: verification.detail,
-    dbSizeBytes: verification.dbSizeBytes,
-    dbTotalBytes: verification.dbTotalBytes,
     rangeSeconds: rangeRun.elapsedS,
     windowSeconds: best.seconds,
     windowRuns,
-  };
+  });
 }
 
 // ── Result presentation ────────────────────────────────────────────────
-
-/** Status marker only; the explanation becomes a note under the table. */
-function correctnessCell(result: BenchmarkResult): string {
-  if (result.correctness === "ok") return "✅";
-  return result.correctness === "mismatch" ? "❌" : "❓";
-}
-
-export function toTableRow(result: BenchmarkResult): TableRow {
-  const size = formatBytes(result.dbSizeBytes);
-  return {
-    name: result.name,
-    eventsPerSec: result.eventsPerSec,
-    cells: {
-      tool: `[${result.name}](${result.toolUrl})`,
-      source: `[${result.source}](${result.sourceUrl})`,
-      blocks: formatRate(result.blocksPerSec),
-      events: formatRate(result.eventsPerSec),
-      correctness: correctnessCell(result),
-      correctnessDetail: result.correctness === "ok" ? "" : result.correctnessDetail,
-      dbSize: size === "—" ? size : `${result.storage} ${size}`,
-    },
-  };
-}
 
 // ── Entry point ────────────────────────────────────────────────────────
 

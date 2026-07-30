@@ -10,7 +10,7 @@ import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } 
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildTable, parsePublishedTable, rowKey, type TableRow } from "../cases/lib/table.ts";
-import { toTableRow, type BenchmarkResult } from "../cases/lib/runner.ts";
+import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RESULTS_DIR = process.env.RESULTS_DIR ?? "results";
@@ -67,7 +67,7 @@ for (const benchCase of cases) {
   for (const prior of parsePublishedTable(readme, benchCase)) {
     if (fresh.has(rowKey(prior))) continue;
     rows.push({ ...prior, carriedOver: true });
-    carried.push(rowKey(prior).replace("|", " via "));
+    carried.push(`${prior.name} via ${prior.cells.source}`);
   }
   if (carried.length > 0) {
     console.log(
