@@ -31,6 +31,10 @@ contracts:
           - name: balance
             default: "0"
         events:
+          # Credit and debit are declared as separate event entries: with both
+          # under one entry's `operations` list, only the first was applied —
+          # sender rows were never created and senders that also received kept
+          # an incoming-only balance.
           - event: Transfer
             operations:
               - type: upsert
@@ -40,6 +44,8 @@ contracts:
                   - column: balance
                     action: add
                     value: $value
+          - event: Transfer
+            operations:
               - type: upsert
                 where:
                   id: $from
