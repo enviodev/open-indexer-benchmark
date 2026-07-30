@@ -41,10 +41,10 @@ You can enter the `cases` directory to see code, setup instructions, and run the
 Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Stores decoded event logs and aggregates account balances. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
 
 <!-- BENCHMARK:erc20-account-balances:START -->
-| | Envio | Sqd (19.7x slower) | Rindexer (22.4x slower) | Envio - RPC (122.3x slower) | Ponder (188.4x slower) | SubQuery (218.9x slower) |
+| | Envio | Rindexer (29.5x slower) | Sqd (34.3x slower) | Envio - RPC (161.7x slower) | Ponder (247.8x slower) | SubQuery (486.7x slower) |
 | --- | --- | --- | --- | --- | --- | --- |
-| blocks/s | 97,873.1 | 4,957.8 | 4,362.5 | 800.0 | 519.5 | 447.2 |
-| events/s | 12,170.2 | 727.1 | 389.4 | 71.5 | 45.8 | 35.3 |
+| blocks/s | 129,365.7 | 4,391.5 | 3,776.9 | 800.0 | 522.1 | 265.8 |
+| events/s | 18,395.8 | 418.3 | 399.9 | 71.5 | 45.9 | 23.8 |
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md).
@@ -55,10 +55,10 @@ See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc
 Results of indexing raw Transfer event logs from the USDC token contract on Ethereum Mainnet, starting at block 18,600,000. Stores every decoded Transfer event with no aggregation — a pure write-only ingestion throughput test.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
-| | Envio | Sqd (5.0x slower) | Rindexer (7.6x slower) | Envio - RPC (20.4x slower) | Ponder (320.4x slower) | SubQuery (2233.0x slower) |
+| | Envio | Sqd (3.8x slower) | Rindexer (5.0x slower) | Envio - RPC (21.4x slower) | Ponder (337.2x slower) | SubQuery (2339.1x slower) |
 | --- | --- | --- | --- | --- | --- | --- |
-| blocks/s | 7,145.5 | 1,430.9 | 934.3 | 349.8 | 22.3 | 3.2 |
-| events/s | 64,482.8 | 11,324.0 | 7,355.1 | 2,814.3 | 181.2 | 26.5 |
+| blocks/s | 7,485.0 | 1,994.5 | 1,484.8 | 349.8 | 22.2 | 3.2 |
+| events/s | 68,315.5 | 16,064.4 | 11,775.1 | 2,814.3 | 180.8 | 26.6 |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
