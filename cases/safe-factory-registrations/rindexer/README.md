@@ -4,6 +4,8 @@
 
 This benchmark indexes `ProxyCreation` on the Safe proxy factory v1.3.0 on Ethereum Mainnet from block 24,600,000, and `SafeSetup` on every proxy it creates. The `Safe` contract's `details` carry a `factory` block naming the factory, its `ProxyCreation` event, and the `proxy` input holding the new address.
 
+Only the child contract is declared. Resolving a factory already makes rindexer index the factory's own `ProxyCreation` logs into a table of their own, so declaring the factory again as a standalone contract would produce two identical `proxy_creation` tables in separate schemas.
+
 ## Pre-requisites
 
 - [rindexer CLI](https://rindexer.xyz/docs/start-building/installation)
