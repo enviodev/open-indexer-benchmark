@@ -57,21 +57,38 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
           .replaceAll("__END_BLOCK__", String(endBlock))
       );
 
-      if (!existsSync(gnd)) {
+      // The tag installed is recorded beside the binary, because the binary
+      // cannot be asked: `gnd --version` reports a commit hash, not the release
+      // it came from. Taking its presence as proof of its version would mean a
+      // developer who ran an earlier revision keeps benchmarking the Graph Node
+      // they already had after a version bump — bin/ is gitignored and nothing
+      // else ever clears it. CI is covered by the cache key, which changes with
+      // this file, but only incidentally, and only in CI.
+      const binDir = resolve(dir, "bin");
+      const versionFile = resolve(binDir, ".gnd-version");
+      const installed =
+        existsSync(gnd) && existsSync(versionFile)
+          ? readFileSync(versionFile, "utf8").trim()
+          : null;
+
+      if (installed !== GRAPH_NODE_VERSION) {
         console.log(`Installing Graph Node ${GRAPH_NODE_VERSION}...\n`);
         // `graph node install` renames the downloaded binary into --bin-dir
         // without creating it first, and fails with ENOENT if it is missing —
         // which it is on any run the cache did not restore.
-        mkdirSync(resolve(dir, "bin"), { recursive: true });
+        mkdirSync(binDir, { recursive: true });
         await exec(
           "pnpm",
           [
             "exec", "graph", "node", "install",
             "--tag", GRAPH_NODE_VERSION,
-            "--bin-dir", resolve(dir, "bin"),
+            "--bin-dir", binDir,
           ],
           dir
         );
+        // Written only after a successful install, so an interrupted one is
+        // retried rather than recorded as done.
+        writeFileSync(versionFile, `${GRAPH_NODE_VERSION}\n`);
       }
 
       console.log("Running codegen and build...\n");
