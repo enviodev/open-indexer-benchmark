@@ -26,7 +26,7 @@ There is no aggregation — accounts, balances, and allowances are intentionally
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
 - **Sqd** — [sqd/](./sqd/)
-- **Subgraph (Graph Node)** — [subgraph/](./subgraph/) (requires Docker)
+- **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
@@ -85,7 +85,7 @@ Runs the processor as a native Node.js process against a Docker Postgres instanc
 
 Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
 
-### Subgraph (Graph Node)
+### Subgraph
 
 Runs Graph Node natively via `gnd dev` — the single-binary distribution of
 graph-node — backed by a Postgres container. `gnd` builds and deploys the

@@ -36,7 +36,10 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const readEvents = createProgressReader(SUBGRAPH_DB_URL, config);
 
   return {
-    name: "Graph Node",
+    // The subgraph is what is being benchmarked; Graph Node is the runtime that
+    // executes it. The name matches the "Subgraph" column of the May 2025
+    // results kept in the root README.
+    name: "Subgraph",
     dbUrl: SUBGRAPH_DB_URL,
     async prepare() {
       console.log("Cleaning previous build...");
