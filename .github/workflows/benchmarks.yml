@@ -26,6 +26,8 @@ jobs:
   setup:
     name: Setup matrix
     runs-on: ubuntu-latest
+    # Only echoes the matrix to GITHUB_OUTPUT; touches neither repo nor API.
+    permissions: {}
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       cases: ${{ steps.set-matrix.outputs.cases }}
@@ -60,6 +62,10 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Runs third-party indexer binaries, so it gets the narrowest token that
+    # still works: read-only, and enough to resolve a public release tag.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       # Jobs run concurrently. GitHub gives each matrix job its own runner VM,
@@ -85,6 +91,8 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
         with:
