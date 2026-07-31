@@ -55,9 +55,13 @@ export function formatRate(n: number): string {
 /** "29.5x slower" relative to the fastest row. */
 function relative(best: number, rate: number): string {
   if (!Number.isFinite(rate) || rate <= 0) return "—";
-  const ratio = best / rate;
-  if (ratio <= 1.0001) return "—";
-  return `${ratio % 1 === 0 ? Math.round(ratio) : ratio.toFixed(1)}x slower`;
+  // Round to the precision that gets displayed before deciding anything, so a
+  // ratio of 1.04 reads as "—" rather than as the nonsensical "1.0x slower",
+  // and a whole number drops its ".0" — testing `ratio % 1` on a raw rate ratio
+  // never fired.
+  const ratio = Math.round((best / rate) * 10) / 10;
+  if (ratio <= 1) return "—";
+  return `${Number.isInteger(ratio) ? ratio : ratio.toFixed(1)}x slower`;
 }
 
 export function buildTable(rows: TableRow[]): string {
@@ -122,7 +126,9 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
   const body = markdown.slice(start + startMarker.length, end);
   const rows: TableRow[] = [];
 
-  // Notes are rendered as "> **(1)** Tool — detail" beneath the table.
+  // Notes are rendered as "> **(1)** Tool — detail" beneath the table. The
+  // split is on the first em-dash, which is safe because tool names never
+  // contain one; a detail string may, and keeps it.
   const notes = new Map<string, string>();
   for (const line of body.split("\n")) {
     const note = line.match(/^>\s*\*\*\((\d+)\)\*\*\s*.*?—\s*(.+)$/);

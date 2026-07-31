@@ -50,43 +50,10 @@ jobs:
           DURATION="${{ inputs.duration }}"
           echo "duration=${DURATION:-60}" >> "$GITHUB_OUTPUT"
 
-  verify-harness:
-    name: Verification harness tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: testing
-          POSTGRES_DB: envio-dev
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      # If table resolution or a canonical SQL expression breaks, every indexer
-      # is reported as "unknown" or uniformly wrong, which reads like a data
-      # problem rather than a harness problem. Catch that here instead.
-      - name: Test the verification layer
-        env:
-          ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
-        run: node scripts/test-verification.ts
-
-      # Carry-forward re-reads the published table, so a parsing regression
-      # would drop a tool from the results rather than fail loudly.
-      - name: Test result table rendering
-        run: node scripts/test-tables.ts
+  # The harness has two test scripts — scripts/test-verification.ts and
+  # scripts/test-tables.ts — that are run locally when either the verification
+  # layer or the result table changes. They are deliberately not a CI job: the
+  # verification test needs a live HyperSync token, which forks do not have.
 
   benchmark:
     name: "Benchmark: ${{ matrix.case }} / ${{ matrix.indexer }}"
