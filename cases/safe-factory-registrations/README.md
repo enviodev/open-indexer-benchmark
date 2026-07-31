@@ -99,6 +99,8 @@ Runs natively via `ponder start` backed by a Postgres container. The child contr
 
 Runs a native binary (`rindexer start all`) with a separate Postgres container, in `no-code` mode. The `Safe` contract's `details` carry a `factory` block naming the factory, its `ProxyCreation` event, and the `proxy` input holding the new address.
 
+Only the child contract is declared. Resolving a factory already makes rindexer index the factory's own `ProxyCreation` logs into a table of their own, so declaring the factory again as a standalone contract yields two identical `proxy_creation` tables in separate schemas — which table resolution rejects as ambiguous rather than guessing between.
+
 ### Sqd (Subsquid)
 
 Runs the processor and GraphQL server as separate native Node.js processes, with a Docker Postgres for storage.
@@ -109,6 +111,6 @@ Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an A
 
 ### SubQuery
 
-Runs entirely via Docker Compose (postgres + subquery-node + graphql-engine), and carries the heaviest startup overhead — see the [Decoded Event Stream](../erc20-transfer-events/README.md) notes, which apply unchanged.
+Runs entirely via Docker Compose (postgres + subquery-node), and carries the heaviest startup overhead — see the [Decoded Event Stream](../erc20-transfer-events/README.md) notes, which apply unchanged.
 
 The proxy is indexed through a `Safe` template instantiated per `ProxyCreation` with `createSafeDatasource({ address })`.
