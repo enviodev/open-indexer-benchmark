@@ -20,18 +20,19 @@ export function handleTransfer(event: Transfer): void {
   const from = event.params.from.toHexString();
   const to = event.params.to.toHexString();
 
-  // Sending to yourself leaves the balance unchanged. Both sides would
-  // otherwise be loaded at the same pre-transfer balance, and the credit would
-  // overwrite the debit.
+  // Both accounts come into existence as soon as they are seen, whether or not
+  // the transfer moves anything: the case gives every address seen as sender or
+  // recipient a row. Only the balances are conditional — sending to yourself
+  // leaves it unchanged, and applying the debit and the credit would keep only
+  // the credit, since both sides were loaded at the same pre-transfer balance.
+  const sender = loadOrCreateAccount(from);
+  const receiver = loadOrCreateAccount(to);
   if (from != to) {
-    const sender = loadOrCreateAccount(from);
     sender.balance = sender.balance.minus(event.params.value);
-    sender.save();
-
-    const receiver = loadOrCreateAccount(to);
     receiver.balance = receiver.balance.plus(event.params.value);
-    receiver.save();
   }
+  sender.save();
+  receiver.save();
 
   const transfer = new TransferEvent(
     event.block.number.toString() + "-" + event.logIndex.toString()
