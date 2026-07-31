@@ -5,10 +5,14 @@
 // express the same thing as declarative `tables:` operations, but the rust
 // project type gives the handler the database directly, so a balance update is
 // one upsert with the arithmetic in SQL.
+//
+// The per-batch info logging codegen emits is dropped: it runs once per batch
+// on the hot path, and no other implementation in this case logs progress.
+// Error logging stays, since it only fires on a failed write.
 use alloy::primitives::{Address, I256, U256};
 use rindexer::{
-    event::callback_registry::EventCallbackRegistry, rindexer_error, rindexer_info,
-    EthereumSqlTypeWrapper, PostgresClient,
+    event::callback_registry::EventCallbackRegistry, rindexer_error, EthereumSqlTypeWrapper,
+    PostgresClient,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -150,11 +154,6 @@ async fn approval_handler(manifest_path: &PathBuf, registry: &mut EventCallbackR
                 return Err(e.to_string());
             }
 
-            rindexer_info!(
-                "RocketTokenRETH::Approval - INDEXED - {} events",
-                results.len(),
-            );
-
             Ok(())
         },
         no_extensions(),
@@ -251,11 +250,6 @@ async fn transfer_handler(manifest_path: &PathBuf, registry: &mut EventCallbackR
                 rindexer_error!("RocketTokenRETHEventType::Transfer balances: {:?}", e);
                 return Err(e.to_string());
             }
-
-            rindexer_info!(
-                "RocketTokenRETH::Transfer - INDEXED - {} events",
-                results.len(),
-            );
 
             Ok(())
         },

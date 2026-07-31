@@ -81,9 +81,15 @@ Runs natively via `ponder start` — the production command, which builds once a
 
 ### Rindexer
 
-A `rust` project rather than a `no-code` one: the event tables and their inserts come from `rindexer codegen`, and the balance and allowance aggregation is written as handler code in `src/rindexer_lib/indexers/`. rindexer's declarative `tables:` operations are a no-code-only feature and cannot express the read-modify-write a running balance needs, so each batch is summed in memory and applied as a single upsert whose arithmetic runs in SQL.
+A `rust` project rather than a `no-code` one. rindexer offers both, and the other case in this benchmark uses `no-code`; this case does not, because `no-code` could not compute the balances correctly.
 
-The crate is compiled with `cargo build --release` before the timer begins; the timer starts when the resulting binary launches. Postgres runs in a separate container, also started beforehand.
+A running balance is a read-modify-write: read the current value, apply a delta, write it back. A `no-code` project can only describe table operations declaratively in `rindexer.yaml`, so the case had to be expressed as a sequence of independent upserts — credit the recipient, then debit the sender. That sequence did not hold. On most runs the debit was lost, leaving 465 of 1,747 accounts absent and 672 holding the wrong balance; the failure was intermittent, so some runs passed. Reordering the operations and splitting them across separate event entries changed which addresses were affected but never fixed it.
+
+The `rust` project type hands the handler a database connection instead, so the aggregation is ordinary code. Each batch is summed in memory into one signed delta per address, then applied as a single upsert whose arithmetic runs in SQL (`balance = account.balance + EXCLUDED.balance`). There is no second write to lose, and the properties the ground truth checks — a self-transfer netting to zero, an address seen only as a sender ending up negative — hold by construction rather than by two operations both landing. Allowances collapse to the last value per `(owner, spender)` pair before the upsert, because Postgres rejects an `ON CONFLICT` statement that touches the same row twice.
+
+The event tables and their inserts are still exactly what `rindexer codegen` produces. Only the aggregation in `src/rindexer_lib/indexers/erc_20indexer/rocket_token_reth.rs` is hand-written — that file is the one rindexer intends you to edit — and the per-batch progress logging codegen emits is removed, since it sits on the hot path and no other implementation here logs progress.
+
+The crate is compiled with `cargo build --release` before the timer begins; the timer starts when the resulting binary launches. Postgres runs in a separate container, also started beforehand. Two things differ from the `no-code` setup as a result: the `rindexer` crate is pinned to a git tag rather than tracking `master`, so a run is reproducible, and the binary is built from source rather than being the released CLI. `rindexer new rust` also does not scaffold a rustls crypto provider, and the dependency graph enables two of them, so `main` installs one explicitly — without it the binary panics on its first HTTPS request.
 
 ### Sqd (Subsquid)
 
