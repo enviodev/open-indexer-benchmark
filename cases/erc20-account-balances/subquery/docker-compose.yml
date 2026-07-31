@@ -44,24 +44,3 @@ services:
       interval: 3s
       timeout: 5s
       retries: 10
-
-  graphql-engine:
-    image: subquerynetwork/subql-query:latest
-    ports:
-      - 19876:3000
-    depends_on:
-      postgres:
-        condition: service_healthy
-      subquery-node:
-        condition: service_healthy
-    restart: always
-    environment:
-      DB_USER: postgres
-      DB_PASS: postgres
-      DB_DATABASE: postgres
-      DB_HOST: postgres
-      DB_PORT: 5432
-    command:
-      - --name=app
-      - --playground
-      - --indexer=http://subquery-node:3000

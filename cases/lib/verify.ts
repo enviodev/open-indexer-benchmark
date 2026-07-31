@@ -251,6 +251,42 @@ function resolveEntity(
   };
 }
 
+/** Where an entity's rows live, without the per-field encoding. */
+export interface EntityTable {
+  key: string;
+  qualified: string;
+  displayName: string;
+  /** Bare predicate restricting the entity's rows, or "" for all of them. */
+  predicate: string;
+}
+
+/**
+ * Locate the tables backing the given entities.
+ *
+ * Shared with the drivers, which read indexing progress straight out of the
+ * database and so need the same name resolution — but only the table, not the
+ * canonical field expressions. Throws on the first entity that cannot be
+ * resolved: a caller that polls progress has no way to report "unknown" the way
+ * verification does, and a silently-skipped table would read as an indexer that
+ * had processed nothing.
+ */
+export async function resolveEntityTables(
+  sql: SqlRunner,
+  specs: EntitySpec[]
+): Promise<EntityTable[]> {
+  const tables = groupTables(await introspect(sql));
+  return specs.map((spec) => {
+    const entity = resolveEntity(spec, tables);
+    if ("error" in entity) throw new Error(entity.error);
+    return {
+      key: spec.key,
+      qualified: entity.qualified,
+      displayName: entity.displayName,
+      predicate: entity.predicate,
+    };
+  });
+}
+
 /** Every row of an entity, in the same canonical encoding the checksum hashes. */
 async function fetchActualRows(
   sql: SqlRunner,

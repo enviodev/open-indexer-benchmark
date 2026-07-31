@@ -51,8 +51,5 @@ export const caseConfig: CaseConfig = {
     return { totalEvents: logs.length, entities: { transferEvent: rows } };
   },
 
-  ponderTables: ["transfer_event"],
-  rindexerCollections: ["allTransfers"],
-  subqueryCollections: ["transferEvents"],
-  sqdConnections: ["transferEventsConnection"],
+  eventEntities: ["transferEvent"],
 };

@@ -60,7 +60,9 @@ ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts erc20-transfer-even
 
 ## Implementation Notes
 
-All indexers share port `19876` for their GraphQL endpoint. A local run benchmarks them one after another and CI gives each its own runner, so there is no conflict.
+Progress and correctness are both read straight from each indexer's PostgreSQL database, never through its GraphQL API. Two reasons: an indexer serving queries alongside its indexing is doing work the benchmark does not measure but does pay for, and every API models the same data differently enough that the polling code was becoming a per-indexer dialect. So none of the GraphQL servers is started — `squid-graphql-server` is not launched, rindexer is started with indexing only (`start indexer` for a no-code project, `--indexer` for a rust one), and SubQuery's `graphql-engine` container is gone from its compose file. Ponder is the exception: `ponder start` always serves an API, so it is bound to port `19876` and otherwise ignored.
+
+The tables backing each entity are found by introspection against the `tableCandidates` in `case.config.ts` — the same resolution the verification layer uses — so a case names its entities once instead of once per indexer.
 
 ### Envio
 
@@ -70,21 +72,21 @@ The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync
 
 ### Ponder
 
-Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the GraphQL server to the benchmark port. The Transfer handler is a single insert with no upserts.
+Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the API server it insists on running to the benchmark port. The Transfer handler is a single insert with no upserts.
 
 ### Rindexer
 
-Runs a native binary (`rindexer start all`) with a separate Postgres container. Uses `no-code` mode with declarative YAML config. Only the Transfer event is included, so rindexer creates a single raw `transfer` event table and no aggregation tables.
+Runs a native binary (`rindexer start indexer`, so no GraphQL server) with a separate Postgres container. Uses `no-code` mode with declarative YAML config. Only the Transfer event is included, so rindexer creates a single raw `transfer` event table and no aggregation tables.
 
 ### Sqd (Subsquid)
 
-Runs the processor and GraphQL server as separate native Node.js processes. Uses a Docker Postgres instance for storage. The handler batches all Transfer events in memory per block range, then inserts them.
+Runs the processor as a native Node.js process against a Docker Postgres instance. The handler batches all Transfer events in memory per block range, then inserts them.
 
 Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
 
 ### SubQuery
 
-Runs entirely via Docker Compose (postgres + subquery-node + graphql-engine). This has the heaviest startup overhead:
+Runs entirely via Docker Compose (postgres + subquery-node). This has the heaviest startup overhead:
 
 - **Docker/DB pre-initialization**: Postgres is started and health-checked _before_ the benchmark timer begins. Image pulls also happen beforehand. This is not counted toward the benchmark duration.
 - **Startup cost**: `subquery-node` takes ~25s to boot inside Docker. SubQuery is too slow to finish the verification range within the throughput window, so its rate comes from that range, where boot time is a small and honestly counted fraction of a multi-minute run.
