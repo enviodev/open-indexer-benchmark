@@ -36,7 +36,7 @@ Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC
 ENVIO_API_TOKEN=your-token node cases/erc20-transfer-events/run.ts
 ```
 
-Each indexer first indexes the verification range to completion, and its database is checked against `expected.json` and measured for size. It then re-runs for the throughput window unless it was too slow to finish the range within that window, in which case its rate comes from the verification run instead.
+Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
 
 The throughput window defaults to 60 seconds. Pass a custom duration (in seconds) with `--duration`:
 
@@ -52,7 +52,7 @@ ENVIO_API_TOKEN=your-token node cases/erc20-transfer-events/run.ts envio ponder 
 
 ### Ground truth
 
-`expected.json` holds a row count and a checksum per entity for the verification range. Regenerate it after changing the range, the contract, or the case logic:
+`expected.json` holds a row count and a checksum per entity. Regenerate it after changing the range, the contract, or the case logic:
 
 ```bash
 ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts erc20-transfer-events
@@ -60,17 +60,17 @@ ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts erc20-transfer-even
 
 ## Implementation Notes
 
-All indexers share port `19876` for their GraphQL endpoint. Within a single run the indexers are benchmarked one after another, and in CI each indexer gets its own runner, so there is no conflict.
+All indexers share port `19876` for their GraphQL endpoint. A local run benchmarks them one after another and CI gives each its own runner, so there is no conflict.
 
 ### Envio
 
-Runs natively via `envio start -r`, which resets the database on each start. Hasura is disabled (`ENVIO_HASURA=false`) since the benchmark reads PostgreSQL directly. The benchmark timer starts when the process launches; Envio's internal init is fast enough that it doesn't materially affect the measurement.
+Runs natively via `envio start -r`, which resets the database on each start. Hasura is disabled (`ENVIO_HASURA=false`) since the benchmark reads PostgreSQL directly. The timer starts when the process launches; Envio's internal init is fast enough not to materially affect the measurement.
 
 The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
 
 ### Ponder
 
-Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. `start` rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so its invocation differs from `ponder dev`. The `--port` flag binds the GraphQL server to the benchmark port. The Transfer handler is a single insert with no upserts.
+Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the GraphQL server to the benchmark port. The Transfer handler is a single insert with no upserts.
 
 ### Rindexer
 
@@ -87,5 +87,5 @@ Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an A
 Runs entirely via Docker Compose (postgres + subquery-node + graphql-engine). This has the heaviest startup overhead:
 
 - **Docker/DB pre-initialization**: Postgres is started and health-checked _before_ the benchmark timer begins. Image pulls also happen beforehand. This is not counted toward the benchmark duration.
-- **Startup cost**: SubQuery's `subquery-node` takes ~25 seconds to boot inside Docker. Because SubQuery is too slow to index the verification range within the throughput window, its rate is measured over that range, where the boot time is a small and honestly counted fraction of a multi-minute run.
-- **`project.ts` env vars**: The `project.ts` config reads `ETHEREUM_RPC_URL` and `SUBQUERY_END_BLOCK`, both baked into `project.yaml` at codegen/build time, so the benchmark passes them during `codegen` and `build`. A missing end block throws rather than defaulting, since an unbounded run would never complete the verification phase.
+- **Startup cost**: `subquery-node` takes ~25s to boot inside Docker. SubQuery is too slow to finish the verification range within the throughput window, so its rate comes from that range, where boot time is a small and honestly counted fraction of a multi-minute run.
+- **`project.ts` env vars**: `ETHEREUM_RPC_URL` and `SUBQUERY_END_BLOCK` are baked into `project.yaml` at codegen/build time, so the benchmark passes both during `codegen` and `build`. A missing end block throws rather than defaulting, since an unbounded run would never complete the verification phase.

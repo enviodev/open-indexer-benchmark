@@ -16,11 +16,11 @@ Index the Rocket Pool ERC20 token contract (RocketTokenRETH) on Ethereum Mainnet
 
 For each **Transfer** event:
 
-1. Upsert the sender account: create it with a zero balance if it does not exist, then subtract the transfer value from its balance. An account seen for the first time as a sender therefore ends up with a negative balance, not a zero one.
-2. Upsert the recipient account: create it with a zero balance if it does not exist, then add the transfer value to its balance.
+1. Upsert the sender account: create it with a zero balance if it does not exist, then subtract the transfer value. An account first seen as a sender therefore ends up negative, not zero.
+2. Upsert the recipient account: create it with a zero balance if it does not exist, then add the transfer value.
 3. Insert a transfer event record with the event id, amount, timestamp, sender, and recipient.
 
-Every address that appears as either sender or recipient gets an account row, and because the debit and the credit are applied to the same running balance, a transfer where sender and recipient are the same address leaves that balance unchanged. The verification range contains 1,747 accounts and three self-transfers, so both are checked rather than assumed.
+Every address seen as sender or recipient gets an account row, and since debit and credit apply to the same running balance, a self-transfer leaves it unchanged. The verification range contains 1,747 accounts and three self-transfers, so both are checked rather than assumed.
 
 For each **Approval** event:
 
@@ -43,7 +43,7 @@ Requires Node 23.6+, Docker, a Rust toolchain (for the rindexer implementation),
 ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts
 ```
 
-Each indexer first indexes the verification range to completion, and its database is checked against `expected.json` and measured for size. It then re-runs for the throughput window unless it was too slow to finish the range within that window, in which case its rate comes from the verification run instead.
+Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
 
 The throughput window defaults to 60 seconds. Pass a custom duration (in seconds) with `--duration`:
 
@@ -59,7 +59,7 @@ ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts envio ponder
 
 ### Ground truth
 
-`expected.json` holds a row count and a checksum per entity for the verification range. Regenerate it after changing the range, the contract, or the case logic:
+`expected.json` holds a row count and a checksum per entity. Regenerate it after changing the range, the contract, or the case logic:
 
 ```bash
 ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts erc20-account-balances
@@ -67,29 +67,27 @@ ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts erc20-account-balan
 
 ## Implementation Notes
 
-All indexers share port `19876` for their GraphQL endpoint. Within a single run the indexers are benchmarked one after another, and in CI each indexer gets its own runner, so there is no conflict.
+All indexers share port `19876` for their GraphQL endpoint. A local run benchmarks them one after another and CI gives each its own runner, so there is no conflict.
 
 ### Envio
 
-Runs natively via `envio start -r`, which resets the database on each start. Hasura is disabled (`ENVIO_HASURA=false`) since the benchmark reads PostgreSQL directly. The benchmark timer starts when the process launches; Envio's internal init is fast enough that it doesn't materially affect the measurement.
+Runs natively via `envio start -r`, which resets the database on each start. Hasura is disabled (`ENVIO_HASURA=false`) since the benchmark reads PostgreSQL directly. The timer starts when the process launches; Envio's internal init is fast enough not to materially affect the measurement.
 
 The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
 
 ### Ponder
 
-Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. `start` rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so its invocation differs from `ponder dev`. The `--port` flag binds the GraphQL server to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
+Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the GraphQL server to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
 
 ### Rindexer
 
-A `rust` project rather than a `no-code` one. rindexer offers both, and the other case in this benchmark uses `no-code`; this case does not, because `no-code` could not compute the balances correctly.
+A `rust` project rather than the `no-code` setup the other case uses, because `no-code` could not compute the balances correctly. A running balance is a read-modify-write, but `no-code` can only describe table operations declaratively in `rindexer.yaml`, so the case had to become a sequence of independent upserts — and the debit was intermittently lost, leaving 465 of 1,747 accounts absent and 672 holding the wrong balance. Reordering the operations and splitting them across event entries changed which addresses broke, but never fixed it.
 
-A running balance is a read-modify-write: read the current value, apply a delta, write it back. A `no-code` project can only describe table operations declaratively in `rindexer.yaml`, so the case had to be expressed as a sequence of independent upserts — credit the recipient, then debit the sender. That sequence did not hold. On most runs the debit was lost, leaving 465 of 1,747 accounts absent and 672 holding the wrong balance; the failure was intermittent, so some runs passed. Reordering the operations and splitting them across separate event entries changed which addresses were affected but never fixed it.
+The `rust` project type hands the handler a database connection, so the aggregation is ordinary code: each batch is summed in memory into one signed delta per address, then applied as a single upsert whose arithmetic runs in SQL (`balance = account.balance + EXCLUDED.balance`). There is no second write to lose, so a self-transfer netting to zero and a sender-only address ending up negative hold by construction. Allowances collapse to the last value per `(owner, spender)` pair first, since Postgres rejects an `ON CONFLICT` that touches the same row twice.
 
-The `rust` project type hands the handler a database connection instead, so the aggregation is ordinary code. Each batch is summed in memory into one signed delta per address, then applied as a single upsert whose arithmetic runs in SQL (`balance = account.balance + EXCLUDED.balance`). There is no second write to lose, and the properties the ground truth checks — a self-transfer netting to zero, an address seen only as a sender ending up negative — hold by construction rather than by two operations both landing. Allowances collapse to the last value per `(owner, spender)` pair before the upsert, because Postgres rejects an `ON CONFLICT` statement that touches the same row twice.
+Event tables and their inserts are exactly what `rindexer codegen` produces. Only the aggregation in `src/rindexer_lib/indexers/erc_20indexer/rocket_token_reth.rs` is hand-written — the file rindexer intends you to edit — and codegen's per-batch progress logging is removed, since it sits on the hot path and no other implementation here logs progress.
 
-The event tables and their inserts are still exactly what `rindexer codegen` produces. Only the aggregation in `src/rindexer_lib/indexers/erc_20indexer/rocket_token_reth.rs` is hand-written — that file is the one rindexer intends you to edit — and the per-batch progress logging codegen emits is removed, since it sits on the hot path and no other implementation here logs progress.
-
-The crate is compiled with `cargo build --release` before the timer begins; the timer starts when the resulting binary launches. Postgres runs in a separate container, also started beforehand. Two things differ from the `no-code` setup as a result: the `rindexer` crate is pinned to a git tag rather than tracking `master`, so a run is reproducible, and the binary is built from source rather than being the released CLI. `rindexer new rust` also does not scaffold a rustls crypto provider, and the dependency graph enables two of them, so `main` installs one explicitly — without it the binary panics on its first HTTPS request.
+The crate is built with `cargo build --release` before the timer begins, and Postgres runs in a separate container started beforehand. Two things follow: the `rindexer` crate is pinned to a git tag rather than tracking `master`, so runs are reproducible, and the binary is built from source rather than being the released CLI. `rindexer new rust` also does not scaffold a rustls crypto provider while the dependency graph enables two, so `main` installs one explicitly — without it the binary panics on its first HTTPS request.
 
 ### Sqd (Subsquid)
 
@@ -102,6 +100,6 @@ Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an A
 Runs entirely via Docker Compose (postgres + subquery-node + graphql-engine). This has the heaviest startup overhead:
 
 - **Docker/DB pre-initialization**: Postgres is started and health-checked _before_ the benchmark timer begins. Image pulls also happen beforehand. This is not counted toward the benchmark duration.
-- **Startup cost**: SubQuery's `subquery-node` takes ~25 seconds to boot inside Docker. Because SubQuery is too slow to index the verification range within the throughput window, its rate is measured over that range, where the boot time is a small and honestly counted fraction of a multi-minute run.
-- **`project.ts` env vars**: The `project.ts` config reads `ETHEREUM_RPC_URL` and `SUBQUERY_END_BLOCK`, both baked into `project.yaml` at codegen/build time, so the benchmark passes them during `codegen` and `build`. A missing end block throws rather than defaulting, since an unbounded run would never complete the verification phase.
+- **Startup cost**: `subquery-node` takes ~25s to boot inside Docker. SubQuery is too slow to finish the verification range within the throughput window, so its rate comes from that range, where boot time is a small and honestly counted fraction of a multi-minute run.
+- **`project.ts` env vars**: `ETHEREUM_RPC_URL` and `SUBQUERY_END_BLOCK` are baked into `project.yaml` at codegen/build time, so the benchmark passes both during `codegen` and `build`. A missing end block throws rather than defaulting, since an unbounded run would never complete the verification phase.
 - **Dictionary errors**: The SubQuery node logs `dictionary-v1` warnings (backend error 1601). This is a known issue with the default dictionary endpoint and doesn't prevent indexing, but may slow it down slightly as the node falls back to direct RPC fetching.

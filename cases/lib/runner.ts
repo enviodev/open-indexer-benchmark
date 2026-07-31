@@ -20,71 +20,28 @@
 // Stopping below the chain head keeps every indexer on the same footing: the
 // fastest ones would otherwise catch up mid-window and spend the rest of it
 // measuring head tracking rather than backfill.
+//
+// The drivers that start and observe each indexer live in ./drivers; this file
+// is only the methodology.
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CaseConfig } from "./case.ts";
 import type { Expected } from "./checksum.ts";
+import {
+  DRIVERS,
+  INDEXERS,
+  TOOLS,
+  type Driver,
+  type Snapshot,
+} from "./drivers/index.ts";
 import { fetchChainHeight, fetchLogs } from "./hypersync.ts";
+import { psql, sleep } from "./process.ts";
 import { type BenchmarkResult, toTableRow } from "./result.ts";
 import { buildTable, formatBytes, formatRate } from "./table.ts";
 import { verify, type Verification } from "./verify.ts";
 
 // ── Constants ──────────────────────────────────────────────────────────
-
-const BENCHMARK_PORT = 19_876;
-
-const HYPERSYNC_URL = "https://docs.envio.dev/docs/HyperSync/overview";
-const HYPERRPC_URL = "https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc";
-const SQD_NETWORK_URL = "https://docs.sqd.ai/subsquid-network/overview/";
-
-/**
- * Where each tool's project lives and which network it reads chain data from.
- * Tools without their own data source read from Envio HyperRPC, so the source
- * column distinguishes a tool's own pipeline from a plain RPC endpoint.
- */
-const TOOLS: Record<
-  keyof typeof DRIVERS,
-  { toolUrl: string; source: string; sourceUrl: string; storage: string }
-> = {
-  envio: {
-    toolUrl: "https://envio.dev",
-    source: "HyperSync",
-    sourceUrl: HYPERSYNC_URL,
-    storage: "Postgres",
-  },
-  "envio-rpc": {
-    toolUrl: "https://envio.dev",
-    source: "RPC",
-    sourceUrl: HYPERRPC_URL,
-    storage: "Postgres",
-  },
-  ponder: {
-    toolUrl: "https://ponder.sh",
-    source: "RPC",
-    sourceUrl: HYPERRPC_URL,
-    storage: "Postgres",
-  },
-  rindexer: {
-    toolUrl: "https://rindexer.xyz",
-    source: "RPC",
-    sourceUrl: HYPERRPC_URL,
-    storage: "Postgres",
-  },
-  sqd: {
-    toolUrl: "https://www.sqd.ai",
-    source: "SQD",
-    sourceUrl: SQD_NETWORK_URL,
-    storage: "Postgres",
-  },
-  subquery: {
-    toolUrl: "https://subquery.network",
-    source: "RPC",
-    sourceUrl: HYPERRPC_URL,
-    storage: "Postgres",
-  },
-};
 
 /**
  * How far below the chain head the throughput run stops. Keeps the whole run
@@ -104,158 +61,7 @@ const PHASE_A_TIMEOUT_S = 900;
  */
 const THROUGHPUT_RUNS = 2;
 
-const ENVIO_PG_PORT = 5433;
-const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${ENVIO_PG_PORT}/envio-dev`;
-const PONDER_PG_PORT = 19_877;
-const PONDER_PG_CONTAINER = "ponder-benchmark-pg";
-const PONDER_DB_URL = `postgresql://postgres:postgres@localhost:${PONDER_PG_PORT}/ponder`;
-const RINDEXER_PG_PORT = 5440;
-const RINDEXER_DB_URL = `postgresql://postgres:rindexer@localhost:${RINDEXER_PG_PORT}/postgres`;
-const SQD_PG_PORT = 23_798;
-const SQD_DB_URL = `postgresql://postgres:postgres@localhost:${SQD_PG_PORT}/squid`;
-const SUBQUERY_PG_PORT = 5432;
-const SUBQUERY_DB_URL = `postgresql://postgres:postgres@localhost:${SUBQUERY_PG_PORT}/postgres`;
-
-// ── Types ──────────────────────────────────────────────────────────────
-
-interface Snapshot {
-  /** Blocks indexed past the case's start block. */
-  blocks: number;
-  events: number;
-}
-
-interface Driver {
-  name: string;
-  dbUrl: string;
-  /** Install, build and start infrastructure. Not part of the measurement. */
-  prepare(): Promise<void>;
-  /** Start indexing. The measured window opens when this returns. */
-  launch(): Promise<void>;
-  snapshot(): Promise<Snapshot | null>;
-  /** Stop indexer processes, leaving the database readable. */
-  stop(): Promise<void>;
-  /** Tear down containers and volumes. */
-  cleanup(): Promise<void>;
-  /** True once the indexer exited on its own, e.g. on reaching its end block. */
-  exited(): boolean;
-}
-
-interface Ctx {
-  config: CaseConfig;
-  rpcUrl: string;
-  endBlock: number;
-}
-
-type DriverFactory = (ctx: Ctx) => Driver;
-
-// ── Process helpers ────────────────────────────────────────────────────
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** Run a command to completion, inheriting stdio. */
-function exec(
-  cmd: string,
-  args: string[],
-  cwd: string,
-  env?: NodeJS.ProcessEnv
-): Promise<void> {
-  return new Promise((res, rej) => {
-    const p = spawn(cmd, args, { cwd, stdio: "inherit", env });
-    p.on("exit", (code) =>
-      code === 0
-        ? res()
-        : rej(new Error(`"${cmd} ${args.join(" ")}" exited with code ${code}`))
-    );
-  });
-}
-
-/** Spawn a long-running process, forwarding output with an indent. */
-function start(
-  cmd: string,
-  args: string[],
-  cwd: string,
-  env?: NodeJS.ProcessEnv
-): ChildProcess {
-  const p = spawn(cmd, args, { cwd, stdio: "pipe", detached: true, env });
-  for (const stream of [p.stdout, p.stderr]) {
-    stream?.on("data", (chunk: Buffer) => {
-      for (const line of chunk.toString().split("\n")) {
-        if (line) console.log(`  ${line}`);
-      }
-    });
-  }
-  return p;
-}
-
-/** Kill a process and its entire process group. */
-function kill(proc: ChildProcess | null): Promise<void> {
-  if (!proc?.pid || proc.exitCode !== null) return Promise.resolve();
-  const pid = proc.pid;
-  return new Promise((res) => {
-    const timer = setTimeout(() => {
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch {}
-      res();
-    }, 5_000);
-    proc.on("exit", () => {
-      clearTimeout(timer);
-      res();
-    });
-    try {
-      process.kill(-pid, "SIGTERM");
-    } catch {
-      try {
-        proc.kill("SIGTERM");
-      } catch {}
-    }
-  });
-}
-
-/** Send a GraphQL query and return the `data` field. */
-async function gql<T = any>(url: string, query: string): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-  });
-  if (!res.ok) throw new Error(`GraphQL HTTP ${res.status}`);
-  const json: any = await res.json();
-  if (json.errors) throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
-  return json.data as T;
-}
-
-/** Run a SQL query via psql and return the trimmed stdout. */
-function psql(connStr: string, query: string): Promise<string> {
-  return new Promise((res, rej) => {
-    const p = spawn("psql", [connStr, "-t", "-A", "-c", query], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    p.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-    p.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-    p.on("exit", (code) =>
-      code === 0 ? res(stdout.trim()) : rej(new Error(`psql failed (${code}): ${stderr}`))
-    );
-  });
-}
-
-/** Poll a PostgreSQL database until the given query succeeds. */
-async function waitPg(connStr: string, query: string, timeoutMs = 30_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      await psql(connStr, query);
-      return;
-    } catch {
-      await sleep(1_000);
-    }
-  }
-  throw new Error(
-    `PostgreSQL ${connStr} did not become ready within ${timeoutMs / 1000}s`
-  );
-}
+const DEFAULT_WINDOW_S = 60;
 
 // ── Cleanup on unexpected exit ─────────────────────────────────────────
 
@@ -272,457 +78,6 @@ async function cleanup() {
     await driver.cleanup();
   } catch {}
 }
-
-process.on("SIGINT", async () => {
-  await cleanup();
-  process.exit(130);
-});
-process.on("SIGTERM", async () => {
-  await cleanup();
-  process.exit(143);
-});
-
-// ── Drivers ────────────────────────────────────────────────────────────
-
-const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
-  const dir = resolve(config.dir, "ponder");
-  const env = {
-    ...process.env,
-    PONDER_RPC_URL_1: rpcUrl,
-    DATABASE_URL: PONDER_DB_URL,
-    PONDER_END_BLOCK: String(endBlock),
-  };
-  let proc: ChildProcess | null = null;
-  let done = false;
-
-  return {
-    name: "Ponder",
-    dbUrl: PONDER_DB_URL,
-    async prepare() {
-      console.log("Cleaning .ponder cache...");
-      rmSync(resolve(dir, ".ponder"), { recursive: true, force: true });
-
-      console.log("Installing dependencies...\n");
-      await exec("pnpm", ["install", "--frozen-lockfile"], dir);
-
-      console.log("Starting PostgreSQL for Ponder...");
-      await exec("docker", ["rm", "-f", PONDER_PG_CONTAINER], dir).catch(() => {});
-      await exec(
-        "docker",
-        [
-          "run", "-d", "--name", PONDER_PG_CONTAINER,
-          "-e", "POSTGRES_PASSWORD=postgres",
-          "-e", "POSTGRES_DB=ponder",
-          "-p", `${PONDER_PG_PORT}:5432`,
-          "postgres:17-alpine",
-        ],
-        dir
-      );
-      await waitPg(PONDER_DB_URL, "SELECT 1");
-    },
-    async launch() {
-      // The production command: builds once and ignores file changes, where
-      // `dev` watches the filesystem and hot-reloads. `start` rejects
-      // `--disable-ui` (a dev-only flag) and refuses to boot without an
-      // explicit schema, so both differ from the dev invocation. `public` keeps
-      // the entity tables on the default search path, where snapshot() reads
-      // them unqualified.
-      proc = start(
-        "pnpm",
-        ["ponder", "start", `--port=${BENCHMARK_PORT}`, "--schema=public"],
-        dir,
-        env
-      );
-      proc.on("exit", () => (done = true));
-    },
-    async snapshot() {
-      const [counts, checkpoint] = await Promise.all([
-        Promise.all(
-          config.ponderTables.map((table) =>
-            psql(PONDER_DB_URL, `SELECT count(*) FROM ${table}`)
-          )
-        ),
-        psql(
-          PONDER_DB_URL,
-          'SELECT "latest_checkpoint" FROM _ponder_checkpoint LIMIT 1'
-        ).catch(() => ""),
-      ]);
-      const events = counts.reduce((sum, c) => sum + (parseInt(c, 10) || 0), 0);
-      // Checkpoint is a 75-char string: [10 timestamp][16 chainId][16 blockNumber]…
-      const block =
-        checkpoint.length >= 42 ? Number(BigInt(checkpoint.slice(26, 42))) : 0;
-      return {
-        events,
-        blocks: block > config.startBlock ? block - config.startBlock : 0,
-      };
-    },
-    async stop() {
-      await kill(proc);
-      proc = null;
-    },
-    async cleanup() {
-      await exec("docker", ["rm", "-f", PONDER_PG_CONTAINER], dir).catch(() => {});
-    },
-    exited: () => done,
-  };
-};
-
-const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
-  config,
-  rpcUrl,
-  endBlock,
-}) => {
-  const dir = resolve(config.dir, "envio");
-  const env = {
-    ...process.env,
-    ENVIO_TUI: "false",
-    ENVIO_HASURA: "false",
-    ENVIO_PG_PORT: String(ENVIO_PG_PORT),
-    ENVIO_RPC_URL: rpcUrl,
-    ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
-    ENVIO_END_BLOCK: String(endBlock),
-  };
-  let proc: ChildProcess | null = null;
-  let done = false;
-
-  return {
-    name: "Envio Indexer",
-    dbUrl: ENVIO_DB_URL,
-    async prepare() {
-      console.log("Cleaning envio cache...");
-      rmSync(resolve(dir, ".envio"), { recursive: true, force: true });
-
-      // Envio is the only driver that reuses one database across phases, and
-      // `envio start -r` resets it asynchronously after launch. A snapshot taken
-      // before that reset lands reads the previous phase's progress — and when
-      // the previous phase reached its end block, that stale reading satisfies
-      // the completion check immediately and yields an absurd rate. Drop the
-      // schema up front so no prior state can be observed at all.
-      await psql(ENVIO_DB_URL, "DROP SCHEMA IF EXISTS public CASCADE").catch(
-        () => {}
-      );
-      await psql(ENVIO_DB_URL, "CREATE SCHEMA public").catch(() => {});
-
-      console.log("Installing dependencies...\n");
-      await exec("pnpm", ["install", "--frozen-lockfile"], dir);
-      await exec("pnpm", ["envio", "codegen"], dir, env);
-    },
-    async launch() {
-      // `-r` resets the database, so each phase starts from a clean state.
-      proc = start("pnpm", ["envio", "start", "-r"], dir, env);
-      proc.on("exit", () => (done = true));
-    },
-    async snapshot() {
-      const row = await psql(
-        ENVIO_DB_URL,
-        "SELECT events_processed, progress_block FROM public.envio_chains LIMIT 1"
-      );
-      const [eventsStr, blockStr] = row.split("|");
-      const events = parseInt(eventsStr, 10) || 0;
-      const block = parseInt(blockStr, 10) || 0;
-      return {
-        events,
-        blocks: block > config.startBlock ? block - config.startBlock : 0,
-      };
-    },
-    async stop() {
-      await kill(proc);
-      proc = null;
-    },
-    async cleanup() {},
-    exited: () => done,
-  };
-};
-
-const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
-  const dir = resolve(config.dir, "rindexer");
-  const graphqlUrl = `http://localhost:${BENCHMARK_PORT}/graphql`;
-  const env = {
-    ...process.env,
-    ETHEREUM_RPC: rpcUrl,
-    DATABASE_URL: RINDEXER_DB_URL,
-    POSTGRES_PASSWORD: "rindexer",
-    RINDEXER_END_BLOCK: String(endBlock),
-  };
-  const bin = resolve(
-    process.env.HOME ?? "~",
-    ".config",
-    ".rindexer",
-    "bin",
-    "rindexer"
-  );
-  // A no-code project is driven entirely by rindexer.yaml and run through the
-  // CLI. A rust project is a crate of its own: the aggregation lives in handler
-  // code, so it is compiled ahead of the timer and the resulting binary is what
-  // gets launched.
-  const isRustProject = existsSync(resolve(dir, "Cargo.toml"));
-  const rustBin = resolve(dir, "target", "release", "erc20indexer");
-  let proc: ChildProcess | null = null;
-  let done = false;
-
-  const snapshotQuery = `{
-    ${config.rindexerCollections
-      .map((c, i) => `count${i}: ${c} { totalCount }`)
-      .join("\n    ")}
-    ${config.rindexerCollections
-      .map(
-        (c, i) =>
-          `last${i}: ${c}(last: 1, orderBy: BLOCK_NUMBER_ASC) { nodes { blockNumber } }`
-      )
-      .join("\n    ")}
-  }`;
-
-  return {
-    name: "Rindexer",
-    dbUrl: RINDEXER_DB_URL,
-    async prepare() {
-      // A rust project runs its own binary, so the CLI is only needed to drive
-      // a no-code one.
-      if (!isRustProject && !existsSync(bin)) {
-        console.log("Installing rindexer CLI...\n");
-        // install.sh resolves "latest" via an unauthenticated GitHub API call
-        // that is occasionally throttled (empty version -> 404 download).
-        // Retry so a transient hiccup doesn't fail the whole benchmark.
-        await exec(
-          "bash",
-          [
-            "-c",
-            "for i in 1 2 3; do curl -L https://rindexer.xyz/install.sh | bash && break; " +
-              'echo "rindexer install attempt $i failed; retrying..." >&2; sleep $((i * 5)); done',
-          ],
-          dir,
-          env
-        );
-      }
-
-      if (isRustProject) {
-        console.log("Building the rindexer rust project...\n");
-        await exec("cargo", ["build", "--release"], dir, env);
-      }
-
-      console.log("Starting PostgreSQL via docker compose...");
-      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
-      await exec("docker", ["compose", "up", "-d"], dir, env);
-      await waitPg(RINDEXER_DB_URL, "SELECT 1");
-    },
-    async launch() {
-      proc = isRustProject
-        ? start(rustBin, [], dir, env)
-        : start(bin, ["start", "all"], dir, env);
-      proc.on("exit", () => (done = true));
-    },
-    async snapshot() {
-      const data: any = await gql(graphqlUrl, snapshotQuery);
-      let events = 0;
-      let maxBlock = 0;
-      for (let i = 0; i < config.rindexerCollections.length; i++) {
-        events += data[`count${i}`]?.totalCount ?? 0;
-        maxBlock = Math.max(
-          maxBlock,
-          Number(data[`last${i}`]?.nodes?.[0]?.blockNumber ?? 0)
-        );
-      }
-      return {
-        events,
-        blocks: maxBlock > config.startBlock ? maxBlock - config.startBlock : 0,
-      };
-    },
-    async stop() {
-      await kill(proc);
-      proc = null;
-    },
-    async cleanup() {
-      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
-    },
-    exited: () => done,
-  };
-};
-
-const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
-  const dir = resolve(config.dir, "sqd");
-  const graphqlUrl = `http://localhost:${BENCHMARK_PORT}/graphql`;
-  const env = {
-    ...process.env,
-    RPC_ENDPOINT: rpcUrl,
-    DB_PORT: String(SQD_PG_PORT),
-    DB_HOST: "localhost",
-    DB_NAME: "squid",
-    DB_PASS: "postgres",
-    GQL_PORT: String(BENCHMARK_PORT),
-    SQD_END_BLOCK: String(endBlock),
-  };
-  let processor: ChildProcess | null = null;
-  let gqlServer: ChildProcess | null = null;
-  let done = false;
-
-  // "transferEventsConnection" exposes totalCount; "transferEvents" is the
-  // plain collection used to read the highest indexed block from the last id.
-  const blockField = config.sqdConnections[0].replace(/Connection$/, "");
-  const snapshotQuery = `{
-    ${config.sqdConnections
-      .map((c, i) => `count${i}: ${c}(orderBy: id_ASC) { totalCount }`)
-      .join("\n    ")}
-    latest: ${blockField}(orderBy: id_DESC, limit: 1) { id }
-  }`;
-
-  return {
-    name: "Sqd",
-    dbUrl: SQD_DB_URL,
-    async prepare() {
-      console.log("Cleaning squid build artifacts...");
-      rmSync(resolve(dir, "lib"), { recursive: true, force: true });
-      rmSync(resolve(dir, "db/migrations"), { recursive: true, force: true });
-
-      console.log("Installing dependencies...\n");
-      await exec("pnpm", ["install", "--frozen-lockfile"], dir);
-      console.log("Generating models from schema...\n");
-      await exec("pnpm", ["codegen"], dir);
-      console.log("Building squid project...\n");
-      await exec("pnpm", ["build"], dir);
-
-      console.log("Starting PostgreSQL database...\n");
-      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
-      await exec("docker", ["compose", "up", "-d"], dir, env);
-      await waitPg(SQD_DB_URL, "SELECT 1");
-
-      console.log("Generating migrations...\n");
-      await exec("npx", ["squid-typeorm-migration", "generate"], dir, env);
-      console.log("Applying migrations...\n");
-      await exec("npx", ["squid-typeorm-migration", "apply"], dir, env);
-    },
-    async launch() {
-      gqlServer = start("npx", ["squid-graphql-server"], dir, env);
-      processor = start(
-        "node",
-        ["--require=dotenv/config", "lib/main.js"],
-        dir,
-        env
-      );
-      // The processor exits by itself once it reaches its end block.
-      processor.on("exit", () => (done = true));
-    },
-    async snapshot() {
-      const data: any = await gql(graphqlUrl, snapshotQuery);
-      let events = 0;
-      for (let i = 0; i < config.sqdConnections.length; i++) {
-        events += data[`count${i}`]?.totalCount ?? 0;
-      }
-      // Event ids are "<blockHeight>-<logIndex>"; within a single benchmark the
-      // heights all have the same digit count, so id_DESC orders by height.
-      const lastId: string | undefined = data.latest?.[0]?.id;
-      const block = lastId ? parseInt(lastId.split("-")[0], 10) : 0;
-      return {
-        events,
-        blocks:
-          Number.isFinite(block) && block > config.startBlock
-            ? block - config.startBlock
-            : 0,
-      };
-    },
-    async stop() {
-      await kill(processor);
-      await kill(gqlServer);
-      processor = null;
-      gqlServer = null;
-    },
-    async cleanup() {
-      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
-    },
-    exited: () => done,
-  };
-};
-
-const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
-  const dir = resolve(config.dir, "subquery");
-  const graphqlUrl = `http://localhost:${BENCHMARK_PORT}`;
-  const env = {
-    ...process.env,
-    ETHEREUM_RPC_URL: rpcUrl,
-    SUBQUERY_END_BLOCK: String(endBlock),
-  };
-  let proc: ChildProcess | null = null;
-  let done = false;
-
-  const snapshotQuery = `{
-    _metadata { lastProcessedHeight }
-    ${config.subqueryCollections
-      .map((c, i) => `count${i}: ${c} { totalCount }`)
-      .join("\n    ")}
-  }`;
-
-  return {
-    name: "SubQuery",
-    dbUrl: SUBQUERY_DB_URL,
-    async prepare() {
-      console.log("Cleaning subquery cache...");
-      rmSync(resolve(dir, ".data"), { recursive: true, force: true });
-      rmSync(resolve(dir, "dist"), { recursive: true, force: true });
-      rmSync(resolve(dir, "src/types"), { recursive: true, force: true });
-
-      console.log("Installing dependencies...\n");
-      await exec("pnpm", ["install", "--frozen-lockfile"], dir);
-
-      // project.ts reads the RPC URL and end block from the environment and
-      // bakes them into project.yaml, so both must be set for these two steps.
-      console.log("Running codegen and build...\n");
-      await exec("pnpm", ["codegen"], dir, env);
-      await exec("pnpm", ["build"], dir, env);
-
-      writeFileSync(resolve(dir, ".env"), `ETHEREUM_RPC_URL=${rpcUrl}\n`);
-
-      console.log("Cleaning previous docker state...");
-      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
-
-      // Image pulls and database startup happen before the measured window.
-      console.log("Pulling images and starting postgres...");
-      await exec("docker", ["compose", "pull"], dir, env);
-      await exec("docker", ["compose", "up", "-d", "postgres"], dir, env);
-      await waitPg(SUBQUERY_DB_URL, "SELECT 1", 60_000);
-    },
-    async launch() {
-      proc = start("docker", ["compose", "up", "--remove-orphans"], dir, env);
-      proc.on("exit", () => (done = true));
-    },
-    async snapshot() {
-      const data: any = await gql(graphqlUrl, snapshotQuery);
-      let events = 0;
-      for (let i = 0; i < config.subqueryCollections.length; i++) {
-        events += data[`count${i}`]?.totalCount ?? 0;
-      }
-      const height = Number(data._metadata?.lastProcessedHeight ?? 0);
-      return {
-        events,
-        blocks: height > config.startBlock ? height - config.startBlock : 0,
-      };
-    },
-    async stop() {
-      await kill(proc);
-      proc = null;
-      // Killing the foreground `compose up` takes the whole project down with
-      // it, including the database that still has to be verified. Bring just
-      // postgres back; it is idempotent when the container survived.
-      await exec("docker", ["compose", "up", "-d", "postgres"], dir, env).catch(
-        () => {}
-      );
-      await waitPg(SUBQUERY_DB_URL, "SELECT 1", 30_000).catch(() => {});
-    },
-    async cleanup() {
-      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
-    },
-    exited: () => done,
-  };
-};
-
-const DRIVERS: Record<string, DriverFactory> = {
-  envio: envioDriver("hypersync"),
-  "envio-rpc": envioDriver("rpc"),
-  ponder: ponderDriver,
-  rindexer: rindexerDriver,
-  subquery: subqueryDriver,
-  sqd: sqdDriver,
-};
-
-export const INDEXERS = Object.keys(DRIVERS);
 
 // ── Phase execution ────────────────────────────────────────────────────
 
@@ -1041,13 +396,14 @@ async function benchmarkIndexer(
 
   // Report the best sample. Contention on a shared runner only ever costs
   // throughput, so the fastest run is the one least distorted by it.
+  const rates = windowRuns.map((r) => r.eventsPerSec);
   const best = windowRuns.reduce((a, b) => (b.eventsPerSec > a.eventsPerSec ? b : a));
-  const spread =
-    Math.max(...windowRuns.map((r) => r.eventsPerSec)) -
-    Math.min(...windowRuns.map((r) => r.eventsPerSec));
-  if (best.eventsPerSec > 0) {
+  // Counted over the runs that survived, not the runs attempted: a discarded
+  // sample would otherwise be reported as one in perfect agreement.
+  if (windowRuns.length > 1 && best.eventsPerSec > 0) {
+    const spread = Math.max(...rates) - Math.min(...rates);
     console.log(
-      `Spread across ${THROUGHPUT_RUNS} runs: ${(
+      `Spread across ${windowRuns.length} runs: ${(
         (spread / best.eventsPerSec) *
         100
       ).toFixed(1)}% of the best rate\n`
@@ -1066,11 +422,19 @@ async function benchmarkIndexer(
   });
 }
 
-// ── Result presentation ────────────────────────────────────────────────
-
 // ── Entry point ────────────────────────────────────────────────────────
 
 export async function runBenchmark(config: CaseConfig) {
+  // Installed here rather than at module scope: importing this file should not
+  // silently take over the process's signal handling, and result.ts exists as a
+  // separate module partly so the CI summary job can avoid exactly that.
+  const onSignal = (code: number) => async () => {
+    await cleanup();
+    process.exit(code);
+  };
+  process.on("SIGINT", onSignal(130));
+  process.on("SIGTERM", onSignal(143));
+
   try {
     await run(config);
   } catch (err) {
@@ -1078,6 +442,21 @@ export async function runBenchmark(config: CaseConfig) {
     await cleanup();
     process.exit(1);
   }
+}
+
+/** Seconds for the throughput window, from `--duration=<n>`. */
+function parseWindowSeconds(): number {
+  const flag = process.argv.find((a) => a.startsWith("--duration="));
+  if (!flag) return DEFAULT_WINDOW_S;
+  const value = Number(flag.slice("--duration=".length));
+  // An unparseable duration used to become NaN, which silently made every
+  // comparison against it false and downgraded the whole table to phase-A
+  // rates. Refuse it instead.
+  if (!Number.isFinite(value) || value <= 0) {
+    console.error(`Error: --duration must be a positive number of seconds.`);
+    process.exit(1);
+  }
+  return value;
 }
 
 async function run(config: CaseConfig) {
@@ -1093,8 +472,7 @@ async function run(config: CaseConfig) {
     }
   }
 
-  const durationFlag = process.argv.find((a) => a.startsWith("--duration="));
-  const windowS = durationFlag ? parseInt(durationFlag.split("=")[1], 10) : 60;
+  const windowS = parseWindowSeconds();
 
   const apiToken = process.env.ENVIO_API_TOKEN;
   if (!apiToken) {

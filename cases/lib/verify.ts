@@ -16,6 +16,7 @@
 import {
   canonicalExprSql,
   checksumSql,
+  whereClause,
   type EntitySpec,
   type Expected,
   type FieldSpec,
@@ -77,16 +78,25 @@ interface ResolvedEntity {
   qualified: string;
   displayName: string;
   fieldExprs: string[];
-  where: string;
+  /** Bare predicate restricting the entity's rows, or "" for all of them. */
+  predicate: string;
 }
 
 const SYSTEM_SCHEMAS = ["pg_catalog", "information_schema"];
 const MAX_EXAMPLES = 3;
 
+/**
+ * Field and record separators for introspection output. psql's default column
+ * separator is "|" and its rows are newline-delimited, either of which a
+ * PostgreSQL identifier is allowed to contain; ASCII 0x1f/0x1e are not.
+ */
+const FIELD_SEP = "\x1f";
+const RECORD_SEP = "\x1e";
+
 const count = (n: number) => n.toLocaleString("en-US");
 /** Entity labels are plural ("account balances"); singularise for a count of one. */
-const noun = (n: number, label: string) =>
-  n === 1 ? label.replace(/s$/, "") : label;
+const noun = (n: number, spec: EntitySpec) =>
+  n === 1 ? (spec.singular ?? spec.label.replace(/s$/, "")) : spec.label;
 
 /** `transfer_event`, `TransferEvent` and `transferEvents` all normalise alike. */
 function normalise(name: string): string {
@@ -98,8 +108,15 @@ function quoteIdent(name: string): string {
 }
 
 async function introspect(sql: SqlRunner): Promise<ColumnInfo[]> {
+  // Assembled server-side into a single value with explicit separators rather
+  // than relying on psql's column and row formatting: this is the one layer
+  // whose whole job is to cope with whatever names an indexer chose, so it must
+  // not be the layer that a "|" in a column name breaks.
+  const field = `E'\\x1f'`;
   const rows = await sql(
-    `SELECT c.table_schema, c.table_name, c.column_name, c.data_type, t.table_type
+    `SELECT string_agg(
+       c.table_schema || ${field} || c.table_name || ${field} || c.column_name ||
+       ${field} || c.data_type || ${field} || t.table_type, E'\\x1e')
      FROM information_schema.columns c
      JOIN information_schema.tables t
        ON t.table_schema = c.table_schema AND t.table_name = c.table_name
@@ -107,9 +124,9 @@ async function introspect(sql: SqlRunner): Promise<ColumnInfo[]> {
        AND c.table_schema NOT LIKE 'pg_%'`
   );
   const out: ColumnInfo[] = [];
-  for (const line of rows.split("\n")) {
+  for (const line of rows.split(RECORD_SEP)) {
     if (!line.trim()) continue;
-    const [schema, table, column, dataType, tableType] = line.split("|");
+    const [schema, table, column, dataType, tableType] = line.split(FIELD_SEP);
     out.push({
       schema,
       table,
@@ -230,7 +247,7 @@ function resolveEntity(
     // the current version so counts and checksums describe present state. The
     // discarded history still shows up in the measured table size, which is the
     // honest way to report the cost of keeping it.
-    where: table.columns.has("_block_range") ? " WHERE upper_inf(_block_range)" : "",
+    predicate: table.columns.has("_block_range") ? "upper_inf(_block_range)" : "",
   };
 }
 
@@ -240,7 +257,9 @@ async function fetchActualRows(
   entity: ResolvedEntity
 ): Promise<string[]> {
   const canonical = canonicalExprSql(entity.fieldExprs);
-  const out = await sql(`SELECT ${canonical} FROM ${entity.qualified}${entity.where}`);
+  const out = await sql(
+    `SELECT ${canonical} FROM ${entity.qualified}${whereClause(entity.predicate)}`
+  );
   return out.split("\n").filter((line) => line.length > 0);
 }
 
@@ -335,7 +354,7 @@ function describeDiff(spec: EntitySpec, diff: Diff, expectedTotal: number): stri
     );
   }
   if (diff.unexpected > 0) {
-    parts.push(`${count(diff.unexpected)} unexpected ${noun(diff.unexpected, spec.label)}`);
+    parts.push(`${count(diff.unexpected)} unexpected ${noun(diff.unexpected, spec)}`);
   }
   return parts.join(" and ");
 }
@@ -352,7 +371,7 @@ function describeCounts(
   const delta = actualRows - expectedRows;
   return delta < 0
     ? `${count(-delta)} of ${count(expectedRows)} ${spec.label} missing`
-    : `${count(delta)} unexpected ${noun(delta, spec.label)} (${count(actualRows)} vs ${count(expectedRows)} expected)`;
+    : `${count(delta)} unexpected ${noun(delta, spec)} (${count(actualRows)} vs ${count(expectedRows)} expected)`;
 }
 
 /** Total size of every non-system relation in the database. */
@@ -423,7 +442,7 @@ export async function verify(
     let row: string;
     try {
       row = await sql(
-        checksumSql(entity.qualified, entity.fieldExprs) + entity.where
+        checksumSql(entity.qualified, entity.fieldExprs, entity.predicate)
       );
     } catch (err: any) {
       entities.push({

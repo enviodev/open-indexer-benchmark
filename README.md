@@ -29,19 +29,17 @@ Indexers included in this benchmark (alphabetical order):
 
 Each case runs in two phases.
 
-**Verification**: the indexer indexes a small fixed block range to completion. Its database is then checked against ground truth and measured on disk. Both are only comparable when every indexer holds identical data, which a fixed block range guarantees and a fixed time window does not.
+**Verification**: the indexer indexes a fixed block range to completion, then its database is checked against ground truth and measured on disk. Both are only comparable when every indexer holds identical data — which a fixed block range guarantees and a fixed time window does not.
 
-**Throughput**: the indexer re-runs from a clean database for 60 seconds, stopping early at a block just short of the chain head so the measurement stays in the backfill path instead of drifting into head tracking. The window is run twice and the better rate reported — a single window on a shared CI runner varies enough to reorder the middle of the table, and contention only ever costs throughput, so the faster sample is the one least distorted by it. Indexers that took longer than the window to index the verification range skip this phase; their rate comes from that run, where the block and event counts are known exactly.
+**Throughput**: the indexer re-runs from a clean database for 60 seconds, stopping just short of the chain head so the measurement stays in backfill rather than drifting into head tracking. The window runs twice and the better rate is reported, since contention on a shared CI runner only ever costs throughput. Indexers too slow to finish the verification range within the window skip this phase and report their rate from that run instead, where block and event counts are known exactly.
 
-**Data correctness**: ground truth is built from [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs by replaying each case's documented logic, and is committed as `expected.json` in the case directory. Rather than storing every expected row, each entity is reduced to a row count and a checksum: every row is encoded canonically, hashed, and the hashes summed. The result is independent of row order but still catches missing rows, duplicated rows, and wrong values. The identical encoding is computed in SQL against the indexer's own database, and the two must agree exactly. ✅ means every entity matched. ❌ means the data disagrees and ❓ means the check could not run; both carry a numbered reference to the exact reason below the table.
+**Data correctness**: ground truth is built from [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs by replaying each case's documented logic, and committed as `expected.json` in the case directory. Each entity is reduced to a row count and a checksum — every row encoded canonically, hashed, and the hashes summed — so the result is order-independent but still catches missing rows, duplicated rows, and wrong values. The same encoding is recomputed in SQL against the indexer's own database, and the two must agree exactly. ✅ every entity matched, ❌ the data disagrees, ❓ the check could not run; the latter two carry a numbered note below the table.
 
-**Storage**: size on disk of the tables the case defines, including their indexes, at the identical data state the verification phase produces, prefixed with the storage engine. Each tool's internal bookkeeping is recorded in the run output rather than the table, since it varies with how much a tool caches or retains.
+**Storage**: on-disk size of the tables the case defines, including their indexes, at the data state the verification phase produces, prefixed with the storage engine. Each tool's internal bookkeeping goes to the run output instead, since it varies with how much a tool caches or retains.
 
-**Source**: where a tool reads chain data from. Tools with their own pipeline use it — Envio reads HyperSync, SQD reads the SQD network — and everything else reads a plain RPC endpoint, which is [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) here. Envio Indexer appears twice, once per source, which isolates the data source from the tool: the same indexer against HyperSync and against a plain RPC endpoint.
+**Source**: where a tool reads chain data. Tools with their own pipeline use it — Envio reads HyperSync, SQD reads the SQD network — and everything else reads [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc). Envio Indexer appears twice, once per source, which separates the data source from the tool.
 
-All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per case.
-
-Every tool runs the command its own documentation recommends for production.
+All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per case, each running the command that tool's own documentation recommends for production.
 
 You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
 

@@ -29,6 +29,12 @@ export interface EntitySpec {
   /** Human-readable name used in result messages, e.g. "transfer events". */
   label: string;
   /**
+   * Singular form, for a count of one. Defaults to `label` minus a trailing
+   * "s", which is right for every label in use; set it explicitly for one that
+   * strip would mangle ("addresses") rather than teaching the formatter English.
+   */
+  singular?: string;
+  /**
    * Possible table names, most specific first. Compared after normalising
    * (lowercase, underscores stripped) so `TransferEvent`, `transfer_event`
    * and `transfer_events` all match the same candidate.
@@ -99,17 +105,30 @@ export function canonicalExprSql(fieldExprs: string[]): string {
 }
 
 /**
+ * Turn a bare predicate into a clause, or nothing when there is none. Callers
+ * pass the predicate alone so no one has to remember which half of the
+ * statement carries the leading "WHERE".
+ */
+export function whereClause(predicate: string): string {
+  return predicate ? ` WHERE ${predicate}` : "";
+}
+
+/**
  * SQL that reproduces `summarise` for a table, given per-field expressions in
  * canonical order. `substr(md5(…), 1, 15)` is read as a 60-bit integer, which
  * always fits a signed bigint; summing bigints yields numeric, so the total
  * never overflows.
  */
-export function checksumSql(qualifiedTable: string, fieldExprs: string[]): string {
+export function checksumSql(
+  qualifiedTable: string,
+  fieldExprs: string[],
+  predicate = ""
+): string {
   const canonical = canonicalExprSql(fieldExprs);
   return (
     `SELECT count(*)::text, ` +
     `coalesce(sum(('x' || substr(md5(${canonical}), 1, ${HASH_HEX_CHARS}))` +
     `::bit(${HASH_HEX_CHARS * 4})::bigint), 0)::text ` +
-    `FROM ${qualifiedTable}`
+    `FROM ${qualifiedTable}${whereClause(predicate)}`
   );
 }

@@ -1,0 +1,112 @@
+import { type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { exec, gql, kill, start, waitPg } from "../process.ts";
+import { BENCHMARK_PORT, type DriverFactory } from "./common.ts";
+
+const PG_PORT = 5440;
+export const RINDEXER_DB_URL = `postgresql://postgres:rindexer@localhost:${PG_PORT}/postgres`;
+
+export const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
+  const dir = resolve(config.dir, "rindexer");
+  const graphqlUrl = `http://localhost:${BENCHMARK_PORT}/graphql`;
+  const env = {
+    ...process.env,
+    ETHEREUM_RPC: rpcUrl,
+    DATABASE_URL: RINDEXER_DB_URL,
+    POSTGRES_PASSWORD: "rindexer",
+    RINDEXER_END_BLOCK: String(endBlock),
+  };
+  const bin = resolve(
+    process.env.HOME ?? "~",
+    ".config",
+    ".rindexer",
+    "bin",
+    "rindexer"
+  );
+  // A no-code project is driven entirely by rindexer.yaml and run through the
+  // CLI. A rust project is a crate of its own: the aggregation lives in handler
+  // code, so it is compiled ahead of the timer and the resulting binary is what
+  // gets launched.
+  const isRustProject = existsSync(resolve(dir, "Cargo.toml"));
+  const rustBin = resolve(dir, "target", "release", "erc20indexer");
+  let proc: ChildProcess | null = null;
+  let done = false;
+
+  const snapshotQuery = `{
+    ${config.rindexerCollections
+      .map((c, i) => `count${i}: ${c} { totalCount }`)
+      .join("\n    ")}
+    ${config.rindexerCollections
+      .map(
+        (c, i) =>
+          `last${i}: ${c}(last: 1, orderBy: BLOCK_NUMBER_ASC) { nodes { blockNumber } }`
+      )
+      .join("\n    ")}
+  }`;
+
+  return {
+    name: "Rindexer",
+    dbUrl: RINDEXER_DB_URL,
+    async prepare() {
+      // A rust project runs its own binary, so the CLI is only needed to drive
+      // a no-code one.
+      if (!isRustProject && !existsSync(bin)) {
+        console.log("Installing rindexer CLI...\n");
+        // install.sh resolves "latest" via an unauthenticated GitHub API call
+        // that is occasionally throttled (empty version -> 404 download).
+        // Retry so a transient hiccup doesn't fail the whole benchmark.
+        await exec(
+          "bash",
+          [
+            "-c",
+            "for i in 1 2 3; do curl -L https://rindexer.xyz/install.sh | bash && break; " +
+              'echo "rindexer install attempt $i failed; retrying..." >&2; sleep $((i * 5)); done',
+          ],
+          dir,
+          env
+        );
+      }
+
+      if (isRustProject) {
+        console.log("Building the rindexer rust project...\n");
+        await exec("cargo", ["build", "--release"], dir, env);
+      }
+
+      console.log("Starting PostgreSQL via docker compose...");
+      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
+      await exec("docker", ["compose", "up", "-d"], dir, env);
+      await waitPg(RINDEXER_DB_URL, "SELECT 1");
+    },
+    async launch() {
+      proc = isRustProject
+        ? start(rustBin, [], dir, env)
+        : start(bin, ["start", "all"], dir, env);
+      proc.on("exit", () => (done = true));
+    },
+    async snapshot() {
+      const data: any = await gql(graphqlUrl, snapshotQuery);
+      let events = 0;
+      let maxBlock = 0;
+      for (let i = 0; i < config.rindexerCollections.length; i++) {
+        events += data[`count${i}`]?.totalCount ?? 0;
+        maxBlock = Math.max(
+          maxBlock,
+          Number(data[`last${i}`]?.nodes?.[0]?.blockNumber ?? 0)
+        );
+      }
+      return {
+        events,
+        blocks: maxBlock > config.startBlock ? maxBlock - config.startBlock : 0,
+      };
+    },
+    async stop() {
+      await kill(proc);
+      proc = null;
+    },
+    async cleanup() {
+      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
+    },
+    exited: () => done,
+  };
+};
