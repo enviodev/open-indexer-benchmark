@@ -12,6 +12,18 @@ import * as dotenv from 'dotenv'
 
 dotenv.config()
 
+// The benchmark runner always supplies an end block; without one the indexer
+// would silently run unbounded and the verification phase would never finish.
+function requireEndBlock(): number {
+  const value = Number(process.env.SQD_END_BLOCK);
+  if (!Number.isInteger(value)) {
+    throw new Error(
+      "SQD_END_BLOCK must be set to the block to stop at (the benchmark runner sets it)"
+    );
+  }
+  return value;
+}
+
 const CONTRACT_ADDRESS = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' // USDC
 const rpcEndpoint = process.env.RPC_ENDPOINT
 
@@ -31,6 +43,7 @@ export const processor = new EvmBatchProcessor()
     })
     .setBlockRange({
         from: 18_600_000,
+        to: requireEndBlock(),
     })
     .addLog({
         address: [CONTRACT_ADDRESS],

@@ -1,0 +1,24 @@
+{
+  "startBlock": 18600000,
+  "endBlock": 18699999,
+  "generatedAt": "2026-07-30T11:31:53.274Z",
+  "totalEvents": 7594,
+  "entities": {
+    "transferEvent": {
+      "rowCount": 5022,
+      "checksum": "2902382755992564457490"
+    },
+    "approvalEvent": {
+      "rowCount": 2572,
+      "checksum": "1510791224812572626995"
+    },
+    "account": {
+      "rowCount": 1747,
+      "checksum": "1014415653524806558931"
+    },
+    "allowance": {
+      "rowCount": 946,
+      "checksum": "544394980426416433786"
+    }
+  }
+}
