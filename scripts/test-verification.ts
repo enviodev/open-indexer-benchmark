@@ -213,6 +213,45 @@ const shapes: Record<string, () => Promise<string>> = {
     );
     return url;
   },
+
+  "subgraph (deployment schema, block_range history filtered)": async () => {
+    // Graph Node puts each deployment in its own `sgd<n>` schema and keeps
+    // superseded versions of mutable entities in the same table, discriminated
+    // by an int4range — the same idea as SubQuery's but a different column
+    // name. Immutable entities instead carry a `block$` column and never have
+    // more than one version, so they need no filtering at all.
+    const url = await createDb(
+      "verify_test_subgraph",
+      `CREATE SCHEMA sgd1;
+       CREATE TABLE sgd1.transfer_event (
+         vid bigserial primary key, block_range int4range, id text,
+         "from" text, "to" text, amount numeric, "timestamp" integer);
+       CREATE TABLE sgd1."poi2$" (vid bigserial primary key, digest bytea);
+       CREATE SCHEMA subgraphs;
+       CREATE TABLE subgraphs.head (id integer, block_number integer)`
+    );
+    const columns = `id, "from", "to", amount, "timestamp", block_range`;
+    await insertRows(
+      url,
+      "sgd1.transfer_event",
+      columns,
+      ROWS.map(
+        (r) =>
+          `(${quote(r.id)},${quote(r.from)},${quote(r.to)},${r.value},${r.timestamp},int4range(1,NULL))`
+      )
+    );
+    // Superseded versions, as an updated entity leaves behind.
+    await insertRows(
+      url,
+      "sgd1.transfer_event",
+      columns,
+      ROWS.slice(0, 500).map(
+        (r) =>
+          `(${quote(r.id)},${quote(r.from)},${quote(r.to)},999,${r.timestamp},int4range(1,2))`
+      )
+    );
+    return url;
+  },
 };
 
 let failures = 0;

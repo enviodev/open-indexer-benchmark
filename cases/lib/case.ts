@@ -34,6 +34,8 @@ export interface CaseConfig {
   rindexerCollections: string[];
   /** SubQuery entity collections exposing totalCount. */
   subqueryCollections: string[];
+  /** Graph Node entity tables whose row counts sum to the processed-event count. */
+  subgraphTables: string[];
   /** Sqd connection fields exposing totalCount. */
   sqdConnections: string[];
 }

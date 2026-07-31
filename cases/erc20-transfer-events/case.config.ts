@@ -54,5 +54,6 @@ export const caseConfig: CaseConfig = {
   ponderTables: ["transfer_event"],
   rindexerCollections: ["allTransfers"],
   subqueryCollections: ["transferEvents"],
+  subgraphTables: ["transfer_event"],
   sqdConnections: ["transferEventsConnection"],
 };

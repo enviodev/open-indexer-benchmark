@@ -26,6 +26,7 @@ There is no aggregation — accounts, balances, and allowances are intentionally
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
 - **Sqd** — [sqd/](./sqd/)
+- **Subgraph (Graph Node)** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
@@ -81,6 +82,34 @@ Runs a native binary (`rindexer start all`) with a separate Postgres container. 
 Runs the processor and GraphQL server as separate native Node.js processes. Uses a Docker Postgres instance for storage. The handler batches all Transfer events in memory per block range, then inserts them.
 
 Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+
+### Subgraph (Graph Node)
+
+Runs Graph Node natively via `gnd dev` — the single-binary distribution of
+graph-node — backed by a Postgres container. `gnd` builds and deploys the
+subgraph itself on startup, so there is no separate `graph create` /
+`graph deploy` step to keep out of the measured window, and no IPFS or
+Docker Compose stack to stand up. The binary is pinned to a Graph Node release
+tag in [`cases/lib/drivers/subgraph.ts`](../lib/drivers/subgraph.ts) and
+installed with `graph node install`.
+
+- **`subgraph.yaml` is generated**: the manifest is rendered from
+  `subgraph.template.yaml` before codegen, with `startBlock`/`endBlock` baked
+  in for the phase being run. A subgraph manifest has no environment-variable
+  equivalent, and an unbounded run would never complete the verification phase.
+- **Postgres locale**: Graph Node requires a `UTF8` / `C` database, which is
+  not what the postgres image creates by default, so the container is started
+  with `POSTGRES_INITDB_ARGS=-E UTF8 --locale=C`.
+- **Logging**: `gnd` defaults to debug logging, which writes a line per trigger
+  processed. The driver sets `GRAPH_LOG=info` — the production default — so the
+  measurement is not charged for output no deployed indexer produces.
+- **Entity storage**: transfer events are declared `@entity(immutable: true)`,
+  the layout The Graph's documentation recommends for append-only event data.
+  Immutable entity tables carry a `block$` column instead of the `block_range`
+  used for mutable ones, so there are no superseded row versions to filter out.
+- **IPFS**: `gnd` connects to `https://api.thegraph.com/ipfs` at startup even
+  though everything it deploys is local, so the run needs outbound network
+  access to that host.
 
 ### SubQuery
 

@@ -33,6 +33,7 @@ For each **Approval** event:
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
 - **Sqd** — [sqd/](./sqd/)
+- **Subgraph (Graph Node)** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
@@ -94,6 +95,38 @@ The crate is built with `cargo build --release` before the timer begins, and Pos
 Runs the processor and GraphQL server as separate native Node.js processes. Uses a Docker Postgres instance for storage. The handler batches all events in memory per block range, then flushes accounts, allowances, transfer events, and approval events concurrently via `Promise.all`.
 
 Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+
+### Subgraph (Graph Node)
+
+Runs Graph Node natively via `gnd dev` — the single-binary distribution of
+graph-node — backed by a Postgres container. `gnd` builds and deploys the
+subgraph itself on startup, so there is no separate `graph create` /
+`graph deploy` step to keep out of the measured window, and no IPFS or Docker
+Compose stack to stand up. The binary is pinned to a Graph Node release tag in
+[`cases/lib/drivers/subgraph.ts`](../lib/drivers/subgraph.ts).
+
+- **`subgraph.yaml` is generated**: the manifest is rendered from
+  `subgraph.template.yaml` before codegen, with `startBlock`/`endBlock` baked in
+  for the phase being run.
+- **Postgres locale**: Graph Node requires a `UTF8` / `C` database, so the
+  container is started with `POSTGRES_INITDB_ARGS=-E UTF8 --locale=C`.
+- **Logging**: `gnd` defaults to debug logging, which writes a line per trigger.
+  The driver sets `GRAPH_LOG=info`, the production default.
+- **Entity storage**: transfer and approval events are declared
+  `@entity(immutable: true)`; accounts and allowances are updated in place and
+  stay mutable, which is what makes this case a read-after-write test. Mutable
+  entity tables keep every superseded version in a `block_range` column, so
+  verification restricts them to the current version — the retained history
+  still counts toward the reported storage, which is the honest way to report
+  what keeping it costs.
+- **Write batching**: Graph Node buffers entity writes and flushes them in
+  batches, so its tables stay empty for the first minute or two of a run and
+  progress then arrives in steps. Both scenarios take longer than the
+  throughput window, so the published rate comes from the verification range,
+  where the batching is fully accounted for.
+- **IPFS**: `gnd` connects to `https://api.thegraph.com/ipfs` at startup even
+  though everything it deploys is local, so the run needs outbound network
+  access to that host.
 
 ### SubQuery
 
