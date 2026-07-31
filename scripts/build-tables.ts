@@ -22,11 +22,21 @@ if (cases.length === 0) {
   process.exit(1);
 }
 
-const titleCase = (name: string) =>
-  name
+/**
+ * Scenario names live in each case's config so the README, the job summary and
+ * the PR comment cannot drift apart. Falling back to the slug keeps a new case
+ * publishing results even before it has a config to import.
+ */
+async function caseTitle(name: string): Promise<string> {
+  try {
+    const mod = await import(resolve(ROOT, "cases", name, "case.config.ts"));
+    if (mod.caseConfig?.title) return mod.caseConfig.title;
+  } catch {}
+  return name
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
 
 const readmePath = resolve(ROOT, "README.md");
 const readme = existsSync(readmePath) ? readFileSync(readmePath, "utf8") : "";
@@ -34,6 +44,7 @@ const readme = existsSync(readmePath) ? readFileSync(readmePath, "utf8") : "";
 const artifactDirs = existsSync(RESULTS_DIR) ? readdirSync(RESULTS_DIR).sort() : [];
 
 for (const benchCase of cases) {
+  const title = await caseTitle(benchCase);
   const prefix = `benchmark-${benchCase}--`;
   const rows: TableRow[] = [];
 
@@ -71,19 +82,22 @@ for (const benchCase of cases) {
   }
   if (carried.length > 0) {
     console.log(
-      `::warning::${titleCase(benchCase)}: no fresh result for ${carried.join(", ")} ` +
+      `::warning::${title}: no fresh result for ${carried.join(", ")} ` +
         `this run — carried forward the last published value(s). Check the failed job(s).`
     );
   }
 
   const table = buildTable(rows);
   writeFileSync(join(OUT_DIR, `benchmark-table-${benchCase}.md`), table);
+  // The PR comment is assembled by a workflow step that cannot import this
+  // module, so the resolved name is handed over as a file.
+  writeFileSync(join(OUT_DIR, `benchmark-title-${benchCase}.txt`), title);
 
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      `## ${titleCase(benchCase)} Benchmark\n\n${table}\n\n`
+      `## ${title}\n\n${table}\n\n`
     );
   }
-  console.log(`\n## ${titleCase(benchCase)}\n\n${table}`);
+  console.log(`\n## ${title}\n\n${table}`);
 }

@@ -1,4 +1,4 @@
-# ERC20 Account Balances
+# State Aggregation
 
 This benchmark is inspired by the one used on the [Ponder landing page](https://ponder.sh/).
 

@@ -1,4 +1,4 @@
-# ERC20 Transfer Events
+# Decoded Event Stream
 
 Index the USDC ERC20 token contract on Ethereum Mainnet from block 18,600,000. Store the raw decoded Transfer event logs in a database — no aggregation, no derived state.
 

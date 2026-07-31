@@ -25,52 +25,64 @@ Indexers included in this benchmark (alphabetical order):
 - [The Graph](https://thegraph.com)
 
 
-## Methodology
+## Scenarios
 
-Each case runs in two phases.
+### State Aggregation
 
-**Verification**: the indexer indexes a fixed block range to completion, then its database is checked against ground truth and measured on disk. Both are only comparable when every indexer holds identical data — which a fixed block range guarantees and a fixed time window does not.
-
-**Throughput**: the indexer re-runs from a clean database for 60 seconds, stopping just short of the chain head so the measurement stays in backfill rather than drifting into head tracking. The window runs twice and the better rate is reported, since contention on a shared CI runner only ever costs throughput. Indexers too slow to finish the verification range within the window skip this phase and report their rate from that run instead, where block and event counts are known exactly.
-
-**Data correctness**: ground truth is built from [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs by replaying each case's documented logic, and committed as `expected.json` in the case directory. Each entity is reduced to a row count and a checksum — every row encoded canonically, hashed, and the hashes summed — so the result is order-independent but still catches missing rows, duplicated rows, and wrong values. The same encoding is recomputed in SQL against the indexer's own database, and the two must agree exactly. ✅ every entity matched, ❌ the data disagrees, ❓ the check could not run; the latter two carry a numbered note below the table.
-
-**Storage**: on-disk size of the tables the case defines, including their indexes, at the data state the verification phase produces, prefixed with the storage engine. Each tool's internal bookkeeping goes to the run output instead, since it varies with how much a tool caches or retains.
-
-**Source**: where a tool reads chain data. Tools with their own pipeline use it — Envio reads HyperSync, SQD reads the SQD network — and everything else reads [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc). Envio Indexer appears twice, once per source, which separates the data source from the tool.
-
-All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per case, each running the command that tool's own documentation recommends for production.
-
-You can enter the `cases` directory to see code, setup instructions, and run the benchmarks yourself.
-
-
-## Results
-
-### ERC-20 Account Balances
-
-Results of indexing the Rocket Pool ERC20 token contract on Ethereum Mainnet. Stores decoded event logs and aggregates account balances. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
+Derived state that every event updates — the indexer must read a row, apply a change, and write it back, so throughput depends on how well it handles read-after-write, not just ingestion. Account balances and allowances over the Rocket Pool rETH contract on Ethereum Mainnet. Inspired by the benchmark used on the [Ponder landing page](https://ponder.sh).
 
 <!-- BENCHMARK:erc20-account-balances:START -->
-_Awaiting the first run under the two-phase methodology._
+| tool | source | events/s | blocks/s | vs best | data | storage |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 17,373.1 | 126,748.9 | — | ✅ | Postgres 2.2 MB |
+| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 778.4 | 5,177.0 | 22.3x slower | ✅ | Postgres 2.2 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 548.3 | 5,807.3 | 31.7x slower | ✅ | Postgres 4.4 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 70.9 | 792.5 | 245x slower | ✅ | Postgres 2.2 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 64.6 | 851.0 | 268.9x slower | ✅ | Postgres 3.4 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 29.9 | 393.4 | 581x slower | ✅ | Postgres 4.4 MB |
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md).
 
 
-### ERC-20 Transfer Events
+### Decoded Event Stream
 
-Results of indexing raw Transfer event logs from the USDC token contract on Ethereum Mainnet, starting at block 18,600,000. Stores every decoded Transfer event with no aggregation — a pure write-only ingestion throughput test.
+Every decoded event written once, with no aggregation and nothing to read back — the ingestion path on its own. Transfer events from the USDC contract on Ethereum Mainnet.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
-_Awaiting the first run under the two-phase methodology._
+| tool | source | events/s | blocks/s | vs best | data | storage |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 72,776.9 | 7,831.4 | — | ✅ | Postgres 1.4 MB |
+| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 16,438.1 | 2,020.3 | 4.4x slower | ✅ | Postgres 1.4 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 9,494.1 | 1,207.9 | 7.7x slower | ✅ | Postgres 3.4 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 735.4 | 105.7 | 99x slower | ✅ | Postgres 1.4 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 183.0 | 22.5 | 397.7x slower | ✅ | Postgres 2.5 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 19.0 | 2.4 | 3830.4x slower | ✅ | Postgres 1.9 MB |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
 
 
-### Sentio Benchmark Cases, May 2025
+## Methodology
 
-Six real-world indexing scenarios covering events, blocks, transactions, and traces on Ethereum Mainnet.
+Each scenario runs in two phases.
+
+**Verification**: the indexer indexes a fixed block range to completion, then its database is checked against ground truth and measured on disk. Both are only comparable when every indexer holds identical data — which a fixed block range guarantees and a fixed time window does not.
+
+**Throughput**: the indexer re-runs from a clean database for 60 seconds, stopping just short of the chain head so the measurement stays in backfill rather than drifting into head tracking. The window runs twice and the better rate is reported, since contention on a shared CI runner only ever costs throughput. Indexers too slow to finish the verification range within the window skip this phase and report their rate from that run instead.
+
+**Data correctness**: ground truth is built from [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs by replaying each scenario's documented logic, then compared against the indexer's own database by a checksum that ignores row order but catches missing rows, duplicated rows, and wrong values. ✅ every entity matched, ❌ the data disagrees, ❓ the check could not run; the latter two carry a numbered note below the table.
+
+**Storage**: on-disk size of the tables the scenario defines, including their indexes, at the data state the verification phase produces. Each tool's internal bookkeeping is excluded, since it varies with how much a tool caches or retains.
+
+**Source**: where a tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool — Envio Indexer supports both HyperSync and RPC and so appears twice. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
+
+All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per source per scenario, each running the command that tool's own documentation recommends for production.
+
+
+## Sentio Benchmark Cases, May 2025
+
+Six real-world indexing scenarios covering events, blocks, transactions, and traces on Ethereum Mainnet. These figures come from the original May 2025 research and predate the methodology above — they are total sync times, not throughput rates, and are kept for reference rather than re-run.
 
 | Case | Description |
 |---|---|
@@ -95,11 +107,11 @@ See the full breakdown in [./sentio-benchmarks-may-2025/README.md](./sentio-benc
 
 ## Running the benchmarks
 
-See the README in each case directory for setup instructions and requirements:
+Each scenario directory holds the implementations, setup instructions and requirements, and can be run yourself:
 
-- [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md)
-- [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md)
-- [./sentio-benchmarks-may-2025/README.md](./sentio-benchmarks-may-2025/README.md)
+- State Aggregation — [./cases/erc20-account-balances/](./cases/erc20-account-balances/README.md)
+- Decoded Event Stream — [./cases/erc20-transfer-events/](./cases/erc20-transfer-events/README.md)
+- Sentio Benchmark Cases, May 2025 — [./sentio-benchmarks-may-2025/](./sentio-benchmarks-may-2025/README.md)
 
 
 ## Contributing

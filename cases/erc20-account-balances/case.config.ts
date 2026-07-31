@@ -18,7 +18,7 @@ const VERIFY_END_BLOCK = 18_699_999;
 
 export const caseConfig: CaseConfig = {
   name: "erc20-account-balances",
-  title: "ERC-20 Account Balances",
+  title: "State Aggregation",
   dir: dirname(fileURLToPath(import.meta.url)),
   contract: "0xae78736cd615f374d3085123a210448e74fc6393",
   startBlock: START_BLOCK,

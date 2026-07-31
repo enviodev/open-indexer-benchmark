@@ -18,7 +18,7 @@ const VERIFY_END_BLOCK = 18_600_999;
 
 export const caseConfig: CaseConfig = {
   name: "erc20-transfer-events",
-  title: "ERC-20 Transfer Events",
+  title: "Decoded Event Stream",
   dir: dirname(fileURLToPath(import.meta.url)),
   contract: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
   startBlock: START_BLOCK,

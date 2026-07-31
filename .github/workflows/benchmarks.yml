@@ -236,8 +236,13 @@ jobs:
             const fs = require('fs');
 
             const cases = JSON.parse(process.env.CASES);
-            const titleCase = c =>
-              c.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            // Scenario names come from each case config via build-tables.ts, so
+            // the comment matches the README; the slug is the fallback.
+            const titleOf = c => {
+              const file = `/tmp/benchmark-title-${c}.txt`;
+              if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8').trim();
+              return c.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            };
 
             const sections = [];
             for (const benchCase of cases) {
@@ -245,7 +250,7 @@ jobs:
               const table = fs.existsSync(file)
                 ? fs.readFileSync(file, 'utf8')
                 : '_No results collected._';
-              sections.push(`### ${titleCase(benchCase)}\n\n${table}`);
+              sections.push(`### ${titleOf(benchCase)}\n\n${table}`);
             }
 
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
