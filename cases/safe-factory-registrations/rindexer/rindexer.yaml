@@ -31,11 +31,17 @@ contracts:
 
   # Addresses come from the factory event rather than the config: `input_name`
   # names the ProxyCreation argument holding the new proxy.
+  #
+  # The factory's `name` is a free label, and it must not repeat the name of the
+  # contract above: when both were called SafeProxyFactory, rindexer indexed
+  # only this child contract and dropped the standalone factory entirely — no
+  # ProxyCreation rows, and SafeSetup matched chain-wide rather than against the
+  # children.
   - name: Safe
     details:
       - network: ethereum
         factory:
-          name: SafeProxyFactory
+          name: SafeProxyFactorySource
           address: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2"
           abi: ./abis/SafeProxyFactory.abi.json
           event_name: ProxyCreation
