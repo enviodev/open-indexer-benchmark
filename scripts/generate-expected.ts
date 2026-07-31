@@ -10,12 +10,15 @@
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchLogs } from "../cases/lib/hypersync.ts";
-import type { CaseConfig } from "../cases/lib/case.ts";
+import { fetchCaseLogs, type CaseConfig } from "../cases/lib/case.ts";
 import { summarise, type Expected } from "../cases/lib/checksum.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const ALL_CASES = ["erc20-transfer-events", "erc20-account-balances"];
+const ALL_CASES = [
+  "erc20-transfer-events",
+  "erc20-account-balances",
+  "safe-factory-registrations",
+];
 
 async function loadCase(name: string): Promise<CaseConfig> {
   const mod = await import(resolve(ROOT, "cases", name, "case.config.ts"));
@@ -32,19 +35,13 @@ async function generate(name: string, token: string) {
     )} (${blocks.toLocaleString("en-US")}) of ${config.contract}`
   );
 
-  const logs = await fetchLogs({
-    token,
-    address: config.contract,
-    topics: config.topics,
-    fromBlock: config.startBlock,
-    toBlock: config.verifyEndBlock,
-    onProgress: (block, count) =>
-      process.stdout.write(
-        `\r  fetched to block ${block.toLocaleString("en-US")} — ${count.toLocaleString(
-          "en-US"
-        )} logs`
-      ),
-  });
+  const logs = await fetchCaseLogs(config, token, (block, count) =>
+    process.stdout.write(
+      `\r  fetched to block ${block.toLocaleString("en-US")} — ${count.toLocaleString(
+        "en-US"
+      )} logs`
+    )
+  );
   process.stdout.write("\n");
 
   if (logs.length === 0) {

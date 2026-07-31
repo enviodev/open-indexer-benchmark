@@ -1,0 +1,23 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "proxy", "type": "address"},
+      {"indexed": false, "name": "singleton", "type": "address"}
+    ],
+    "name": "ProxyCreation",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "name": "initiator", "type": "address"},
+      {"indexed": false, "name": "owners", "type": "address[]"},
+      {"indexed": false, "name": "threshold", "type": "uint256"},
+      {"indexed": false, "name": "initializer", "type": "address"},
+      {"indexed": false, "name": "fallbackHandler", "type": "address"}
+    ],
+    "name": "SafeSetup",
+    "type": "event"
+  }
+]

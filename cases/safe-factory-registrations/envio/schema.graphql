@@ -1,0 +1,14 @@
+type Safe {
+  id: ID!
+  address: String!
+  singleton: String!
+  timestamp: Int!
+}
+
+type SafeSetup {
+  id: ID!
+  safe: String!
+  initiator: String!
+  threshold: BigInt!
+  timestamp: Int!
+}

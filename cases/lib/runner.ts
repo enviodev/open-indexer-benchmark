@@ -26,7 +26,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { CaseConfig } from "./case.ts";
+import { fetchCaseLogs, type CaseConfig } from "./case.ts";
 import type { Expected } from "./checksum.ts";
 import {
   DRIVERS,
@@ -35,7 +35,7 @@ import {
   type Driver,
   type Snapshot,
 } from "./drivers/index.ts";
-import { fetchChainHeight, fetchLogs } from "./hypersync.ts";
+import { fetchChainHeight } from "./hypersync.ts";
 import { psql, sleep } from "./process.ts";
 import { type BenchmarkResult, toTableRow } from "./result.ts";
 import { buildTable, formatBytes, formatRate } from "./table.ts";
@@ -49,8 +49,11 @@ import { verify, type Verification } from "./verify.ts";
  */
 const HEAD_OFFSET = 500;
 
-/** Give up on the verification range after this long and report no result. */
-const PHASE_A_TIMEOUT_S = 900;
+/**
+ * Give up on the verification range after this long and report no result.
+ * A case whose range is deliberately large can raise it via `phaseATimeoutS`.
+ */
+const DEFAULT_PHASE_A_TIMEOUT_S = 900;
 
 /**
  * How many throughput windows to run for indexers fast enough to get one.
@@ -196,6 +199,35 @@ function buildResult(
   };
 }
 
+/**
+ * The row published for a tool the case declares unsupported. Every metric is
+ * zero and `unsupported` is what the table actually renders from; the driver is
+ * constructed only to borrow its display name, so the row reads identically to
+ * one the tool would have produced had it run.
+ */
+function unsupportedResult(
+  key: string,
+  config: CaseConfig,
+  rpcUrl: string,
+  reason: string
+): BenchmarkResult {
+  const driver = DRIVERS[key]({ config, rpcUrl, endBlock: config.verifyEndBlock });
+  return {
+    name: driver.name,
+    ...TOOLS[key],
+    blocksPerSec: 0,
+    eventsPerSec: 0,
+    throughputSource: "range",
+    correctness: "unknown",
+    correctnessDetail: reason,
+    dbSizeBytes: null,
+    dbTotalBytes: null,
+    rangeSeconds: null,
+    windowSeconds: null,
+    unsupported: reason,
+  };
+}
+
 async function benchmarkIndexer(
   key: string,
   config: CaseConfig,
@@ -206,6 +238,7 @@ async function benchmarkIndexer(
   headEndBlock: number
 ): Promise<BenchmarkResult> {
   const factory = DRIVERS[key];
+  const phaseATimeoutS = config.phaseATimeoutS ?? DEFAULT_PHASE_A_TIMEOUT_S;
   // Two different quantities that differ by one. The inclusive range holds
   // this many blocks, which is what the rate is computed over…
   const rangeBlocks = config.verifyEndBlock - config.startBlock + 1;
@@ -230,7 +263,7 @@ async function benchmarkIndexer(
   const rangeRun = await runPhase(phaseA, {
     targetBlocks: rangeTargetBlocks,
     targetEvents: expected.totalEvents,
-    maxSeconds: PHASE_A_TIMEOUT_S,
+    maxSeconds: phaseATimeoutS,
   });
   await phaseA.stop();
 
@@ -248,13 +281,7 @@ async function benchmarkIndexer(
         // the report can name what differs instead of just that a checksum did.
         fetchExpectedRows: async () => {
           console.log("  Mismatch found — rebuilding ground truth to diff it...");
-          const logs = await fetchLogs({
-            token: apiToken,
-            address: config.contract,
-            topics: config.topics,
-            fromBlock: config.startBlock,
-            toBlock: config.verifyEndBlock,
-          });
+          const logs = await fetchCaseLogs(config, apiToken);
           return config.computeExpected(logs).entities;
         },
       }
@@ -266,11 +293,11 @@ async function benchmarkIndexer(
   } else {
     // Verifying a partial database would report missing rows, which reads as a
     // data bug rather than what it is: the indexer ran out of time.
-    const timedOut = rangeRun.elapsedS >= PHASE_A_TIMEOUT_S - 1;
+    const timedOut = rangeRun.elapsedS >= phaseATimeoutS - 1;
     verification = {
       status: "unknown",
       detail: timedOut
-        ? `did not finish the verification range within ${PHASE_A_TIMEOUT_S}s`
+        ? `did not finish the verification range within ${phaseATimeoutS}s`
         : `stopped after ${rangeRun.elapsedS.toFixed(0)}s having indexed ` +
           `${rangeRun.events.toLocaleString("en-US")} of ` +
           `${expected.totalEvents.toLocaleString("en-US")} events — ` +
@@ -506,6 +533,18 @@ async function run(config: CaseConfig) {
 
   const results: BenchmarkResult[] = [];
   for (const name of selected) {
+    const reason = config.unsupported?.[name];
+    if (reason) {
+      // Published rather than skipped silently. A tool that cannot express the
+      // case is a finding about the tool, and dropping its row would make that
+      // finding indistinguishable from a job that crashed.
+      const result = unsupportedResult(name, config, rpcUrl, reason);
+      results.push(result);
+      console.log(`\n--- ${result.name} — not run ---\n  ${reason}\n`);
+      console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);
+      continue;
+    }
+
     const result = await benchmarkIndexer(
       name,
       config,

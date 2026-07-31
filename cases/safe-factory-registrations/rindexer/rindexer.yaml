@@ -1,0 +1,53 @@
+name: safe-factory-indexer
+description: Safe proxy factory registrations and the setup events of the proxies it creates
+project_type: no-code
+timestamps: true
+
+networks:
+  - name: ethereum
+    chain_id: 1
+    rpc: ${ETHEREUM_RPC}
+    # The factory burst indexed here creates proxies faster than an unbounded
+    # eth_getLogs range will serve, so pin an explicit per-request range and
+    # fan the historic backfill across several concurrent workers.
+    max_block_range: 1000
+    fetch_concurrency: 10
+
+storage:
+  postgres:
+    enabled: true
+    drop_each_run: true
+
+contracts:
+  - name: SafeProxyFactory
+    details:
+      - network: ethereum
+        address: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeProxyFactory.abi.json
+    include_events:
+      - ProxyCreation
+
+  # Addresses come from the factory event rather than the config: `input_name`
+  # names the ProxyCreation argument holding the new proxy.
+  - name: Safe
+    details:
+      - network: ethereum
+        factory:
+          name: SafeProxyFactory
+          address: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2"
+          abi: ./abis/SafeProxyFactory.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/Safe.abi.json
+    include_events:
+      - SafeSetup
+
+graphql:
+  port: 19876
+
+global:
+  health_port: 8082

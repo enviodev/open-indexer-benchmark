@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: safe-factory-indexer
+description: Safe proxy factory — dynamic contract registration
+contracts:
+  - name: SafeProxyFactory
+    events:
+      - event: "ProxyCreation(address proxy, address singleton)"
+  # No address: every instance is registered at runtime from ProxyCreation.
+  - name: Safe
+    events:
+      - event: "SafeSetup(address indexed initiator, address[] owners, uint256 threshold, address initializer, address fallbackHandler)"
+chains:
+  - id: 1 # Ethereum Mainnet
+    start_block: 24600000
+    end_block: ${ENVIO_END_BLOCK}
+    rpc:
+      url: ${ENVIO_RPC_URL}
+      for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: SafeProxyFactory
+        address: 0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2 # Safe proxy factory v1.3.0
+      - name: Safe
