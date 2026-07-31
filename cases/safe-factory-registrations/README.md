@@ -54,7 +54,7 @@ Every implementation here is written the way that tool's own documentation recom
 Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
 
 ```bash
-ENVIO_API_TOKEN=your-token node cases/safe-factory-registrations/run.ts
+ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node cases/safe-factory-registrations/run.ts
 ```
 
 Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
