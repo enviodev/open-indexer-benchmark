@@ -30,7 +30,7 @@ There is no aggregation and nothing is read back. Registration cost is the varia
 
 A Safe proxy is deployed and set up in a single transaction, and the two logs come out in this order:
 
-```
+```text
 logIndex n      SafeSetup      ← emitted by the new proxy
 logIndex n + 1  ProxyCreation  ← emitted by the factory, announcing that proxy
 ```
