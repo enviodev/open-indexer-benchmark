@@ -28,12 +28,14 @@ export interface CaseConfig {
   /** Replays the case logic over raw logs to produce the expected rows. */
   computeExpected(logs: DecodedLog[]): ExpectedData;
 
-  /** Ponder tables whose row counts sum to the processed-event count. */
-  ponderTables: string[];
-  /** PostGraphile collection fields exposed by rindexer. */
-  rindexerCollections: string[];
-  /** SubQuery entity collections exposing totalCount. */
-  subqueryCollections: string[];
-  /** Sqd connection fields exposing totalCount. */
-  sqdConnections: string[];
+  /**
+   * Keys of the entities that hold one row per processed event, so their row
+   * counts sum to the number of events an indexer has got through. Aggregated
+   * entities (a balance, an allowance) are deliberately excluded: they collapse
+   * many events into one row and would understate progress.
+   *
+   * The tables backing them are found by introspection from the same
+   * `tableCandidates`, so this stays one list rather than one per indexer.
+   */
+  eventEntities: string[];
 }

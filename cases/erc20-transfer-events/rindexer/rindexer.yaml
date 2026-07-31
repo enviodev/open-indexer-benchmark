@@ -31,8 +31,5 @@ contracts:
     include_events:
       - Transfer
 
-graphql:
-  port: 19876
-
 global:
   health_port: 8082

@@ -25,8 +25,5 @@ contracts:
       - Transfer
       - Approval
 
-graphql:
-  port: 19876
-
 global:
   health_port: 8082

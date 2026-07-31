@@ -1,15 +1,18 @@
 import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { exec, gql, kill, start, waitPg } from "../process.ts";
-import { BENCHMARK_PORT, type DriverFactory } from "./common.ts";
+import { exec, kill, start, waitPg } from "../process.ts";
+import {
+  blocksIndexed,
+  createProgressReader,
+  type DriverFactory,
+} from "./common.ts";
 
 const PG_PORT = 23_798;
 export const SQD_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/squid`;
 
 export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const dir = resolve(config.dir, "sqd");
-  const graphqlUrl = `http://localhost:${BENCHMARK_PORT}/graphql`;
   const env = {
     ...process.env,
     RPC_ENDPOINT: rpcUrl,
@@ -17,22 +20,20 @@ export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     DB_HOST: "localhost",
     DB_NAME: "squid",
     DB_PASS: "postgres",
-    GQL_PORT: String(BENCHMARK_PORT),
     SQD_END_BLOCK: String(endBlock),
   };
   let processor: ChildProcess | null = null;
-  let gqlServer: ChildProcess | null = null;
   let done = false;
 
-  // "transferEventsConnection" exposes totalCount; "transferEvents" is the
-  // plain collection used to read the highest indexed block from the last id.
-  const blockField = config.sqdConnections[0].replace(/Connection$/, "");
-  const snapshotQuery = `{
-    ${config.sqdConnections
-      .map((c, i) => `count${i}: ${c}(orderBy: id_ASC) { totalCount }`)
-      .join("\n    ")}
-    latest: ${blockField}(orderBy: id_DESC, limit: 1) { id }
-  }`;
+  // Event ids are "<blockHeight>-<logIndex>", the only column on these entities
+  // that carries the block. Taking the numeric maximum rather than the last id
+  // in text order also drops the assumption that every height in a run has the
+  // same number of digits.
+  const readProgress = createProgressReader(
+    SQD_DB_URL,
+    config,
+    "split_part(id, '-', 1)::bigint"
+  );
 
   return {
     name: "Sqd",
@@ -60,7 +61,9 @@ export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       await exec("npx", ["squid-typeorm-migration", "apply"], dir, env);
     },
     async launch() {
-      gqlServer = start("npx", ["squid-graphql-server"], dir, env);
+      // Only the processor: progress and verification both read PostgreSQL, so
+      // squid-graphql-server would be a second Node process competing for the
+      // same machine without contributing to anything measured.
       processor = start(
         "node",
         ["--require=dotenv/config", "lib/main.js"],
@@ -71,28 +74,12 @@ export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       processor.on("exit", () => (done = true));
     },
     async snapshot() {
-      const data: any = await gql(graphqlUrl, snapshotQuery);
-      let events = 0;
-      for (let i = 0; i < config.sqdConnections.length; i++) {
-        events += data[`count${i}`]?.totalCount ?? 0;
-      }
-      // Event ids are "<blockHeight>-<logIndex>"; within a single benchmark the
-      // heights all have the same digit count, so id_DESC orders by height.
-      const lastId: string | undefined = data.latest?.[0]?.id;
-      const block = lastId ? parseInt(lastId.split("-")[0], 10) : 0;
-      return {
-        events,
-        blocks:
-          Number.isFinite(block) && block > config.startBlock
-            ? block - config.startBlock
-            : 0,
-      };
+      const { events, block } = await readProgress();
+      return { events, blocks: blocksIndexed(config, block) };
     },
     async stop() {
       await kill(processor);
-      await kill(gqlServer);
       processor = null;
-      gqlServer = null;
     },
     async cleanup() {
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});

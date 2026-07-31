@@ -1,15 +1,21 @@
 import { type ChildProcess } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { exec, gql, kill, start, waitPg } from "../process.ts";
-import { BENCHMARK_PORT, type DriverFactory } from "./common.ts";
+import { exec, kill, psql, start, waitPg } from "../process.ts";
+import {
+  blocksIndexed,
+  createProgressReader,
+  type DriverFactory,
+} from "./common.ts";
 
 const PG_PORT = 5432;
 export const SUBQUERY_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/postgres`;
 
+/** Matches `--db-schema` in each case's docker-compose.yml. */
+const DB_SCHEMA = "app";
+
 export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const dir = resolve(config.dir, "subquery");
-  const graphqlUrl = `http://localhost:${BENCHMARK_PORT}`;
   const env = {
     ...process.env,
     ETHEREUM_RPC_URL: rpcUrl,
@@ -18,12 +24,7 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   let proc: ChildProcess | null = null;
   let done = false;
 
-  const snapshotQuery = `{
-    _metadata { lastProcessedHeight }
-    ${config.subqueryCollections
-      .map((c, i) => `count${i}: ${c} { totalCount }`)
-      .join("\n    ")}
-  }`;
+  const readEvents = createProgressReader(SUBQUERY_DB_URL, config);
 
   return {
     name: "SubQuery",
@@ -59,15 +60,23 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       proc.on("exit", () => (done = true));
     },
     async snapshot() {
-      const data: any = await gql(graphqlUrl, snapshotQuery);
-      let events = 0;
-      for (let i = 0; i < config.subqueryCollections.length; i++) {
-        events += data[`count${i}`]?.totalCount ?? 0;
-      }
-      const height = Number(data._metadata?.lastProcessedHeight ?? 0);
+      // `_metadata` is the same key/value table the GraphQL `_metadata` field
+      // is served from, so the height read here is the node's own sync
+      // position — it keeps advancing through ranges that produced no events.
+      // The value column is jsonb, whose text rendering of a JSON string keeps
+      // its quotes; stripping them also makes this work unchanged if SubQuery
+      // ever stores the column as plain text.
+      const [{ events }, height] = await Promise.all([
+        readEvents(),
+        psql(
+          SUBQUERY_DB_URL,
+          `SELECT trim(both '"' from value::text) FROM "${DB_SCHEMA}"._metadata ` +
+            `WHERE key = 'lastProcessedHeight'`
+        ),
+      ]);
       return {
         events,
-        blocks: height > config.startBlock ? height - config.startBlock : 0,
+        blocks: blocksIndexed(config, parseInt(height, 10) || 0),
       };
     },
     async stop() {
