@@ -46,8 +46,5 @@ contracts:
     include_events:
       - SafeSetup
 
-graphql:
-  port: 19876
-
 global:
   health_port: 8082
