@@ -68,7 +68,9 @@ ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts erc20-account-balan
 
 ## Implementation Notes
 
-All indexers share port `19876` for their GraphQL endpoint. A local run benchmarks them one after another and CI gives each its own runner, so there is no conflict.
+Progress and correctness are both read straight from each indexer's PostgreSQL database, never through its GraphQL API. Two reasons: an indexer serving queries alongside its indexing is doing work the benchmark does not measure but does pay for, and every API models the same data differently enough that the polling code was becoming a per-indexer dialect. So none of the GraphQL servers is started — `squid-graphql-server` is not launched, rindexer is started with indexing only (`start indexer` for a no-code project, `--indexer` for a rust one), and SubQuery's `graphql-engine` container is gone from its compose file. Ponder and Graph Node are the exceptions: `ponder start` and `gnd dev` both always serve an API, so each is bound to port `19876` and otherwise ignored.
+
+The tables backing each entity are found by introspection against the `tableCandidates` in `case.config.ts` — the same resolution the verification layer uses — so a case names its entities once instead of once per indexer.
 
 ### Envio
 
@@ -78,7 +80,7 @@ The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync
 
 ### Ponder
 
-Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the GraphQL server to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
+Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the API server it insists on running to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
 
 ### Rindexer
 
@@ -92,7 +94,7 @@ The crate is built with `cargo build --release` before the timer begins, and Pos
 
 ### Sqd (Subsquid)
 
-Runs the processor and GraphQL server as separate native Node.js processes. Uses a Docker Postgres instance for storage. The handler batches all events in memory per block range, then flushes accounts, allowances, transfer events, and approval events concurrently via `Promise.all`.
+Runs the processor as a native Node.js process against a Docker Postgres instance. The handler batches all events in memory per block range, then flushes accounts, allowances, transfer events, and approval events concurrently via `Promise.all`.
 
 Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
 
@@ -120,17 +122,22 @@ Compose stack to stand up. The binary is pinned to a Graph Node release tag in
   still counts toward the reported storage, which is the honest way to report
   what keeping it costs.
 - **Write batching**: Graph Node buffers entity writes and flushes them in
-  batches, so its tables stay empty for the first minute or two of a run and
-  progress then arrives in steps. Both scenarios take longer than the
-  throughput window, so the published rate comes from the verification range,
-  where the batching is fully accounted for.
+  batches, so both the tables and `subgraphs.head` stay at zero for the first
+  minute or two of a run and then jump. Progress is therefore stepped rather
+  than continuous, and the measured time can run up to one poll interval past
+  the actual finish — which overstates the time rather than flattering it. Both
+  scenarios take longer than the throughput window, so the published rate comes
+  from the verification range, where the batching is fully accounted for.
+- **Progress**: read from `subgraphs.head`, Graph Node's own record of where the
+  deployment has got to — the same position its status API serves. It keeps
+  advancing through ranges that produced no events, which a row count cannot.
 - **IPFS**: `gnd` connects to `https://api.thegraph.com/ipfs` at startup even
   though everything it deploys is local, so the run needs outbound network
   access to that host.
 
 ### SubQuery
 
-Runs entirely via Docker Compose (postgres + subquery-node + graphql-engine). This has the heaviest startup overhead:
+Runs entirely via Docker Compose (postgres + subquery-node). This has the heaviest startup overhead:
 
 - **Docker/DB pre-initialization**: Postgres is started and health-checked _before_ the benchmark timer begins. Image pulls also happen beforehand. This is not counted toward the benchmark duration.
 - **Startup cost**: `subquery-node` takes ~25s to boot inside Docker. SubQuery is too slow to finish the verification range within the throughput window, so its rate comes from that range, where boot time is a small and honestly counted fraction of a multi-minute run.

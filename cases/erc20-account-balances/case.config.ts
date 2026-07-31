@@ -131,9 +131,5 @@ export const caseConfig: CaseConfig = {
     };
   },
 
-  ponderTables: ["transfer_event", "approval_event"],
-  rindexerCollections: ["allTransfers", "allApprovals"],
-  subgraphTables: ["transfer_event", "approval_event"],
-  subqueryCollections: ["transferEvents", "approvalEvents"],
-  sqdConnections: ["transferEventsConnection", "approvalEventsConnection"],
+  eventEntities: ["transferEvent", "approvalEvent"],
 };

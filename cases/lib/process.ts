@@ -1,4 +1,4 @@
-// Process, PostgreSQL and GraphQL helpers shared by the drivers.
+// Process and PostgreSQL helpers shared by the drivers.
 //
 // Kept apart from the drivers so the runner can reach psql for verification
 // without importing every driver, and so a driver file is only ever about the
@@ -71,19 +71,6 @@ export function kill(proc: ChildProcess | null): Promise<void> {
       } catch {}
     }
   });
-}
-
-/** Send a GraphQL query and return the `data` field. */
-export async function gql<T = any>(url: string, query: string): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-  });
-  if (!res.ok) throw new Error(`GraphQL HTTP ${res.status}`);
-  const json: any = await res.json();
-  if (json.errors) throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
-  return json.data as T;
 }
 
 /** Run a SQL query via psql and return the trimmed stdout. */

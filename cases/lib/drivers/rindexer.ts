@@ -1,15 +1,18 @@
 import { type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { exec, gql, kill, start, waitPg } from "../process.ts";
-import { BENCHMARK_PORT, type DriverFactory } from "./common.ts";
+import { exec, kill, start, waitPg } from "../process.ts";
+import {
+  blocksIndexed,
+  createProgressReader,
+  type DriverFactory,
+} from "./common.ts";
 
 const PG_PORT = 5440;
 export const RINDEXER_DB_URL = `postgresql://postgres:rindexer@localhost:${PG_PORT}/postgres`;
 
 export const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const dir = resolve(config.dir, "rindexer");
-  const graphqlUrl = `http://localhost:${BENCHMARK_PORT}/graphql`;
   const env = {
     ...process.env,
     ETHEREUM_RPC: rpcUrl,
@@ -33,17 +36,10 @@ export const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   let proc: ChildProcess | null = null;
   let done = false;
 
-  const snapshotQuery = `{
-    ${config.rindexerCollections
-      .map((c, i) => `count${i}: ${c} { totalCount }`)
-      .join("\n    ")}
-    ${config.rindexerCollections
-      .map(
-        (c, i) =>
-          `last${i}: ${c}(last: 1, orderBy: BLOCK_NUMBER_ASC) { nodes { blockNumber } }`
-      )
-      .join("\n    ")}
-  }`;
+  // rindexer keeps its sync position in an internal schema whose layout is not
+  // part of its public interface, but every event row carries the block it came
+  // from, so progress is read from the event tables themselves.
+  const readProgress = createProgressReader(RINDEXER_DB_URL, config, "block_number");
 
   return {
     name: "Rindexer",
@@ -79,26 +75,17 @@ export const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       await waitPg(RINDEXER_DB_URL, "SELECT 1");
     },
     async launch() {
+      // Indexer only. The benchmark reads PostgreSQL directly, so serving a
+      // GraphQL API alongside the indexing would be work no measurement uses —
+      // and work the other indexers are not doing.
       proc = isRustProject
-        ? start(rustBin, [], dir, env)
-        : start(bin, ["start", "all"], dir, env);
+        ? start(rustBin, ["--indexer"], dir, env)
+        : start(bin, ["start", "indexer"], dir, env);
       proc.on("exit", () => (done = true));
     },
     async snapshot() {
-      const data: any = await gql(graphqlUrl, snapshotQuery);
-      let events = 0;
-      let maxBlock = 0;
-      for (let i = 0; i < config.rindexerCollections.length; i++) {
-        events += data[`count${i}`]?.totalCount ?? 0;
-        maxBlock = Math.max(
-          maxBlock,
-          Number(data[`last${i}`]?.nodes?.[0]?.blockNumber ?? 0)
-        );
-      }
-      return {
-        events,
-        blocks: maxBlock > config.startBlock ? maxBlock - config.startBlock : 0,
-      };
+      const { events, block } = await readProgress();
+      return { events, blocks: blocksIndexed(config, block) };
     },
     async stop() {
       await kill(proc);

@@ -2,7 +2,12 @@ import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, kill, psql, start, waitPg } from "../process.ts";
-import { BENCHMARK_PORT, type DriverFactory } from "./common.ts";
+import {
+  BENCHMARK_PORT,
+  blocksIndexed,
+  createProgressReader,
+  type DriverFactory,
+} from "./common.ts";
 
 const PG_PORT = 19_877;
 const PG_CONTAINER = "ponder-benchmark-pg";
@@ -18,6 +23,8 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   };
   let proc: ChildProcess | null = null;
   let done = false;
+
+  const readEvents = createProgressReader(PONDER_DB_URL, config);
 
   return {
     name: "Ponder",
@@ -60,25 +67,17 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       proc.on("exit", () => (done = true));
     },
     async snapshot() {
-      const [counts, checkpoint] = await Promise.all([
-        Promise.all(
-          config.ponderTables.map((table) =>
-            psql(PONDER_DB_URL, `SELECT count(*) FROM ${table}`)
-          )
-        ),
+      const [{ events }, checkpoint] = await Promise.all([
+        readEvents(),
         psql(
           PONDER_DB_URL,
           'SELECT "latest_checkpoint" FROM _ponder_checkpoint LIMIT 1'
         ).catch(() => ""),
       ]);
-      const events = counts.reduce((sum, c) => sum + (parseInt(c, 10) || 0), 0);
       // Checkpoint is a 75-char string: [10 timestamp][16 chainId][16 blockNumber]…
       const block =
         checkpoint.length >= 42 ? Number(BigInt(checkpoint.slice(26, 42))) : 0;
-      return {
-        events,
-        blocks: block > config.startBlock ? block - config.startBlock : 0,
-      };
+      return { events, blocks: blocksIndexed(config, block) };
     },
     async stop() {
       await kill(proc);

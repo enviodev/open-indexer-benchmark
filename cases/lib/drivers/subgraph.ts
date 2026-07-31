@@ -2,7 +2,12 @@ import { type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, kill, psql, start, waitPg } from "../process.ts";
-import { BENCHMARK_PORT, type DriverFactory } from "./common.ts";
+import {
+  BENCHMARK_PORT,
+  blocksIndexed,
+  createProgressReader,
+  type DriverFactory,
+} from "./common.ts";
 
 const PG_PORT = 19_881;
 const PG_CONTAINER = "subgraph-benchmark-pg";
@@ -27,8 +32,8 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const gnd = resolve(dir, "bin/gnd");
   let proc: ChildProcess | null = null;
   let done = false;
-  /** Deployment schema (`sgd1`, …), resolved on the first successful snapshot. */
-  let schema: string | null = null;
+
+  const readEvents = createProgressReader(SUBGRAPH_DB_URL, config);
 
   return {
     name: "Graph Node",
@@ -113,28 +118,20 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       proc.on("exit", () => (done = true));
     },
     async snapshot() {
-      if (!schema) {
-        const found = await psql(
+      // `subgraphs.head` is Graph Node's own record of where each deployment
+      // has got to — the same position its index-node status API serves. It
+      // keeps advancing through ranges that produced no events, which matters
+      // for a sparse contract where most scanned blocks write nothing.
+      const [{ events }, block] = await Promise.all([
+        readEvents(),
+        psql(
           SUBGRAPH_DB_URL,
-          "SELECT name FROM public.deployment_schemas ORDER BY id DESC LIMIT 1"
-        );
-        if (!found.trim()) return null;
-        schema = found.trim();
-      }
-      const counts = config.subgraphTables
-        .map((table) => `(SELECT count(*) FROM ${schema}.${table})`)
-        .join(" + ");
-      // subgraphs.head is where Graph Node records the block each deployment
-      // has reached; the entity tables hold the events written so far.
-      const row = await psql(
-        SUBGRAPH_DB_URL,
-        `SELECT (SELECT coalesce(max(block_number), 0) FROM subgraphs.head) || '|' || (${counts})`
-      );
-      const [blockStr, eventStr] = row.trim().split("|");
-      const block = Number(blockStr) || 0;
+          "SELECT coalesce(max(block_number), 0) FROM subgraphs.head"
+        ),
+      ]);
       return {
-        events: Number(eventStr) || 0,
-        blocks: block > config.startBlock ? block - config.startBlock : 0,
+        events,
+        blocks: blocksIndexed(config, parseInt(block, 10) || 0),
       };
     },
     async stop() {

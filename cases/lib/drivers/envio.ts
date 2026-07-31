@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, kill, psql, start } from "../process.ts";
-import type { DriverFactory } from "./common.ts";
+import { blocksIndexed, type DriverFactory } from "./common.ts";
 
 const PG_PORT = 5433;
 export const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${PG_PORT}/envio-dev`;
@@ -58,11 +58,9 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
         "SELECT events_processed, progress_block FROM public.envio_chains LIMIT 1"
       );
       const [eventsStr, blockStr] = row.split("|");
-      const events = parseInt(eventsStr, 10) || 0;
-      const block = parseInt(blockStr, 10) || 0;
       return {
-        events,
-        blocks: block > config.startBlock ? block - config.startBlock : 0,
+        events: parseInt(eventsStr, 10) || 0,
+        blocks: blocksIndexed(config, parseInt(blockStr, 10) || 0),
       };
     },
     async stop() {
