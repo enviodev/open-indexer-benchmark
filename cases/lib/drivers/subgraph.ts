@@ -1,5 +1,5 @@
 import { type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, kill, psql, start, waitPg } from "../process.ts";
 import {
@@ -59,6 +59,10 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
 
       if (!existsSync(gnd)) {
         console.log(`Installing Graph Node ${GRAPH_NODE_VERSION}...\n`);
+        // `graph node install` renames the downloaded binary into --bin-dir
+        // without creating it first, and fails with ENOENT if it is missing —
+        // which it is on any run the cache did not restore.
+        mkdirSync(resolve(dir, "bin"), { recursive: true });
         await exec(
           "pnpm",
           [
