@@ -1,0 +1,31 @@
+# Events are written once and never updated, so they are declared immutable —
+# the storage layout The Graph's docs recommend for event data. Accounts and
+# allowances are updated in place and so stay mutable, which is what makes this
+# case a read-after-write test rather than an ingestion one.
+type Account @entity(immutable: false) {
+  id: ID!
+  balance: BigInt!
+}
+
+type Allowance @entity(immutable: false) {
+  id: ID!
+  owner: String!
+  spender: String!
+  amount: BigInt!
+}
+
+type TransferEvent @entity(immutable: true) {
+  id: ID!
+  from: String!
+  to: String!
+  amount: BigInt!
+  timestamp: Int!
+}
+
+type ApprovalEvent @entity(immutable: true) {
+  id: ID!
+  owner: String!
+  spender: String!
+  amount: BigInt!
+  timestamp: Int!
+}

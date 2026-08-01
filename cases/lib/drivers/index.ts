@@ -5,6 +5,7 @@ import { envioDriver } from "./envio.ts";
 import { ponderDriver } from "./ponder.ts";
 import { rindexerDriver } from "./rindexer.ts";
 import { sqdDriver } from "./sqd.ts";
+import { subgraphDriver } from "./subgraph.ts";
 import { subqueryDriver } from "./subquery.ts";
 
 export { BENCHMARK_PORT } from "./common.ts";
@@ -15,6 +16,7 @@ export const DRIVERS: Record<string, DriverFactory> = {
   "envio-rpc": envioDriver("rpc"),
   ponder: ponderDriver,
   rindexer: rindexerDriver,
+  subgraph: subgraphDriver,
   subquery: subqueryDriver,
   sqd: sqdDriver,
 };
@@ -54,6 +56,12 @@ export const TOOLS: Record<
   },
   rindexer: {
     toolUrl: "https://rindexer.xyz",
+    source: "RPC",
+    sourceUrl: HYPERRPC_URL,
+    storage: "Postgres",
+  },
+  subgraph: {
+    toolUrl: "https://thegraph.com",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",

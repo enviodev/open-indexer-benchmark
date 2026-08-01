@@ -243,11 +243,17 @@ function resolveEntity(
     qualified: `${quoteIdent(table.schema)}.${quoteIdent(table.table)}`,
     displayName,
     fieldExprs,
-    // SubQuery keeps historical entity versions in the same table; restrict to
-    // the current version so counts and checksums describe present state. The
-    // discarded history still shows up in the measured table size, which is the
-    // honest way to report the cost of keeping it.
-    predicate: table.columns.has("_block_range") ? "upper_inf(_block_range)" : "",
+    // SubQuery (`_block_range`) and Graph Node (`block_range`) keep historical
+    // entity versions in the same table; restrict to the current version so
+    // counts and checksums describe present state. The discarded history still
+    // shows up in the measured table size, which is the honest way to report
+    // the cost of keeping it. Graph Node's immutable entities have no range
+    // column at all — nothing to filter, since nothing is ever superseded.
+    predicate: table.columns.has("_block_range")
+      ? "upper_inf(_block_range)"
+      : table.columns.has("block_range")
+        ? "upper_inf(block_range)"
+        : "",
   };
 }
 

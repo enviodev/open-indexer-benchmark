@@ -37,7 +37,7 @@ jobs:
         run: |
           INDEXERS="${{ inputs.indexers }}"
           if [ -z "$INDEXERS" ]; then
-            echo 'matrix=["envio","envio-rpc","ponder","rindexer","subquery","sqd"]' >> "$GITHUB_OUTPUT"
+            echo 'matrix=["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]' >> "$GITHUB_OUTPUT"
           else
             MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | jq -R . | jq -sc .)
             echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -102,6 +102,19 @@ jobs:
         with:
           node-version: 24
 
+      # The Graph Node binary is a ~107 MB download. It is pinned to a release
+      # tag in the driver, so the cache key only has to change when that does.
+      - name: Cache Graph Node binary
+        if: matrix.indexer == 'subgraph'
+        uses: actions/cache@v4
+        with:
+          path: cases/${{ matrix.case }}/subgraph/bin
+          # Keyed per case as well as per driver revision: both cases install
+          # the same binary into their own directory, and a shared key would
+          # have the second job to finish fail to save what the first already
+          # wrote under that name.
+          key: gnd-${{ matrix.case }}-${{ hashFiles('cases/lib/drivers/subgraph.ts') }}
+
       # The rust rindexer project pulls in alloy and the rindexer crate, which
       # is several minutes of compilation from cold. It happens before the
       # timer starts, so it costs CI wall clock rather than benchmark
@@ -164,6 +177,9 @@ jobs:
                 echo "Installing rindexer v$RINDEXER_VERSION"
                 curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$RINDEXER_VERSION"
               fi
+              ;;
+            subgraph)
+              docker pull postgres:17-alpine
               ;;
             subquery)
               docker compose -f "$CASE_DIR/subquery/docker-compose.yml" pull
