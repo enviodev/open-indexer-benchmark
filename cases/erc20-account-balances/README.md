@@ -46,10 +46,10 @@ ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts
 
 Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
 
-The throughput window defaults to 60 seconds. Pass a custom duration (in seconds) with `--duration`:
+The throughput window defaults to 100 seconds. Pass a custom duration (in seconds) with `--duration`:
 
 ```bash
-ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts --duration=60
+ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts --duration=100
 ```
 
 Run a specific indexer:
