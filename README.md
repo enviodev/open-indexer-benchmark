@@ -34,12 +34,13 @@ Derived state that every event updates — the indexer must read a row, apply a 
 <!-- BENCHMARK:erc20-account-balances:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 18,036.9 | 131,603.0 | — | ✅ | Postgres 2.2 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 651.7 | 4,744.5 | 27.7x slower | ✅ | Postgres 4.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 484.1 | 4,032.9 | 37.3x slower | ✅ | Postgres 2.2 MB |
-| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 443.6 | 3,914.2 | 40.7x slower | ✅ | Postgres 2.2 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 65.5 | 862.0 | 275.5x slower | ✅ | Postgres 3.3 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 12.3 | 161.8 | 1467.9x slower | ✅ | Postgres 4.4 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 14,006.7 | 98,566.1 | — | ✅ | Postgres 2.2 MB |
+| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 786.2 | 5,210.9 | 17.8x slower | ✅ | Postgres 2.2 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 386.1 | 5,046.1 | 36.3x slower | ✅ | Postgres 4.4 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 70.9 | 793.4 | 197.4x slower | ✅ | Postgres 2.3 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 61.5 | 810.0 | 227.7x slower | ✅ | Postgres 3.3 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 43.9 | 577.5 | 319.4x slower | ✅ | Postgres 6.9 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 25.5 | 335.4 | 549.9x slower | ✅ | Postgres 4.4 MB |
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md).
@@ -52,12 +53,13 @@ Every decoded event written once, with no aggregation and nothing to read back �
 <!-- BENCHMARK:erc20-transfer-events:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 71,871.8 | 7,762.0 | — | ✅ | Postgres 1.4 MB |
-| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 12,344.1 | 1,551.2 | 5.8x slower | ✅ | Postgres 1.4 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 8,776.4 | 1,121.2 | 8.2x slower | ✅ | Postgres 3.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1,389.7 | 196.6 | 51.7x slower | ✅ | Postgres 1.4 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 181.6 | 22.3 | 395.7x slower | ✅ | Postgres 2.5 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 16.5 | 2.0 | 4365.1x slower | ✅ | Postgres 2.0 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 72,222.5 | 7,783.5 | — | ✅ | Postgres 1.4 MB |
+| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 15,339.4 | 1,908.6 | 4.7x slower | ✅ | Postgres 1.4 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 6,833.7 | 847.8 | 10.6x slower | ✅ | Postgres 3.4 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 2,159.4 | 274.6 | 33.4x slower | ✅ | Postgres 1.4 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 183.3 | 22.5 | 393.9x slower | ✅ | Postgres 2.5 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 17.0 | 2.1 | 4259.2x slower | ✅ | Postgres 1.9 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ✅ | Postgres 2.8 MB |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
