@@ -36,28 +36,41 @@ jobs:
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
       - id: set-matrix
+        # Dispatch inputs are read from the environment rather than expanded
+        # into the script text, so they reach the shell as data.
+        env:
+          INDEXERS: ${{ inputs.indexers }}
+          CASES: ${{ inputs.cases }}
+          DURATION_INPUT: ${{ inputs.duration }}
         run: |
-          INDEXERS="${{ inputs.indexers }}"
           if [ -z "$INDEXERS" ]; then
             echo 'matrix=["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]' >> "$GITHUB_OUTPUT"
           else
-            MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | jq -R . | jq -sc .)
+            MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
             echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           fi
-          CASES="${{ inputs.cases }}"
           if [ -z "$CASES" ]; then
             CASES_JSON='["erc20-account-balances","erc20-transfer-events"]'
           else
-            CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | jq -R . | jq -sc .)
+            CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
+
+          COUNT=$(echo "$CASES_JSON" | jq 'length')
+
+          # An input of nothing but separators splits into no scenarios at all.
+          # Left alone every scenario job would skip and the summary would still
+          # publish an empty table, which reads as "measured, found nothing".
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No scenarios resolved from the cases input." >&2
+            exit 1
+          fi
 
           # Scenarios run one after another, which needs one `needs`-chained job
           # per scenario below — GitHub cannot order a matrix. That makes the
           # number of scenario slots fixed: adding a third scenario means adding
           # a third `scenario-N` job here. Fail loudly rather than silently
           # dropping the extra scenario from the run and from the table.
-          COUNT=$(echo "$CASES_JSON" | jq 'length')
           if [ "$COUNT" -gt 2 ]; then
             echo "Only 2 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
             exit 1
@@ -65,8 +78,7 @@ jobs:
           echo "case1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')" >> "$GITHUB_OUTPUT"
           echo "case2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')" >> "$GITHUB_OUTPUT"
 
-          DURATION="${{ inputs.duration }}"
-          echo "duration=${DURATION:-100}" >> "$GITHUB_OUTPUT"
+          echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
   # The harness has two test scripts — scripts/test-verification.ts and
   # scripts/test-tables.ts — that are run locally when either the verification

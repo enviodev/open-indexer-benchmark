@@ -51,18 +51,46 @@ for (const name of selected) {
   }
 }
 
+// `--cases=` and `--cases=,` select nothing. Exiting 0 there would look like a
+// successful run that measured nothing at all.
+if (selected.length === 0) {
+  console.error(`No scenarios selected. Available: ${available.join(", ")}`);
+  process.exit(1);
+}
+
+// Ctrl-C reaches the running scenario through the terminal's process group, and
+// the runner installs its own SIGINT handler to tear down containers. Handle the
+// signal here too so this process does not exit first and hand the terminal back
+// while that teardown is still running; the child's exit is what ends the wait.
+// A SIGTERM sent to this process alone never reaches the child, so pass it on.
+let current: ReturnType<typeof spawn> | null = null;
+let interrupted = false;
+process.on("SIGINT", () => {
+  interrupted = true;
+});
+process.on("SIGTERM", () => {
+  interrupted = true;
+  current?.kill("SIGTERM");
+});
+
 function runCase(name: string): Promise<number> {
-  return new Promise((res, rej) => {
+  return new Promise((res) => {
     const child = spawn(
       process.execPath,
       [join(CASES_DIR, name, "run.ts"), ...forwarded],
       { stdio: "inherit", cwd: ROOT }
     );
-    // Ctrl-C reaches the child through the terminal's process group, and the
-    // runner installs its own SIGINT handler to tear down containers. Wait for
-    // it to exit rather than dying first and leaving those behind.
-    child.on("error", rej);
-    child.on("exit", (code, signal) => res(signal ? 1 : (code ?? 1)));
+    current = child;
+    // A scenario that cannot even be spawned is a failed scenario, not a reason
+    // to abandon the remaining ones with an unhandled rejection.
+    child.on("error", (err) => {
+      console.error(`Failed to start scenario "${name}": ${err.message}`);
+      res(1);
+    });
+    child.on("exit", (code, signal) => {
+      current = null;
+      res(signal ? 1 : (code ?? 1));
+    });
   });
 }
 
@@ -70,6 +98,10 @@ let failed = 0;
 for (const [i, name] of selected.entries()) {
   console.log(`\n=== Scenario ${i + 1}/${selected.length}: ${name} ===\n`);
   const code = await runCase(name);
+  if (interrupted) {
+    console.error("\nInterrupted; skipping the remaining scenarios.");
+    process.exit(130);
+  }
   if (code !== 0) {
     // One scenario failing says nothing about the others, so keep going and
     // report at the end — a partial table beats no table.

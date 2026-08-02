@@ -118,10 +118,10 @@ Each scenario directory holds the implementations, setup instructions and requir
 To run every scenario in one go, sequentially and in the same order as CI:
 
 ```bash
-ENVIO_API_TOKEN=your-token node scripts/run-benchmarks.ts
+ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node scripts/run-benchmarks.ts
 ```
 
-It forwards its arguments to each scenario, so `node scripts/run-benchmarks.ts envio ponder --duration=100` selects indexers and the window exactly as running a scenario directly does. Limit it to some scenarios with `--cases=erc20-transfer-events`.
+It needs the same credentials as the scenarios it runs — an [Envio](https://envio.dev) API token, and an [SQD](https://portal.sqd.dev) API key for the Sqd implementation — and forwards its arguments to each scenario, so `node scripts/run-benchmarks.ts envio ponder --duration=100` selects indexers and the window exactly as running a scenario directly does. Limit it to some scenarios with `--cases=erc20-transfer-events`.
 
 
 ## Contributing

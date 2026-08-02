@@ -96,11 +96,15 @@ jobs:
           restore-keys: cargo-${{ inputs.case }}-
 
       - name: Prepare services
+        # Inputs and matrix values are read from the environment rather than
+        # expanded into the script text: they reach the shell as data, and
+        # quoting stays correct whatever they contain.
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          INDEXER: ${{ matrix.indexer }}
+          CASE: ${{ inputs.case }}
         run: |
-          INDEXER="${{ matrix.indexer }}"
-          CASE_DIR="cases/${{ inputs.case }}"
+          CASE_DIR="cases/$CASE"
 
           # Pre-pull Docker images so pulls don't count toward benchmark time
           case "$INDEXER" in
@@ -158,8 +162,11 @@ jobs:
       - name: Run benchmark
         run: |
           set -o pipefail
-          node cases/${{ inputs.case }}/run.ts ${{ matrix.indexer }} --duration="${{ inputs.duration }}" 2>&1 | tee /tmp/benchmark-output.txt
+          node "cases/$CASE/run.ts" "$INDEXER" --duration="$DURATION" 2>&1 | tee /tmp/benchmark-output.txt
         env:
+          CASE: ${{ inputs.case }}
+          INDEXER: ${{ matrix.indexer }}
+          DURATION: ${{ inputs.duration }}
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
           # Sqd's archive (v2.archive.subsquid.io) requires an API key as of
           # 19 May 2026. The @subsquid archive client reads it from SQD_API_KEY.
@@ -169,8 +176,11 @@ jobs:
 
       - name: Post results to job summary
         if: always()
+        env:
+          CASE: ${{ inputs.case }}
+          INDEXER: ${{ matrix.indexer }}
         run: |
-          echo "## ${{ inputs.case }} / ${{ matrix.indexer }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "## $CASE / $INDEXER" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/benchmark-output.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "No output captured" >> "$GITHUB_STEP_SUMMARY"
