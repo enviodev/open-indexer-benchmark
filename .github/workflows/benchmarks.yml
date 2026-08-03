@@ -26,15 +26,29 @@ jobs:
   setup:
     name: Setup matrix
     runs-on: ubuntu-latest
-    # Only echoes the matrix to GITHUB_OUTPUT; touches neither repo nor API.
-    permissions: {}
+    # Reads the diff to scope pull request runs; touches nothing else.
+    permissions:
+      contents: read
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
       cases: ${{ steps.set-matrix.outputs.cases }}
       case1: ${{ steps.set-matrix.outputs.case1 }}
       case2: ${{ steps.set-matrix.outputs.case2 }}
+      indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
+      indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
+      partial: ${{ steps.set-matrix.outputs.partial }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          # The pull request scope comes from `git diff` against the base
+          # commit, which a shallow clone does not have.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - id: set-matrix
         # Dispatch inputs are read from the environment rather than expanded
         # into the script text, so they reach the shell as data.
@@ -42,19 +56,20 @@ jobs:
           INDEXERS: ${{ inputs.indexers }}
           CASES: ${{ inputs.cases }}
           DURATION_INPUT: ${{ inputs.duration }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ -z "$INDEXERS" ]; then
-            echo 'matrix=["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]' >> "$GITHUB_OUTPUT"
+            INDEXERS_JSON='["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]'
           else
-            MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
-            echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+            INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
             CASES_JSON='["erc20-account-balances","erc20-transfer-events"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
-          echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
+          FULL_CASES_JSON="$CASES_JSON"
 
           COUNT=$(echo "$CASES_JSON" | jq 'length')
 
@@ -75,15 +90,60 @@ jobs:
             echo "Only 2 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
             exit 1
           fi
+
+          # Every scenario measures every indexer, unless a pull request
+          # narrows it: there a full run is fourteen long jobs against shared
+          # data endpoints, nearly all of them re-measuring untouched code.
+          # `main` and manual runs stay full — they publish the README table,
+          # which has to hold a complete set of results.
+          INDEXERS1="$INDEXERS_JSON"
+          INDEXERS2="$INDEXERS_JSON"
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # HEAD is the merge commit, so its diff against the base commit is
+            # exactly what the pull request changes.
+            CHANGED_FILES=$(git diff --name-only "$BASE_SHA" HEAD)
+            echo "Changed files:"
+            echo "$CHANGED_FILES" | sed 's/^/  /'
+
+            SCOPE=$(CHANGED_FILES="$CHANGED_FILES" ALL_CASES="$CASES_JSON" \
+              ALL_INDEXERS="$INDEXERS_JSON" node scripts/select-scope.ts)
+            echo "Scope: $SCOPE"
+
+            CASES_JSON=$(echo "$SCOPE" | jq -c '.cases')
+            CASE1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')
+            CASE2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')
+            INDEXERS1=$(echo "$SCOPE" | jq -c --arg c "$CASE1" '.indexers[$c] // []')
+            INDEXERS2=$(echo "$SCOPE" | jq -c --arg c "$CASE2" '.indexers[$c] // []')
+
+            if [ -z "$CASE1" ]; then
+              echo "Nothing benchmark-related changed; skipping the benchmark run."
+            fi
+          fi
+
+          # Whether anything was left out, so the summary can tell a row that
+          # was deliberately not re-run apart from one whose job failed.
+          if [ "$CASES_JSON" = "$FULL_CASES_JSON" ] &&
+             [ "$INDEXERS1" = "$INDEXERS_JSON" ] &&
+             { [ -z "$(echo "$CASES_JSON" | jq -r '.[1] // ""')" ] || [ "$INDEXERS2" = "$INDEXERS_JSON" ]; }; then
+            echo "partial=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "partial=1" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
           echo "case1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')" >> "$GITHUB_OUTPUT"
           echo "case2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')" >> "$GITHUB_OUTPUT"
+          echo "indexers1=$INDEXERS1" >> "$GITHUB_OUTPUT"
+          echo "indexers2=$INDEXERS2" >> "$GITHUB_OUTPUT"
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
-  # The harness has two test scripts — scripts/test-verification.ts and
-  # scripts/test-tables.ts — that are run locally when either the verification
-  # layer or the result table changes. They are deliberately not a CI job: the
-  # verification test needs a live HyperSync token, which forks do not have.
+  # The harness has three test scripts — scripts/test-verification.ts,
+  # scripts/test-tables.ts and scripts/test-scope.ts — that are run locally when
+  # the verification layer, the result table or the pull request run filter
+  # changes. They are deliberately not a CI job: the verification test needs a
+  # live HyperSync token, which forks do not have.
 
   # One scenario at a time: every indexer of scenario 1 runs in parallel, and
   # scenario 2 only starts once they have all finished. Keeping the scenarios
@@ -96,7 +156,7 @@ jobs:
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ needs.setup.outputs.case1 }}
-      indexers: ${{ needs.setup.outputs.matrix }}
+      indexers: ${{ needs.setup.outputs.indexers1 }}
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
@@ -110,14 +170,17 @@ jobs:
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ needs.setup.outputs.case2 }}
-      indexers: ${{ needs.setup.outputs.matrix }}
+      indexers: ${{ needs.setup.outputs.indexers2 }}
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
   summary:
     name: Summary
     needs: [setup, scenario-1, scenario-2]
-    if: always() && needs.setup.result == 'success'
+    # A pull request that changed nothing benchmark-related runs no scenario,
+    # so there is nothing to tabulate — and an empty table reads as "measured,
+    # found nothing" rather than "not measured".
+    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -135,6 +198,7 @@ jobs:
       - name: Build comparison tables
         env:
           CASES: ${{ needs.setup.outputs.cases }}
+          PARTIAL_RUN: ${{ needs.setup.outputs.partial }}
         run: node scripts/build-tables.ts
 
       - name: Comment results on PR
@@ -142,6 +206,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           CASES: ${{ needs.setup.outputs.cases }}
+          PARTIAL_RUN: ${{ needs.setup.outputs.partial }}
         with:
           script: |
             const fs = require('fs');
@@ -166,9 +231,17 @@ jobs:
 
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
+            // Say so when the run was narrowed, so a ⚠️ row reads as "not
+            // re-run by this pull request" rather than "this indexer broke".
+            const scopeNote = process.env.PARTIAL_RUN === '1'
+              ? 'Only the scenarios and indexers this pull request touches were re-run; '
+                + 'the remaining rows are carried forward from the last published results.'
+              : '';
+
             const body = [
               '## Benchmark Results',
               '',
+              ...(scopeNote ? [scopeNote, ''] : []),
               sections.join('\n\n'),
               '',
               `[Full output](${runUrl}) is available in the workflow run logs.`,

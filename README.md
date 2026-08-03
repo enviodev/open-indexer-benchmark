@@ -81,6 +81,8 @@ Each scenario runs in two phases.
 
 All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per source per scenario, each running the command that tool's own documentation recommends for production.
 
+The published numbers come from full runs on `main`. A pull request only re-runs what it changes: a change under one tool's directory benchmarks that tool in that scenario, a change to a scenario's own run logic benchmarks every tool in that scenario, and a change to the shared harness benchmarks everything. Rows nobody re-ran are carried forward from the last published results and marked as such in the pull request comment.
+
 
 ## Sentio Benchmark Cases, May 2025
 

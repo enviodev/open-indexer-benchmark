@@ -81,9 +81,16 @@ for (const benchCase of cases) {
     carried.push(`${prior.name} via ${prior.cells.source}`);
   }
   if (carried.length > 0) {
+    // A pull request only runs the indexers it touched, so most rows being
+    // carried forward is the normal case there rather than a failure to
+    // annotate. The row itself still says it was carried forward.
+    const message =
+      `${title}: no fresh result for ${carried.join(", ")} this run — ` +
+      `carried forward the last published value(s).`;
     console.log(
-      `::warning::${title}: no fresh result for ${carried.join(", ")} ` +
-        `this run — carried forward the last published value(s). Check the failed job(s).`
+      process.env.PARTIAL_RUN === "1"
+        ? `${message} Not selected to run by this run's scope.`
+        : `::warning::${message} Check the failed job(s).`
     );
   }
 
