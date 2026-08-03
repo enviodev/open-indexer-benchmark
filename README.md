@@ -79,7 +79,7 @@ Each scenario runs in two phases.
 
 **Source**: where a tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool — Envio Indexer supports both HyperSync and RPC and so appears twice. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
 
-All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per source per scenario, each running the command that tool's own documentation recommends for production. Scenarios run one at a time — every tool of a scenario in parallel, the next scenario only once they have all finished — so a scenario's numbers are not shaped by what another scenario was doing on the shared data endpoints.
+All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per source per scenario, each running the command that tool's own documentation recommends for production.
 
 
 ## Sentio Benchmark Cases, May 2025
