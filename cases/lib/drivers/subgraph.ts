@@ -148,6 +148,15 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
           // gnd defaults to debug logging, which writes a line per trigger and
           // costs throughput no production deployment pays.
           GRAPH_LOG: "info",
+          // While syncing, Graph Node accumulates entity changes in memory and
+          // writes them in one batch every 300 seconds (or 10 MB). Progress is
+          // read from PostgreSQL here, so with the default a throughput window
+          // shorter than that observes an empty database and reports a rate of
+          // zero for an indexer that was working the whole time — which is what
+          // the erc20-transfer-events table published. Batching stays on, just
+          // bounded well inside the window; the reading is then at most this
+          // many seconds stale.
+          GRAPH_STORE_WRITE_BATCH_DURATION: "5",
         }
       );
       proc.on("exit", () => (done = true));
