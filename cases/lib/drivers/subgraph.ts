@@ -1,6 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { exec, kill, psql, start, waitPg } from "../process.ts";
 import {
   BENCHMARK_PORT,
@@ -23,13 +24,24 @@ export const SUBGRAPH_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PO
 const GRAPH_NODE_VERSION = "v0.44.0";
 
 /** Ports gnd binds besides the shared GraphQL one. */
+/**
+ * Where the `gnd` binary lives, shared by every scenario rather than installed
+ * once per case. It is the same ~107 MB download whichever scenario asks for
+ * it, and scenarios run one after another, so nothing races to write it.
+ */
+const BIN_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+  ".graph-node/bin"
+);
+
 const INDEX_NODE_PORT = 19_882;
 const ADMIN_PORT = 19_883;
 const METRICS_PORT = 19_884;
 
 export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const dir = resolve(config.dir, "subgraph");
-  const gnd = resolve(dir, "bin/gnd");
+  const gnd = resolve(BIN_DIR, "gnd");
   let proc: ChildProcess | null = null;
   let done = false;
 
@@ -67,8 +79,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       // they already had after a version bump — bin/ is gitignored and nothing
       // else ever clears it. CI is covered by the cache key, which changes with
       // this file, but only incidentally, and only in CI.
-      const binDir = resolve(dir, "bin");
-      const versionFile = resolve(binDir, ".gnd-version");
+      const versionFile = resolve(BIN_DIR, ".gnd-version");
       const installed =
         existsSync(gnd) && existsSync(versionFile)
           ? readFileSync(versionFile, "utf8").trim()
@@ -79,13 +90,13 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
         // `graph node install` renames the downloaded binary into --bin-dir
         // without creating it first, and fails with ENOENT if it is missing —
         // which it is on any run the cache did not restore.
-        mkdirSync(binDir, { recursive: true });
+        mkdirSync(BIN_DIR, { recursive: true });
         await exec(
           "pnpm",
           [
             "exec", "graph", "node", "install",
             "--tag", GRAPH_NODE_VERSION,
-            "--bin-dir", binDir,
+            "--bin-dir", BIN_DIR,
           ],
           dir
         );
