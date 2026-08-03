@@ -1,0 +1,46 @@
+specVersion: 1.3.0
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: SafeProxyFactory
+    network: mainnet
+    source:
+      address: "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2"
+      abi: SafeProxyFactory
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Safe
+      abis:
+        - name: SafeProxyFactory
+          file: ./abis/SafeProxyFactory.json
+      eventHandlers:
+        - event: ProxyCreation(address,address)
+          handler: handleProxyCreation
+      file: ./src/mapping.ts
+# Instantiated per ProxyCreation by the handler above. A template carries no
+# address of its own — nor a block range, which only a dataSource may declare.
+templates:
+  - kind: ethereum
+    name: Safe
+    network: mainnet
+    source:
+      abi: Safe
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - SafeSetup
+      abis:
+        - name: Safe
+          file: ./abis/Safe.json
+      eventHandlers:
+        - event: SafeSetup(indexed address,address[],uint256,address,address)
+          handler: handleSafeSetup
+      file: ./src/mapping.ts

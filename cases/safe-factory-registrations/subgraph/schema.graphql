@@ -1,0 +1,16 @@
+# Both entities are written once and never updated, so they are declared
+# immutable — the storage layout The Graph's docs recommend for event data.
+type Safe @entity(immutable: true) {
+  id: ID!
+  address: String!
+  singleton: String!
+  timestamp: Int!
+}
+
+type SafeSetup @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  initiator: String!
+  threshold: BigInt!
+  timestamp: Int!
+}

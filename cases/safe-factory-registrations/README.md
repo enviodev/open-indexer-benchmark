@@ -47,6 +47,7 @@ Every implementation here is written the way that tool's own documentation recom
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
 - **Sqd** — [sqd/](./sqd/)
+- **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
@@ -108,6 +109,18 @@ Runs the processor and GraphQL server as separate native Node.js processes, with
 There is no address list to give the processor for the children, so `SafeSetup` is subscribed to by topic chain-wide and the handler drops logs from proxies this factory did not create — the pattern SQD's own factory-contract guide describes. The set of known proxies is built as the batch is walked, in chain order.
 
 Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+
+### Subgraph (Graph Node)
+
+Runs a pinned `gnd` binary against its own Postgres container. The proxy is
+indexed through a `Safe` template instantiated per `ProxyCreation` with
+`SafeTemplate.create(proxy)`.
+
+Only the factory data source carries the block range: a template may not declare
+`startBlock` or `endBlock`, so Graph Node has no end block for the children it
+creates and keeps following them past the range. The run still stops on the
+event and block targets the harness watches — the process is killed rather than
+exiting on its own, as with several of the other drivers.
 
 ### SubQuery
 
