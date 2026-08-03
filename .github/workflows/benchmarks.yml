@@ -69,7 +69,6 @@ jobs:
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
-          FULL_CASES_JSON="$CASES_JSON"
 
           COUNT=$(echo "$CASES_JSON" | jq 'length')
 
@@ -98,10 +97,17 @@ jobs:
           # which has to hold a complete set of results.
           INDEXERS1="$INDEXERS_JSON"
           INDEXERS2="$INDEXERS_JSON"
+          PARTIAL=0
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            # HEAD is the merge commit, so its diff against the base commit is
-            # exactly what the pull request changes.
+            # The filter has no execution path other than right here, so it
+            # vouches for itself before it decides anything.
+            node scripts/test-scope.ts
+
+            # HEAD is the merge commit GitHub built against the base. The
+            # event's base sha can lag the merge base it actually used, in
+            # which case files from the base branch leak into the diff — that
+            # only ever widens the selection, never narrows it.
             CHANGED_FILES=$(git diff --name-only "$BASE_SHA" HEAD)
             echo "Changed files:"
             echo "$CHANGED_FILES" | sed 's/^/  /'
@@ -111,31 +117,26 @@ jobs:
             echo "Scope: $SCOPE"
 
             CASES_JSON=$(echo "$SCOPE" | jq -c '.cases')
-            CASE1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')
-            CASE2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')
-            INDEXERS1=$(echo "$SCOPE" | jq -c --arg c "$CASE1" '.indexers[$c] // []')
-            INDEXERS2=$(echo "$SCOPE" | jq -c --arg c "$CASE2" '.indexers[$c] // []')
+            [ "$(echo "$SCOPE" | jq '.full')" = "true" ] || PARTIAL=1
 
-            if [ -z "$CASE1" ]; then
+            if [ "$CASES_JSON" = "[]" ]; then
               echo "Nothing benchmark-related changed; skipping the benchmark run."
             fi
           fi
 
-          # Whether anything was left out, so the summary can tell a row that
-          # was deliberately not re-run apart from one whose job failed.
-          if [ "$CASES_JSON" = "$FULL_CASES_JSON" ] &&
-             [ "$INDEXERS1" = "$INDEXERS_JSON" ] &&
-             { [ -z "$(echo "$CASES_JSON" | jq -r '.[1] // ""')" ] || [ "$INDEXERS2" = "$INDEXERS_JSON" ]; }; then
-            echo "partial=0" >> "$GITHUB_OUTPUT"
-          else
-            echo "partial=1" >> "$GITHUB_OUTPUT"
+          CASE1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')
+          CASE2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            INDEXERS1=$(echo "$SCOPE" | jq -c --arg c "$CASE1" '.indexers[$c] // []')
+            INDEXERS2=$(echo "$SCOPE" | jq -c --arg c "$CASE2" '.indexers[$c] // []')
           fi
 
           echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
-          echo "case1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')" >> "$GITHUB_OUTPUT"
-          echo "case2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')" >> "$GITHUB_OUTPUT"
+          echo "case1=$CASE1" >> "$GITHUB_OUTPUT"
+          echo "case2=$CASE2" >> "$GITHUB_OUTPUT"
           echo "indexers1=$INDEXERS1" >> "$GITHUB_OUTPUT"
           echo "indexers2=$INDEXERS2" >> "$GITHUB_OUTPUT"
+          echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
@@ -143,7 +144,9 @@ jobs:
   # scripts/test-tables.ts and scripts/test-scope.ts — that are run locally when
   # the verification layer, the result table or the pull request run filter
   # changes. They are deliberately not a CI job: the verification test needs a
-  # live HyperSync token, which forks do not have.
+  # live HyperSync token, which forks do not have. The one exception is
+  # test-scope.ts, which the setup job runs before trusting the filter's
+  # decision, since it needs no credentials and takes under a second.
 
   # One scenario at a time: every indexer of scenario 1 runs in parallel, and
   # scenario 2 only starts once they have all finished. Keeping the scenarios

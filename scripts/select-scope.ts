@@ -13,11 +13,19 @@
 //   cases/lib/drivers/<x>.ts    that indexer, in every scenario
 //   cases/lib/**                every indexer, every scenario
 //   .github/workflows/**        every indexer, every scenario
+//   this file, build-tables.ts  every indexer, every scenario — they are the
+//                               CI pipeline itself, and their only execution
+//                               is in it: a narrowed run would ship them to
+//                               main unexercised
 //
 // Anything else — docs, local scripts — runs nothing. Emits JSON on stdout:
 //
 //   {"cases":["erc20-transfer-events"],
-//    "indexers":{"erc20-transfer-events":["ponder"]}}
+//    "indexers":{"erc20-transfer-events":["ponder"]},
+//    "full":false}
+//
+// `full` says nothing was narrowed away, so the summary can tell a row that
+// was deliberately not re-run apart from one whose job failed.
 //
 // Note that `main` and workflow_dispatch runs never call this: they publish the
 // README table and the table has to hold a full set of results.
@@ -31,9 +39,20 @@ const DRIVER_INDEXERS: Record<string, string[]> = { envio: ["envio", "envio-rpc"
 /** Driver modules that are shared plumbing rather than one tool's driver. */
 const SHARED_DRIVERS = new Set(["common", "index"]);
 
+/**
+ * Scripts that are part of the CI pipeline itself. Nothing else executes
+ * them, so a change to one has to run the pipeline in full.
+ */
+const PIPELINE_SCRIPTS = new Set([
+  "scripts/select-scope.ts",
+  "scripts/build-tables.ts",
+]);
+
 export interface Scope {
   cases: string[];
   indexers: Record<string, string[]>;
+  /** True when nothing was narrowed away relative to a full run. */
+  full: boolean;
 }
 
 export function selectScope(
@@ -59,16 +78,25 @@ export function selectScope(
     const file = raw.trim();
     if (!file) continue;
 
-    // Documentation never changes what a run measures, wherever it sits.
-    if (file.endsWith("README.md")) continue;
+    const parts = file.split("/");
 
-    if (file.startsWith(".github/workflows/")) {
+    // Documentation never changes what a run measures, wherever it sits.
+    if (parts[parts.length - 1] === "README.md") continue;
+
+    if (file.startsWith(".github/workflows/") || PIPELINE_SCRIPTS.has(file)) {
       addEverywhere(allIndexers);
       continue;
     }
 
-    const parts = file.split("/");
-    if (parts[0] !== "cases" || parts.length < 3) continue;
+    if (parts[0] !== "cases") continue;
+
+    // A file directly under cases/ belongs to no scenario in particular, so
+    // it is presumed shared. None exist today; running everything is the
+    // failure mode that only costs runner time.
+    if (parts.length === 2) {
+      addEverywhere(allIndexers);
+      continue;
+    }
 
     if (parts[1] === "lib") {
       // cases/lib/drivers/<name>.ts drives one tool everywhere; everything
@@ -99,7 +127,10 @@ export function selectScope(
     // however the diff happened to be ordered.
     indexers[benchCase] = allIndexers.filter((i) => selected.get(benchCase)!.has(i));
   }
-  return { cases, indexers };
+  const full =
+    cases.length === allCases.length &&
+    cases.every((c) => indexers[c].length === allIndexers.length);
+  return { cases, indexers, full };
 }
 
 if (import.meta.filename === process.argv[1]) {
