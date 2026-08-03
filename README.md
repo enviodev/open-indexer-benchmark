@@ -71,7 +71,7 @@ Each scenario runs in two phases.
 
 **Verification**: the indexer indexes a fixed block range to completion, then its database is checked against ground truth and measured on disk. Both are only comparable when every indexer holds identical data — which a fixed block range guarantees and a fixed time window does not.
 
-**Throughput**: the indexer re-runs from a clean database for 60 seconds, stopping just short of the chain head so the measurement stays in backfill rather than drifting into head tracking. The window runs twice and the better rate is reported, since contention on a shared CI runner only ever costs throughput. Indexers too slow to finish the verification range within the window skip this phase and report their rate from that run instead.
+**Throughput**: the indexer re-runs from a clean database for 100 seconds, stopping just short of the chain head so the measurement stays in backfill rather than drifting into head tracking. The window runs twice and the better rate is reported, since contention on a shared CI runner only ever costs throughput. Indexers too slow to finish the verification range within the window skip this phase and report their rate from that run instead.
 
 **Data correctness**: ground truth is built from [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs by replaying each scenario's documented logic, then compared against the indexer's own database by a checksum that ignores row order but catches missing rows, duplicated rows, and wrong values. ✅ every entity matched, ❌ the data disagrees, ❓ the check could not run; the latter two carry a numbered note below the table.
 
@@ -114,6 +114,14 @@ Each scenario directory holds the implementations, setup instructions and requir
 - State Aggregation — [./cases/erc20-account-balances/](./cases/erc20-account-balances/README.md)
 - Decoded Event Stream — [./cases/erc20-transfer-events/](./cases/erc20-transfer-events/README.md)
 - Sentio Benchmark Cases, May 2025 — [./sentio-benchmarks-may-2025/](./sentio-benchmarks-may-2025/README.md)
+
+To run every scenario in one go, sequentially and in the same order as CI:
+
+```bash
+ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node scripts/run-benchmarks.ts
+```
+
+It needs the same credentials as the scenarios it runs — an [Envio](https://envio.dev) API token, and an [SQD](https://portal.sqd.dev) API key for the Sqd implementation — and forwards its arguments to each scenario, so `node scripts/run-benchmarks.ts envio ponder --duration=100` selects indexers and the window exactly as running a scenario directly does. Limit it to some scenarios with `--cases=erc20-transfer-events`.
 
 
 ## Contributing

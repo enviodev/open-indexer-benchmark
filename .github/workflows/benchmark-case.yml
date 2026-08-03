@@ -1,0 +1,195 @@
+name: Benchmark case
+
+# One scenario's worth of benchmark jobs, called once per scenario by
+# benchmarks.yml. It lives in its own file so the caller can chain the
+# scenarios with `needs`: GitHub has no way to order a matrix, and running
+# every scenario's jobs at once puts twice as many indexers on the shared
+# data endpoints at the same time.
+
+on:
+  workflow_call:
+    inputs:
+      case:
+        description: 'Case directory under cases/, e.g. erc20-transfer-events'
+        required: true
+        type: string
+      indexers:
+        description: 'JSON array of indexers to benchmark'
+        required: true
+        type: string
+      duration:
+        description: 'Throughput window in seconds'
+        required: true
+        type: string
+
+jobs:
+  benchmark:
+    name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Runs third-party indexer binaries, so it gets the narrowest token that
+    # still works: read-only, and enough to resolve a public release tag.
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # The indexers of one scenario run concurrently. GitHub gives each matrix
+      # job its own runner VM, so compute (CPU/RAM/Postgres/Docker) is isolated
+      # already, and the shared Envio endpoint is not rate limited, so
+      # concurrent jobs do not compete for it. Wall-clock time for a scenario is
+      # the slowest single job rather than the sum.
+      matrix:
+        indexer: ${{ fromJSON(inputs.indexers) }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testing
+          POSTGRES_DB: envio-dev
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # The Graph Node binary is a ~107 MB download. It is pinned to a release
+      # tag in the driver, so the cache key only has to change when that does.
+      - name: Cache Graph Node binary
+        if: matrix.indexer == 'subgraph'
+        uses: actions/cache@v4
+        with:
+          path: cases/${{ inputs.case }}/subgraph/bin
+          # Keyed per case as well as per driver revision: both cases install
+          # the same binary into their own directory, and a shared key would
+          # have the second job to finish fail to save what the first already
+          # wrote under that name.
+          key: gnd-${{ inputs.case }}-${{ hashFiles('cases/lib/drivers/subgraph.ts') }}
+
+      # The rust rindexer project pulls in alloy and the rindexer crate, which
+      # is several minutes of compilation from cold. It happens before the
+      # timer starts, so it costs CI wall clock rather than benchmark
+      # accuracy — the cache keeps that cost off most runs.
+      - name: Cache cargo build
+        if: matrix.indexer == 'rindexer'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cases/${{ inputs.case }}/rindexer/target
+          key: cargo-${{ inputs.case }}-${{ hashFiles(format('cases/{0}/rindexer/Cargo.toml', inputs.case)) }}
+          restore-keys: cargo-${{ inputs.case }}-
+
+      - name: Prepare services
+        # Inputs and matrix values are read from the environment rather than
+        # expanded into the script text: they reach the shell as data, and
+        # quoting stays correct whatever they contain.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INDEXER: ${{ matrix.indexer }}
+          CASE: ${{ inputs.case }}
+        run: |
+          CASE_DIR="cases/$CASE"
+
+          # Pre-pull Docker images so pulls don't count toward benchmark time
+          case "$INDEXER" in
+            ponder)
+              docker pull postgres:17-alpine
+              ;;
+            rindexer)
+              docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
+              # A rust project is a crate of its own and runs its own binary,
+              # so it is compiled here rather than installing the CLI. The
+              # build is outside the benchmark timer either way.
+              if [ -f "$CASE_DIR/rindexer/Cargo.toml" ]; then
+                rustup update stable
+                rustup default stable
+                cargo build --release --manifest-path "$CASE_DIR/rindexer/Cargo.toml"
+              else
+                # install.sh resolves "latest" via an UNAUTHENTICATED GitHub API
+                # call (60 req/h, shared across Actions runners) and does not guard
+                # an empty result: when throttled the version is blank and the
+                # download URL 404s (".../releases/download/v/..."), failing the job
+                # and silently dropping rindexer from the table. Resolve the tag
+                # ourselves with an authenticated call (5000 req/h) and pin it via
+                # --version, which still tracks the latest release.
+                RINDEXER_VERSION=""
+                for i in 1 2 3; do
+                  RINDEXER_VERSION=$(curl -fsSL \
+                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    https://api.github.com/repos/joshstevens19/rindexer/releases/latest \
+                    | jq -r '.tag_name // empty' | sed 's/^v//') || true
+                  [ -n "$RINDEXER_VERSION" ] && break
+                  echo "rindexer version lookup attempt $i failed; retrying..." >&2
+                  sleep $((i * 5))
+                done
+                if [ -z "$RINDEXER_VERSION" ]; then
+                  echo "Failed to resolve latest rindexer version" >&2
+                  exit 1
+                fi
+                echo "Installing rindexer v$RINDEXER_VERSION"
+                curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$RINDEXER_VERSION"
+              fi
+              ;;
+            subgraph)
+              docker pull postgres:17-alpine
+              ;;
+            subquery)
+              docker compose -f "$CASE_DIR/subquery/docker-compose.yml" pull
+              docker compose -f "$CASE_DIR/subquery/docker-compose.yml" build
+              ;;
+            sqd)
+              docker compose -f "$CASE_DIR/sqd/docker-compose.yml" pull
+              ;;
+          esac
+
+      - name: Run benchmark
+        run: |
+          set -o pipefail
+          node "cases/$CASE/run.ts" "$INDEXER" --duration="$DURATION" 2>&1 | tee /tmp/benchmark-output.txt
+        env:
+          CASE: ${{ inputs.case }}
+          INDEXER: ${{ matrix.indexer }}
+          DURATION: ${{ inputs.duration }}
+          ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
+          # Sqd's archive (v2.archive.subsquid.io) requires an API key as of
+          # 19 May 2026. The @subsquid archive client reads it from SQD_API_KEY.
+          # Get a key at https://portal.sqd.dev and add it as the SQD_API_KEY
+          # repo secret. Without it, the sqd jobs report 0 (CREDENTIALS_INVALID).
+          SQD_API_KEY: ${{ secrets.SQD_API_KEY }}
+
+      - name: Post results to job summary
+        if: always()
+        env:
+          CASE: ${{ inputs.case }}
+          INDEXER: ${{ matrix.indexer }}
+        run: |
+          echo "## $CASE / $INDEXER" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/benchmark-output.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "No output captured" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ inputs.case }}--${{ matrix.indexer }}
+          path: /tmp/benchmark-output.txt
+          if-no-files-found: ignore

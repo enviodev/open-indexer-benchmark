@@ -61,7 +61,7 @@ const PHASE_A_TIMEOUT_S = 900;
  */
 const THROUGHPUT_RUNS = 2;
 
-const DEFAULT_WINDOW_S = 60;
+const DEFAULT_WINDOW_S = 100;
 
 // ── Cleanup on unexpected exit ─────────────────────────────────────────
 
