@@ -12,3 +12,21 @@ type SafeSetup {
   threshold: BigInt!
   timestamp: Int!
 }
+
+type SafeReceived {
+  id: ID!
+  safe: String!
+  sender: String!
+  value: BigInt!
+  timestamp: Int!
+}
+
+type SafeModuleTransaction {
+  id: ID!
+  safe: String!
+  module: String!
+  to: String!
+  value: BigInt!
+  operation: Int!
+  timestamp: Int!
+}

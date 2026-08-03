@@ -38,4 +38,30 @@ export const SafeAbi = [
     name: "SafeSetup",
     type: "event",
   },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "sender", type: "address" },
+      { indexed: false, internalType: "uint256", name: "value", type: "uint256" },
+    ],
+    name: "SafeReceived",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: false, internalType: "address", name: "module", type: "address" },
+      { indexed: false, internalType: "address", name: "to", type: "address" },
+      { indexed: false, internalType: "uint256", name: "value", type: "uint256" },
+      { indexed: false, internalType: "bytes", name: "data", type: "bytes" },
+      {
+        indexed: false,
+        internalType: "enum Enum.Operation",
+        name: "operation",
+        type: "uint8",
+      },
+    ],
+    name: "SafeModuleTransaction",
+    type: "event",
+  },
 ] as const;

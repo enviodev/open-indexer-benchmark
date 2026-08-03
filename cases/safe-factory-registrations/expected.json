@@ -1,8 +1,8 @@
 {
   "startBlock": 24600000,
   "endBlock": 24609162,
-  "generatedAt": "2026-08-03T11:53:59.038Z",
-  "totalEvents": 25352,
+  "generatedAt": "2026-08-03T13:40:38.383Z",
+  "totalEvents": 25421,
   "entities": {
     "safe": {
       "rowCount": 25096,
@@ -11,6 +11,14 @@
     "safeSetup": {
       "rowCount": 256,
       "checksum": "140012777770930080095"
+    },
+    "safeReceived": {
+      "rowCount": 32,
+      "checksum": "20758804309159876026"
+    },
+    "safeModuleTransaction": {
+      "rowCount": 37,
+      "checksum": "20380708079051395120"
     }
   }
 }

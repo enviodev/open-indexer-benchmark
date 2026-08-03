@@ -13,7 +13,7 @@ The other cases fix the contract set in configuration. This one does not: nothin
   | v1.3.0 (eip155) | [`0xc2283458…10bc`](https://etherscan.io/address/0xc22834581ebc8527d974f8a1c97e1bea4ef910bc) | `(address proxy, address singleton)` |
   | v1.4.1 | [`0x4e1dcf7a…ec67`](https://etherscan.io/address/0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67) | `(address indexed proxy, address singleton)` |
   | v1.5.0 | [`0x14f2982d…5e7b`](https://etherscan.io/address/0x14f2982d601c9458f93bd70b218933a6f8165e7b) | `(address indexed proxy, address singleton)` |
-- **Events Indexed**: `ProxyCreation` on the factories, `SafeSetup` on every proxy they create
+- **Events Indexed**: `ProxyCreation` on the factories; `SafeSetup`, `SafeReceived` and `SafeModuleTransaction` on every proxy they create
 - **Block Range**: 24,600,000 to 24,660,000
 - **Verification Range**: 24,600,000 to 24,609,162 — indexed to completion, then checked against `expected.json`
 - **Child contracts registered in that range**: 25,096
@@ -37,7 +37,24 @@ For each **SafeSetup** event emitted by a registered proxy:
 
 1. Insert a safe setup record with the event id, the emitting proxy, the initiator, the threshold, and the timestamp.
 
+For each **SafeReceived** and **SafeModuleTransaction** event emitted by a registered proxy:
+
+1. Insert a record with the event id, the emitting proxy, the event's own arguments, and the timestamp.
+
 There is no aggregation and nothing is read back. Registration cost is the variable under test, so everything else is kept to a plain insert.
+
+### The other two child events
+
+`SafeSetup` fires once, in the transaction that creates the proxy. The other two fire for the rest of the proxy's life, so unlike the setup they arrive when the child is already registered and no tool loses them to discovery order. They are here for what they cost to match:
+
+| event | for this factory's children | chain-wide, same blocks |
+| --- | --- | --- |
+| `SafeReceived` | 413 | 52,882 |
+| `SafeModuleTransaction` | 298 | 840 |
+
+A tool that hands its child address set to the data source pays for the first column. A tool that subscribes by topic and filters in the handler pays for the second — 128 logs fetched and discarded for every one kept, on a contract set of 199,977 addresses. `SafeModuleTransaction` also carries a dynamic `bytes` payload, so decoding it is not free either.
+
+These two were picked because they have a single event layout across every Safe version. Most of the rest of the Safe ABI — `ExecutionSuccess`, `EnabledModule`, `AddedOwner`, `RemovedOwner` — changed an argument to `indexed` in 1.4.x while keeping the signature, so one topic0 arrives in two layouts *from the same contract*. The factory's own `ProxyCreation` has that problem too, but there the emitting address says which layout to expect; for a child it cannot be known ahead of the log. Only some of the tools here can express that, so indexing those events would measure which tool tolerates a mis-decode rather than which indexes faster.
 
 ### The SafeSetup ordering, and why it is in the case
 

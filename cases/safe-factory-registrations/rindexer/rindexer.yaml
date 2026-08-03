@@ -59,6 +59,8 @@ contracts:
     abi: ./abis/Safe.abi.json
     include_events:
       - SafeSetup
+      - SafeReceived
+      - SafeModuleTransaction
 
 global:
   health_port: 8082

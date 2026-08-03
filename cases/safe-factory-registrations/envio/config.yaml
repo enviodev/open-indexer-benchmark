@@ -15,6 +15,8 @@ contracts:
   - name: Safe
     events:
       - event: "SafeSetup(address indexed initiator, address[] owners, uint256 threshold, address initializer, address fallbackHandler)"
+      - event: "SafeReceived(address indexed sender, uint256 value)"
+      - event: "SafeModuleTransaction(address module, address to, uint256 value, bytes data, uint8 operation)"
 chains:
   - id: 1 # Ethereum Mainnet
     start_block: 24600000

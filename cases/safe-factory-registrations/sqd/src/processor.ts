@@ -67,7 +67,11 @@ export const processor = new EvmBatchProcessor()
     // handler discards logs from proxies these factories did not create. This
     // is the pattern SQD's own factory-contract guide describes.
     .addLog({
-        topic0: [safeAbi.events.SafeSetup.topic],
+        topic0: [
+            safeAbi.events.SafeSetup.topic,
+            safeAbi.events.SafeReceived.topic,
+            safeAbi.events.SafeModuleTransaction.topic,
+        ],
     })
 
 export type Fields = EvmBatchProcessorFields<typeof processor>

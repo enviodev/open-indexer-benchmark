@@ -108,6 +108,22 @@ const project: EthereumProject = {
               ],
             },
           },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleSafeReceived",
+            filter: {
+              topics: ["SafeReceived(address indexed sender, uint256 value)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleSafeModuleTransaction",
+            filter: {
+              topics: [
+                "SafeModuleTransaction(address module, address to, uint256 value, bytes data, uint8 operation)",
+              ],
+            },
+          },
         ],
       },
     },

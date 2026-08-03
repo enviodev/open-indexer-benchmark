@@ -12,6 +12,8 @@ import {
   uintAtWord,
   type DecodedLog,
   PROXY_CREATION_TOPIC,
+  SAFE_MODULE_TRANSACTION_TOPIC,
+  SAFE_RECEIVED_TOPIC,
   SAFE_SETUP_TOPIC,
 } from "../lib/hypersync.ts";
 
@@ -77,6 +79,17 @@ const THROUGHPUT_END_BLOCK = 24_660_000;
  */
 const thresholdOf = (data: string) => uintAtWord(data, 1);
 
+/**
+ * `SafeModuleTransaction(address module, address to, uint256 value, bytes
+ * data, uint8 operation)`. Everything is in the payload, and the `bytes` in the
+ * middle is a head-and-tail encoding, so word 3 is only its offset and
+ * `operation` follows at word 4.
+ */
+const moduleOf = (data: string) => addressAtWord(data, 0);
+const moduleToOf = (data: string) => addressAtWord(data, 1);
+const moduleValueOf = (data: string) => uintAtWord(data, 2);
+const operationOf = (data: string) => uintAtWord(data, 4);
+
 export const caseConfig: CaseConfig = {
   name: "safe-factory-registrations",
   title: "Factory Contract Registration",
@@ -88,7 +101,7 @@ export const caseConfig: CaseConfig = {
   topics: [PROXY_CREATION_TOPIC],
 
   child: {
-    topics: [SAFE_SETUP_TOPIC],
+    topics: [SAFE_SETUP_TOPIC, SAFE_RECEIVED_TOPIC, SAFE_MODULE_TRANSACTION_TOPIC],
     childOf: proxyOf,
   },
 
@@ -134,11 +147,48 @@ export const caseConfig: CaseConfig = {
         { role: "timestamp", kind: "seconds", candidates: ["timestamp", "block_timestamp"] },
       ],
     },
+    {
+      key: "safeReceived",
+      label: "safe receipts",
+      singular: "safe receipt",
+      tableCandidates: ["SafeReceived", "safe_received"],
+      keyFieldCount: 1,
+      fields: [
+        {
+          role: "safe",
+          kind: "address",
+          candidates: ["safe", "safe_id", "contract_address", "address", "id"],
+        },
+        { role: "sender", kind: "address", candidates: ["sender"] },
+        { role: "value", kind: "amount", candidates: ["value"] },
+        { role: "timestamp", kind: "seconds", candidates: ["timestamp", "block_timestamp"] },
+      ],
+    },
+    {
+      key: "safeModuleTransaction",
+      label: "module transactions",
+      tableCandidates: ["SafeModuleTransaction", "safe_module_transaction"],
+      keyFieldCount: 1,
+      fields: [
+        {
+          role: "safe",
+          kind: "address",
+          candidates: ["safe", "safe_id", "contract_address", "address", "id"],
+        },
+        { role: "module", kind: "address", candidates: ["module"] },
+        { role: "to", kind: "address", candidates: ["to"] },
+        { role: "value", kind: "amount", candidates: ["value"] },
+        { role: "operation", kind: "amount", candidates: ["operation"] },
+        { role: "timestamp", kind: "seconds", candidates: ["timestamp", "block_timestamp"] },
+      ],
+    },
   ],
 
   computeExpected(logs) {
     const safes: string[] = [];
     const setups: string[] = [];
+    const receipts: string[] = [];
+    const moduleTransactions: string[] = [];
     // Only proxies these factories announced count as children. `fetchCaseLogs`
     // already filters the child logs to those addresses, but the case logic is
     // what defines the rule, so it is applied here too rather than assumed.
@@ -171,16 +221,55 @@ export const caseConfig: CaseConfig = {
             encodeSeconds(log.timestamp),
           ])
         );
+        continue;
+      }
+
+      // The two events a registered proxy goes on emitting for the rest of its
+      // life. Unlike SafeSetup they arrive long after registration, so every
+      // tool that registers the proxy at all sees them; what they cost is
+      // matching them against a contract set six figures deep. SafeReceived in
+      // particular is emitted 52,882 times chain-wide across the throughput
+      // range against 413 for this factory's children, so a tool that
+      // subscribes by topic and filters locally pays for all of them.
+      if (log.topic0 === SAFE_RECEIVED_TOPIC) {
+        receipts.push(
+          canonicalRow([
+            encodeAddress(log.address),
+            encodeAddress(log.arg0),
+            encodeAmount(uintAtWord(log.data, 0)),
+            encodeSeconds(log.timestamp),
+          ])
+        );
+        continue;
+      }
+
+      if (log.topic0 === SAFE_MODULE_TRANSACTION_TOPIC) {
+        moduleTransactions.push(
+          canonicalRow([
+            encodeAddress(log.address),
+            encodeAddress(moduleOf(log.data)),
+            encodeAddress(moduleToOf(log.data)),
+            encodeAmount(moduleValueOf(log.data)),
+            encodeAmount(operationOf(log.data)),
+            encodeSeconds(log.timestamp),
+          ])
+        );
       }
     }
 
     return {
-      totalEvents: safes.length + setups.length,
-      entities: { safe: safes, safeSetup: setups },
+      totalEvents:
+        safes.length + setups.length + receipts.length + moduleTransactions.length,
+      entities: {
+        safe: safes,
+        safeSetup: setups,
+        safeReceived: receipts,
+        safeModuleTransaction: moduleTransactions,
+      },
     };
   },
 
-  // Both hold one row per processed event: a safe per ProxyCreation, a setup
-  // per SafeSetup. Neither aggregates, so their counts sum to events processed.
-  eventEntities: ["safe", "safeSetup"],
+  // Each holds one row per processed event. Nothing aggregates, so their counts
+  // sum to events processed.
+  eventEntities: ["safe", "safeSetup", "safeReceived", "safeModuleTransaction"],
 };

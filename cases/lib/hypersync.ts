@@ -18,6 +18,15 @@ export const PROXY_CREATION_TOPIC =
  */
 export const SAFE_SETUP_TOPIC =
   "0x141df868a6331af528e38c83b7aa03edc19be66e37ae67f9285bf4f8e3c6a1a8";
+/** `SafeReceived(address indexed sender, uint256 value)` — bare ETH inbound. */
+export const SAFE_RECEIVED_TOPIC =
+  "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
+/**
+ * `SafeModuleTransaction(address module, address to, uint256 value, bytes
+ * data, uint8 operation)` — emitted by the L2 singleton on a module call.
+ */
+export const SAFE_MODULE_TRANSACTION_TOPIC =
+  "0xb648d3644f584ed1c2232d53c46d87e693586486ad0d1175f8656013110b714e";
 
 export interface DecodedLog {
   blockNumber: number;

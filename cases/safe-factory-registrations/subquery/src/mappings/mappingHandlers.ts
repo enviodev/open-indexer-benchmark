@@ -1,9 +1,13 @@
 import assert from "assert";
-import { Safe, SafeSetup } from "../types";
+import { Safe, SafeModuleTransaction, SafeReceived, SafeSetup } from "../types";
 import { createSafeDatasource } from "../types/datasources";
 import type { ProxyCreationLog } from "../types/abi-interfaces/SafeProxyFactoryAbi";
 import type { ProxyCreationLog as ProxyCreationIndexedLog } from "../types/abi-interfaces/SafeProxyFactoryModernAbi";
-import type { SafeSetupLog } from "../types/abi-interfaces/SafeAbi";
+import type {
+  SafeModuleTransactionLog,
+  SafeReceivedLog,
+  SafeSetupLog,
+} from "../types/abi-interfaces/SafeAbi";
 
 async function recordProxy(
   log: ProxyCreationLog | ProxyCreationIndexedLog
@@ -53,4 +57,38 @@ export async function handleSafeSetup(log: SafeSetupLog): Promise<void> {
   });
 
   await safeSetup.save();
+}
+
+// The two events a registered proxy goes on emitting for the rest of its life,
+// long after the datasource that watches it was created.
+export async function handleSafeReceived(log: SafeReceivedLog): Promise<void> {
+  assert(log.args, "No log.args");
+
+  const safeReceived = SafeReceived.create({
+    id: `${log.blockNumber}-${log.logIndex}`,
+    safe: log.address.toLowerCase(),
+    sender: log.args.sender.toLowerCase(),
+    value: log.args.value.toBigInt(),
+    timestamp: Number(log.block.timestamp),
+  });
+
+  await safeReceived.save();
+}
+
+export async function handleSafeModuleTransaction(
+  log: SafeModuleTransactionLog
+): Promise<void> {
+  assert(log.args, "No log.args");
+
+  const moduleTransaction = SafeModuleTransaction.create({
+    id: `${log.blockNumber}-${log.logIndex}`,
+    safe: log.address.toLowerCase(),
+    module: log.args.module.toLowerCase(),
+    to: log.args.to.toLowerCase(),
+    value: log.args.value.toBigInt(),
+    operation: log.args.operation,
+    timestamp: Number(log.block.timestamp),
+  });
+
+  await moduleTransaction.save();
 }

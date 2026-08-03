@@ -60,3 +60,34 @@ indexer.onEvent(
     });
   }
 );
+
+// The two events a registered proxy goes on emitting for the rest of its life,
+// long after the registration that made it visible. What they cost is matching
+// them against a contract set six figures deep.
+indexer.onEvent(
+  { contract: "Safe", event: "SafeReceived" },
+  async ({ event, context }) => {
+    context.SafeReceived.set({
+      id: `${event.block.number}-${event.logIndex}`,
+      safe: event.srcAddress,
+      sender: event.params.sender,
+      value: event.params.value,
+      timestamp: event.block.timestamp,
+    });
+  }
+);
+
+indexer.onEvent(
+  { contract: "Safe", event: "SafeModuleTransaction" },
+  async ({ event, context }) => {
+    context.SafeModuleTransaction.set({
+      id: `${event.block.number}-${event.logIndex}`,
+      safe: event.srcAddress,
+      module: event.params.module,
+      to: event.params.to,
+      value: event.params.value,
+      operation: Number(event.params.operation),
+      timestamp: event.block.timestamp,
+    });
+  }
+);

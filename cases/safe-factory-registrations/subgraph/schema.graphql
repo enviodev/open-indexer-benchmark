@@ -14,3 +14,21 @@ type SafeSetup @entity(immutable: true) {
   threshold: BigInt!
   timestamp: Int!
 }
+
+type SafeReceived @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  sender: String!
+  value: BigInt!
+  timestamp: Int!
+}
+
+type SafeModuleTransaction @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  module: String!
+  to: String!
+  value: BigInt!
+  operation: Int!
+  timestamp: Int!
+}

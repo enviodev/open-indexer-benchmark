@@ -103,10 +103,16 @@ templates:
       language: wasm/assemblyscript
       entities:
         - SafeSetup
+        - SafeReceived
+        - SafeModuleTransaction
       abis:
         - name: Safe
           file: ./abis/Safe.json
       eventHandlers:
         - event: SafeSetup(indexed address,address[],uint256,address,address)
           handler: handleSafeSetup
+        - event: SafeReceived(indexed address,uint256)
+          handler: handleSafeReceived
+        - event: SafeModuleTransaction(address,address,uint256,bytes,uint8)
+          handler: handleSafeModuleTransaction
       file: ./src/mapping.ts

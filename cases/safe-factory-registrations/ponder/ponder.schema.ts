@@ -14,3 +14,21 @@ export const safeSetup = onchainTable("safe_setup", (t) => ({
   threshold: t.bigint().notNull(),
   timestamp: t.integer().notNull(),
 }));
+
+export const safeReceived = onchainTable("safe_received", (t) => ({
+  id: t.text().primaryKey(),
+  safe: t.hex().notNull(),
+  sender: t.hex().notNull(),
+  value: t.bigint().notNull(),
+  timestamp: t.integer().notNull(),
+}));
+
+export const safeModuleTransaction = onchainTable("safe_module_transaction", (t) => ({
+  id: t.text().primaryKey(),
+  safe: t.hex().notNull(),
+  module: t.hex().notNull(),
+  to: t.hex().notNull(),
+  value: t.bigint().notNull(),
+  operation: t.integer().notNull(),
+  timestamp: t.integer().notNull(),
+}));

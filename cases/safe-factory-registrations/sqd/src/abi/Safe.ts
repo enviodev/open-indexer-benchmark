@@ -27,6 +27,22 @@ export const events = {
             "fallbackHandler": p.address
         }
     ),
+    SafeReceived: event(
+        "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d",
+        "SafeReceived(address,uint256)",
+        {"sender": indexed(p.address), "value": p.uint256}
+    ),
+    SafeModuleTransaction: event(
+        "0xb648d3644f584ed1c2232d53c46d87e693586486ad0d1175f8656013110b714e",
+        "SafeModuleTransaction(address,address,uint256,bytes,uint8)",
+        {
+            "module": p.address,
+            "to": p.address,
+            "value": p.uint256,
+            "data": p.bytes,
+            "operation": p.uint8
+        }
+    ),
 }
 
 export type ProxyCreationEventArgs = EParams<typeof events.ProxyCreation>

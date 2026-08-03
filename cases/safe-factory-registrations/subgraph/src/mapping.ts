@@ -1,9 +1,18 @@
 import { Address, BigInt } from "@graphprotocol/graph-ts";
 import { ProxyCreation } from "../generated/SafeProxyFactory/SafeProxyFactory";
 import { ProxyCreation as ProxyCreationIndexed } from "../generated/SafeProxyFactory141/SafeProxyFactoryModern";
-import { SafeSetup } from "../generated/templates/Safe/Safe";
+import {
+  SafeModuleTransaction,
+  SafeReceived,
+  SafeSetup,
+} from "../generated/templates/Safe/Safe";
 import { Safe as SafeTemplate } from "../generated/templates";
-import { Safe, SafeSetup as SafeSetupEntity } from "../generated/schema";
+import {
+  Safe,
+  SafeModuleTransaction as SafeModuleTransactionEntity,
+  SafeReceived as SafeReceivedEntity,
+  SafeSetup as SafeSetupEntity,
+} from "../generated/schema";
 
 function recordProxy(
   proxy: Address,
@@ -57,6 +66,32 @@ export function handleSafeSetup(event: SafeSetup): void {
   entity.safe = event.address.toHexString();
   entity.initiator = event.params.initiator.toHexString();
   entity.threshold = event.params.threshold;
+  entity.timestamp = event.block.timestamp.toI32();
+  entity.save();
+}
+
+// The two events a registered proxy goes on emitting for the rest of its life,
+// long after the data source that watches it was created.
+export function handleSafeReceived(event: SafeReceived): void {
+  const entity = new SafeReceivedEntity(
+    event.block.number.toString() + "-" + event.logIndex.toString()
+  );
+  entity.safe = event.address.toHexString();
+  entity.sender = event.params.sender.toHexString();
+  entity.value = event.params.value;
+  entity.timestamp = event.block.timestamp.toI32();
+  entity.save();
+}
+
+export function handleSafeModuleTransaction(event: SafeModuleTransaction): void {
+  const entity = new SafeModuleTransactionEntity(
+    event.block.number.toString() + "-" + event.logIndex.toString()
+  );
+  entity.safe = event.address.toHexString();
+  entity.module = event.params.module.toHexString();
+  entity.to = event.params.to.toHexString();
+  entity.value = event.params.value;
+  entity.operation = event.params.operation;
   entity.timestamp = event.block.timestamp.toI32();
   entity.save();
 }
