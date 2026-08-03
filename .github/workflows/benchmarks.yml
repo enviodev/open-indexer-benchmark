@@ -36,6 +36,7 @@ jobs:
       indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
       indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
       partial: ${{ steps.set-matrix.outputs.partial }}
+      selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +99,10 @@ jobs:
           INDEXERS1="$INDEXERS_JSON"
           INDEXERS2="$INDEXERS_JSON"
           PARTIAL=0
+          # Empty unless the run is scoped: the summary reads it to tell an
+          # indexer that was asked to run and reported nothing — a failed job —
+          # apart from one this run never selected.
+          SELECTED=""
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
             # The filter has no execution path other than right here, so it
@@ -117,6 +122,7 @@ jobs:
             echo "Scope: $SCOPE"
 
             CASES_JSON=$(echo "$SCOPE" | jq -c '.cases')
+            SELECTED=$(echo "$SCOPE" | jq -c '.indexers')
             [ "$(echo "$SCOPE" | jq '.full')" = "true" ] || PARTIAL=1
 
             if [ "$CASES_JSON" = "[]" ]; then
@@ -137,6 +143,7 @@ jobs:
           echo "indexers1=$INDEXERS1" >> "$GITHUB_OUTPUT"
           echo "indexers2=$INDEXERS2" >> "$GITHUB_OUTPUT"
           echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
+          echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
@@ -201,7 +208,7 @@ jobs:
       - name: Build comparison tables
         env:
           CASES: ${{ needs.setup.outputs.cases }}
-          PARTIAL_RUN: ${{ needs.setup.outputs.partial }}
+          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
         run: node scripts/build-tables.ts
 
       - name: Comment results on PR

@@ -103,8 +103,15 @@ export function selectScope(
       // else under lib is the harness all of them run through.
       if (parts[2] === "drivers" && parts.length === 4) {
         const module = parts[3].replace(/\.ts$/, "");
-        if (!SHARED_DRIVERS.has(module)) {
-          addEverywhere(DRIVER_INDEXERS[module] ?? [module]);
+        const driven = (DRIVER_INDEXERS[module] ?? [module]).filter((i) =>
+          allIndexers.includes(i)
+        );
+        // A module under drivers/ that names no indexer this run knows about
+        // is either shared plumbing or a driver whose file does not match its
+        // registry key. Neither can be attributed, so it runs everything
+        // rather than silently selecting nothing.
+        if (!SHARED_DRIVERS.has(module) && driven.length > 0) {
+          addEverywhere(driven);
           continue;
         }
       }

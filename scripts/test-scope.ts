@@ -99,6 +99,15 @@ check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.t
   "erc20-transfer-events": ["envio", "envio-rpc"],
 });
 
+// Attributing a driver module to no indexer at all would select nothing and
+// publish the untouched carried-forward rows as if they had been re-measured.
+check("an unattributable driver module runs everything", [
+  "cases/lib/drivers/helpers.ts",
+], {
+  "erc20-account-balances": INDEXERS,
+  "erc20-transfer-events": INDEXERS,
+});
+
 check("shared harness runs everything", ["cases/lib/runner.ts"], {
   "erc20-account-balances": INDEXERS,
   "erc20-transfer-events": INDEXERS,

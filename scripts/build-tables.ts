@@ -23,6 +23,15 @@ if (cases.length === 0) {
 }
 
 /**
+ * Which indexers each case was asked to run, when the run was scoped to part
+ * of the matrix. Unset means every indexer was expected, so any row missing a
+ * fresh result is a failed job.
+ */
+const selected: Record<string, string[]> | null = process.env.SELECTED_INDEXERS
+  ? JSON.parse(process.env.SELECTED_INDEXERS)
+  : null;
+
+/**
  * Scenario names live in each case's config so the README, the job summary and
  * the PR comment cannot drift apart. Falling back to the slug keeps a new case
  * publishing results even before it has a config to import.
@@ -48,6 +57,11 @@ for (const benchCase of cases) {
   const prefix = `benchmark-${benchCase}--`;
   const rows: TableRow[] = [];
 
+  // Which indexers reported this run, by id. The artifact directory is named
+  // after the job that wrote it, so this is the one place a row can be tied
+  // back to the indexer the workflow selected.
+  const reported = new Set<string>();
+
   for (const dir of artifactDirs) {
     if (!dir.startsWith(prefix)) continue;
     const file = join(RESULTS_DIR, dir, "benchmark-output.txt");
@@ -65,6 +79,7 @@ for (const benchCase of cases) {
         lines[lines.length - 1].slice("BENCHMARK_RESULT ".length)
       );
       rows.push(toTableRow(result));
+      reported.add(dir.slice(prefix.length));
     } catch (err) {
       console.error(`Could not parse a result from ${file}: ${err}`);
     }
@@ -81,17 +96,20 @@ for (const benchCase of cases) {
     carried.push(`${prior.name} via ${prior.cells.source}`);
   }
   if (carried.length > 0) {
-    // A pull request only runs the indexers it touched, so most rows being
-    // carried forward is the normal case there rather than a failure to
-    // annotate. The row itself still says it was carried forward.
+    // A run scoped to part of the matrix — a pull request — carries most rows
+    // forward by design, so annotating those as failures would cry wolf on
+    // every pull request. An indexer that was selected and still reported
+    // nothing is a failed job, and has to stay loud even on such a run.
+    const failed = selected ? (selected[benchCase] ?? []).filter((i) => !reported.has(i)) : null;
     const message =
       `${title}: no fresh result for ${carried.join(", ")} this run — ` +
       `carried forward the last published value(s).`;
-    console.log(
-      process.env.PARTIAL_RUN === "1"
-        ? `${message} Not selected to run by this run's scope.`
-        : `::warning::${message} Check the failed job(s).`
-    );
+    if (failed === null || failed.length > 0) {
+      const detail = failed === null ? "" : ` Selected but reported nothing: ${failed.join(", ")}.`;
+      console.log(`::warning::${message}${detail} Check the failed job(s).`);
+    } else {
+      console.log(`${message} Not selected to run by this run's scope.`);
+    }
   }
 
   const table = buildTable(rows);
