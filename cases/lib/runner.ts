@@ -363,10 +363,11 @@ async function benchmarkIndexer(
       targetEvents: Number.POSITIVE_INFINITY,
       maxSeconds: windowS,
     });
-    // The end block sits millions of blocks ahead, so nothing reaches it inside
-    // the window: exiting without completing means the indexer died. Whatever
-    // partial work it did is not a throughput measurement, and keeping it risks
-    // publishing a rate from a broken run.
+    // Reaching the end block is a legitimate way for a run to finish — a case
+    // may pin one close enough to get to — and that leaves `completed` set.
+    // Exiting *without* it means the indexer died, and whatever partial work it
+    // did is not a throughput measurement: keeping it risks publishing a rate
+    // from a broken run.
     const died = phaseB.exited() && !windowRun.completed;
     await phaseB.stop();
     await phaseB.cleanup();
@@ -519,8 +520,11 @@ async function run(config: CaseConfig) {
     process.exit(1);
   }
 
-  const head = await fetchChainHeight(apiToken);
-  const headEndBlock = head - HEAD_OFFSET;
+  // The throughput window normally runs at the chain head, which is as far as
+  // any indexer could get. A case that cares about *what* it is walking pins an
+  // end block instead, and then the height is not needed at all.
+  const headEndBlock =
+    config.throughputEndBlock ?? (await fetchChainHeight(apiToken)) - HEAD_OFFSET;
 
   console.log(`=== ${config.title} Benchmark ===`);
   console.log(

@@ -1,6 +1,6 @@
 # Factory Contract Registration
 
-Index the canonical Safe proxy factories on Ethereum Mainnet from block 24,600,000 and every proxy they create. The verification range ends once the factories have announced their 25,096th proxy, and the throughput window carries the same configuration on towards the chain head, where the registered contract set runs into six figures.
+Index the canonical Safe proxy factories on Ethereum Mainnet from block 24,600,000 and every proxy they create. The verification range ends once the factories have announced their 25,096th proxy; the throughput window carries the same configuration on to block 24,660,000, by which point the registered contract set is 199,977 deep.
 
 The other cases fix the contract set in configuration. This one does not: nothing is known about the children at build time, and the set grows throughout the run. What is measured is the cost of that growth — how an indexer's per-contract bookkeeping, address matching and log filtering hold up as the set gets large.
 
@@ -14,9 +14,10 @@ The other cases fix the contract set in configuration. This one does not: nothin
   | v1.4.1 | [`0x4e1dcf7a…ec67`](https://etherscan.io/address/0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67) | `(address indexed proxy, address singleton)` |
   | v1.5.0 | [`0x14f2982d…5e7b`](https://etherscan.io/address/0x14f2982d601c9458f93bd70b218933a6f8165e7b) | `(address indexed proxy, address singleton)` |
 - **Events Indexed**: `ProxyCreation` on the factories, `SafeSetup` on every proxy they create
-- **Block Range**: 24,600,000 to latest
+- **Block Range**: 24,600,000 to 24,660,000
 - **Verification Range**: 24,600,000 to 24,609,162 — indexed to completion, then checked against `expected.json`
 - **Child contracts registered in that range**: 25,096
+- **Throughput Range**: 24,600,000 to 24,660,000 — 199,977 registrations, six figures of dynamic contracts
 - **Features**: `dynamic contract registration`, `event decoding`, `storage write` (insert-only, no updates)
 
 Only the canonical factories are indexed. Several other contracts on mainnet emit the same `ProxyCreation` topic — some of them heavily — but they are not Safe deployments, and including them would make the case a topic scan rather than a factory case. The pre-1.3.0 factories are left out for the opposite reason: they emit a different event (`ProxyCreation(address)`) and have created nothing in this range.
@@ -75,6 +76,8 @@ ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node cases/safe-factory-registra
 Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
 
 The verification phase allows 1,800 seconds here rather than the usual 900. The range is nine thousand blocks and twenty-five thousand events, and a tool that runs out of time reports "could not verify", which would say nothing about the tool.
+
+Unlike the other cases, the throughput window stops at a fixed block rather than at the chain head. Safe's deployment traffic comes in bursts, and these 60,000 blocks hold 199,977 of the canonical factories' creations at 3.3 per block, against a tenth of that density for the next 340,000. Running to the head would spend most of the window scanning near-empty blocks — a measure of how fast an indexer skips, not of how it copes with a contract set growing underneath it. The fastest indexers reach the end block before the window closes, and their rate is computed over the time it took.
 
 The throughput window defaults to 60 seconds. Pass a custom duration (in seconds) with `--duration`:
 

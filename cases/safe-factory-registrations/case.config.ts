@@ -61,6 +61,15 @@ const START_BLOCK = 24_600_000;
 // towards the chain head — is where the size of that set is measured.
 const VERIFY_END_BLOCK = 24_609_162;
 
+// The throughput window stops here rather than at the chain head. Safe's
+// deployment traffic comes in bursts: these 60,000 blocks hold 199,977 of the
+// canonical factories' creations at 3.3 per block, and the 340,000 blocks that
+// follow add only 65,000 more at a tenth of the density. Running to the head
+// would spend most of the window scanning near-empty blocks, which measures
+// how fast an indexer skips rather than how it copes with a contract set
+// growing underneath it.
+const THROUGHPUT_END_BLOCK = 24_660_000;
+
 /**
  * `SafeSetup(address indexed initiator, address[] owners, uint256 threshold,
  * address initializer, address fallbackHandler)`. The dynamic `owners` array is
@@ -75,6 +84,7 @@ export const caseConfig: CaseConfig = {
   contract: FACTORIES,
   startBlock: START_BLOCK,
   verifyEndBlock: VERIFY_END_BLOCK,
+  throughputEndBlock: THROUGHPUT_END_BLOCK,
   topics: [PROXY_CREATION_TOPIC],
 
   child: {

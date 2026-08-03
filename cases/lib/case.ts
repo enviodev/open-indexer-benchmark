@@ -25,6 +25,15 @@ export interface CaseConfig {
    * indexer still finishes within the phase timeout.
    */
   verifyEndBlock: number;
+  /**
+   * Inclusive end block of the throughput window, when the default — as far
+   * towards the chain head as anything could get — would measure the wrong
+   * thing. Pin it where a case's events are concentrated, so the window
+   * measures work rather than the cost of scanning past empty blocks. The
+   * fastest indexer may then reach it before the window closes, which is fine:
+   * its rate is computed over the time it took.
+   */
+  throughputEndBlock?: number;
   /** Event topic0 values the case indexes on `contract`. */
   topics: string[];
   /**
