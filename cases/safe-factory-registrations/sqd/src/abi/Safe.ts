@@ -8,6 +8,14 @@ export const events = {
         "ProxyCreation(address,address)",
         {"proxy": p.address, "singleton": p.address}
     ),
+    // Safe 1.4.1 onwards. Identical signature — and so identical topic0 — but
+    // `proxy` is indexed, which moves it out of the data payload. The two
+    // layouts cannot decode each other's logs.
+    ProxyCreationIndexed: event(
+        "0x4f51faf6c4561ff95f067657e43439f0f856d97c04d9ec9070a6199ad418e235",
+        "ProxyCreation(address,address)",
+        {"proxy": indexed(p.address), "singleton": p.address}
+    ),
     SafeSetup: event(
         "0x141df868a6331af528e38c83b7aa03edc19be66e37ae67f9285bf4f8e3c6a1a8",
         "SafeSetup(address,address[],uint256,address,address)",

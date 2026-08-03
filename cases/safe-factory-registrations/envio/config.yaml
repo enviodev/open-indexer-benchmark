@@ -2,9 +2,15 @@
 name: safe-factory-indexer
 description: Safe proxy factory — dynamic contract registration
 contracts:
+  # The two canonical factory generations emit the same ProxyCreation topic
+  # from different event layouts — `proxy` became indexed in 1.4.1 — so each
+  # needs its own contract carrying its own signature.
   - name: SafeProxyFactory
     events:
       - event: "ProxyCreation(address proxy, address singleton)"
+  - name: SafeProxyFactoryModern
+    events:
+      - event: "ProxyCreation(address indexed proxy, address singleton)"
   # No address: every instance is registered at runtime from ProxyCreation.
   - name: Safe
     events:
@@ -18,5 +24,11 @@ chains:
       for: ${ENVIO_RPC_FOR:-fallback}
     contracts:
       - name: SafeProxyFactory
-        address: 0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2 # Safe proxy factory v1.3.0
+        address:
+          - 0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2 # v1.3.0 canonical
+          - 0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC # v1.3.0 eip155
+      - name: SafeProxyFactoryModern
+        address:
+          - 0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67 # v1.4.1 canonical
+          - 0x14F2982D601c9458F93bd70B218933A6f8165e7b # v1.5.0 canonical
       - name: Safe

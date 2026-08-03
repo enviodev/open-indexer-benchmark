@@ -10,27 +10,56 @@ import {
 import {
   addressAtWord,
   uintAtWord,
+  type DecodedLog,
   PROXY_CREATION_TOPIC,
   SAFE_SETUP_TOPIC,
 } from "../lib/hypersync.ts";
 
-/** Safe (formerly Gnosis Safe) proxy factory v1.3.0 on Ethereum Mainnet. */
-const FACTORY = "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2";
+/**
+ * The canonical Safe (formerly Gnosis Safe) proxy factories on Ethereum
+ * Mainnet. They emit the same `ProxyCreation` topic from two different event
+ * layouts, which is the reason the case carries two decode paths rather than
+ * one.
+ *
+ * `ProxyCreation(address proxy, address singleton)` — both arguments in the
+ * data payload, proxy first.
+ */
+const FACTORIES_V1_3_0 = [
+  "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2", // canonical deployment
+  "0xc22834581ebc8527d974f8a1c97e1bea4ef910bc", // eip155 deployment
+];
+
+/**
+ * `ProxyCreation(address indexed proxy, address singleton)` — proxy moved into
+ * a topic in 1.4.1 and stayed there, so the data payload holds the singleton
+ * alone. Same topic0 as above: the signature string is unchanged, only the
+ * indexing of its first argument.
+ */
+const FACTORIES_MODERN = [
+  "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67", // canonical 1.4.1 deployment
+  "0x14f2982d601c9458f93bd70b218933a6f8165e7b", // canonical 1.5.0 deployment
+];
+
+const FACTORIES = [...FACTORIES_V1_3_0, ...FACTORIES_MODERN];
+
+const legacy = new Set(FACTORIES_V1_3_0);
+
+/** The proxy a `ProxyCreation` announced — data word 0, or topic1 since 1.4.1. */
+const proxyOf = (log: DecodedLog) =>
+  legacy.has(log.address) ? addressAtWord(log.data, 0) : log.arg0;
+
+/** The singleton it was pointed at — the word after the proxy, wherever it is. */
+const singletonOf = (log: DecodedLog) =>
+  addressAtWord(log.data, legacy.has(log.address) ? 1 : 0);
 
 const START_BLOCK = 24_600_000;
 
-// The 100,037th proxy of this run lands here. The range is sized by contract
-// registrations rather than by blocks: the point of the case is the size of the
-// dynamic contract set, and 100k children is where the bookkeeping an indexer
-// keeps per registered contract stops being free.
-const VERIFY_END_BLOCK = 24_646_610;
-
-/**
- * `ProxyCreation(address proxy, address singleton)` — both arguments sit in the
- * data payload, proxy first.
- */
-const proxyOf = (data: string) => addressAtWord(data, 0);
-const singletonOf = (data: string) => addressAtWord(data, 1);
+// The 25,096th proxy of this run lands here. The range is sized by contract
+// registrations rather than by blocks: what the phase has to demonstrate is
+// that an indexer stays correct while its contract set grows into five
+// figures, and the throughput window — which runs the same configuration on
+// towards the chain head — is where the size of that set is measured.
+const VERIFY_END_BLOCK = 24_609_162;
 
 /**
  * `SafeSetup(address indexed initiator, address[] owners, uint256 threshold,
@@ -43,21 +72,21 @@ export const caseConfig: CaseConfig = {
   name: "safe-factory-registrations",
   title: "Factory Contract Registration",
   dir: dirname(fileURLToPath(import.meta.url)),
-  contract: FACTORY,
+  contract: FACTORIES,
   startBlock: START_BLOCK,
   verifyEndBlock: VERIFY_END_BLOCK,
   topics: [PROXY_CREATION_TOPIC],
 
   child: {
     topics: [SAFE_SETUP_TOPIC],
-    childOf: (log) => proxyOf(log.data),
+    childOf: proxyOf,
   },
 
-  // Two orders of magnitude more events than the ERC-20 cases, over forty-six
+  // An order of magnitude more events than the ERC-20 cases, over nine
   // thousand blocks rather than a thousand. The default fifteen minutes is not
   // enough for the slower indexers to reach the end of it, and a timeout is
   // reported as "could not verify", which would say nothing about the tool.
-  phaseATimeoutS: 2_400,
+  phaseATimeoutS: 1_800,
 
   entities: [
     {
@@ -100,19 +129,19 @@ export const caseConfig: CaseConfig = {
   computeExpected(logs) {
     const safes: string[] = [];
     const setups: string[] = [];
-    // Only proxies this factory announced count as children. `fetchCaseLogs`
+    // Only proxies these factories announced count as children. `fetchCaseLogs`
     // already filters the child logs to those addresses, but the case logic is
     // what defines the rule, so it is applied here too rather than assumed.
     const registered = new Set<string>();
 
     for (const log of logs) {
       if (log.topic0 === PROXY_CREATION_TOPIC) {
-        const proxy = proxyOf(log.data);
+        const proxy = proxyOf(log);
         registered.add(proxy);
         safes.push(
           canonicalRow([
             encodeAddress(proxy),
-            encodeAddress(singletonOf(log.data)),
+            encodeAddress(singletonOf(log)),
             encodeSeconds(log.timestamp),
           ])
         );

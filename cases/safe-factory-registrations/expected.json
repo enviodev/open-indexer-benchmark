@@ -1,16 +1,16 @@
 {
   "startBlock": 24600000,
-  "endBlock": 24646610,
-  "generatedAt": "2026-07-31T12:41:51.978Z",
-  "totalEvents": 100332,
+  "endBlock": 24609162,
+  "generatedAt": "2026-08-03T11:53:59.038Z",
+  "totalEvents": 25352,
   "entities": {
     "safe": {
-      "rowCount": 100037,
-      "checksum": "57706111370311021769996"
+      "rowCount": 25096,
+      "checksum": "14514348513298252651322"
     },
     "safeSetup": {
-      "rowCount": 295,
-      "checksum": "167937992122997016794"
+      "rowCount": 256,
+      "checksum": "140012777770930080095"
     }
   }
 }

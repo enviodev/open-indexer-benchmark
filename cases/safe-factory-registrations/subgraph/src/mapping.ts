@@ -1,21 +1,50 @@
+import { Address, BigInt } from "@graphprotocol/graph-ts";
 import { ProxyCreation } from "../generated/SafeProxyFactory/SafeProxyFactory";
+import { ProxyCreation as ProxyCreationIndexed } from "../generated/SafeProxyFactory141/SafeProxyFactoryModern";
 import { SafeSetup } from "../generated/templates/Safe/Safe";
 import { Safe as SafeTemplate } from "../generated/templates";
 import { Safe, SafeSetup as SafeSetupEntity } from "../generated/schema";
 
-export function handleProxyCreation(event: ProxyCreation): void {
+function recordProxy(
+  proxy: Address,
+  singleton: Address,
+  blockNumber: BigInt,
+  logIndex: BigInt,
+  timestamp: BigInt
+): void {
   // Spin up a data source for the proxy so its own events are indexed from
-  // here on. The contract set is not known at build time and grows to six
-  // figures during the run.
-  SafeTemplate.create(event.params.proxy);
+  // here on. The contract set is not known at build time and grows throughout
+  // the run.
+  SafeTemplate.create(proxy);
 
-  const entity = new Safe(
-    event.block.number.toString() + "-" + event.logIndex.toString()
-  );
-  entity.address = event.params.proxy.toHexString();
-  entity.singleton = event.params.singleton.toHexString();
-  entity.timestamp = event.block.timestamp.toI32();
+  const entity = new Safe(blockNumber.toString() + "-" + logIndex.toString());
+  entity.address = proxy.toHexString();
+  entity.singleton = singleton.toHexString();
+  entity.timestamp = timestamp.toI32();
   entity.save();
+}
+
+export function handleProxyCreation(event: ProxyCreation): void {
+  recordProxy(
+    event.params.proxy,
+    event.params.singleton,
+    event.block.number,
+    event.logIndex,
+    event.block.timestamp
+  );
+}
+
+// Safe 1.4.1 onwards: the same event with `proxy` indexed. Graph Node decodes
+// each data source against its own ABI, so the two handlers differ only in the
+// generated type they take.
+export function handleProxyCreationIndexed(event: ProxyCreationIndexed): void {
+  recordProxy(
+    event.params.proxy,
+    event.params.singleton,
+    event.block.number,
+    event.logIndex,
+    event.block.timestamp
+  );
 }
 
 // A proxy emits SafeSetup one log index *below* the ProxyCreation that

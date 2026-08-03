@@ -24,7 +24,17 @@ function requireEndBlock(): number {
   return value;
 }
 
-const SAFE_PROXY_FACTORY = '0xa6b71e26c5e0845f74c812102ca7114b6a896ab2' // Safe proxy factory v1.3.0
+// The canonical Safe proxy factories, grouped by ProxyCreation layout: 1.3.0
+// carries `proxy` in the data payload, 1.4.1 onwards carries it in a topic.
+export const FACTORIES_V1_3_0 = [
+    '0xa6b71e26c5e0845f74c812102ca7114b6a896ab2', // canonical
+    '0xc22834581ebc8527d974f8a1c97e1bea4ef910bc', // eip155
+]
+export const FACTORIES_MODERN = [
+    '0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67', // 1.4.1
+    '0x14f2982d601c9458f93bd70b218933a6f8165e7b', // 1.5.0
+]
+
 const rpcEndpoint = process.env.RPC_ENDPOINT
 
 export const processor = new EvmBatchProcessor()
@@ -45,14 +55,17 @@ export const processor = new EvmBatchProcessor()
         from: 24_600_000,
         to: requireEndBlock(),
     })
+    // Both generations share a topic0, so one subscription covers them; which
+    // decoder a log needs is decided in the handler from the address it came
+    // from.
     .addLog({
-        address: [SAFE_PROXY_FACTORY],
+        address: [...FACTORIES_V1_3_0, ...FACTORIES_MODERN],
         topic0: [safeAbi.events.ProxyCreation.topic],
     })
     // The children are not known at configuration time and there is no address
     // list to give here, so SafeSetup is subscribed to chain-wide and the
-    // handler discards logs from proxies this factory did not create. This is
-    // the pattern SQD's own factory-contract guide describes.
+    // handler discards logs from proxies these factories did not create. This
+    // is the pattern SQD's own factory-contract guide describes.
     .addLog({
         topic0: [safeAbi.events.SafeSetup.topic],
     })

@@ -219,7 +219,12 @@ export async function fetchLogs(opts: {
  */
 export async function fetchFactoryLogs(opts: {
   token: string;
-  factory: string;
+  /**
+   * The factory address, or several when a protocol has more than one
+   * deployment. They are read in a single pass: what distinguishes them is how
+   * each announces its child, which is `childOf`'s problem, not the query's.
+   */
+  factory: string | string[];
   factoryTopics: string[];
   childTopics: string[];
   /** Child contract announced by a factory log, lowercase. */

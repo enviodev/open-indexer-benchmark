@@ -2,15 +2,18 @@ import assert from "assert";
 import { Safe, SafeSetup } from "../types";
 import { createSafeDatasource } from "../types/datasources";
 import type { ProxyCreationLog } from "../types/abi-interfaces/SafeProxyFactoryAbi";
+import type { ProxyCreationLog as ProxyCreationIndexedLog } from "../types/abi-interfaces/SafeProxyFactoryModernAbi";
 import type { SafeSetupLog } from "../types/abi-interfaces/SafeAbi";
 
-export async function handleProxyCreation(log: ProxyCreationLog): Promise<void> {
+async function recordProxy(
+  log: ProxyCreationLog | ProxyCreationIndexedLog
+): Promise<void> {
   assert(log.args, "No log.args");
 
   const proxy = log.args.proxy.toLowerCase();
 
   // Spin up a datasource for the proxy so its own events are indexed from here
-  // on. The contract set is not known at build time and grows to six figures.
+  // on. The contract set is not known at build time and grows throughout.
   await createSafeDatasource({ address: proxy });
 
   const safe = Safe.create({
@@ -21,6 +24,18 @@ export async function handleProxyCreation(log: ProxyCreationLog): Promise<void> 
   });
 
   await safe.save();
+}
+
+export async function handleProxyCreation(log: ProxyCreationLog): Promise<void> {
+  await recordProxy(log);
+}
+
+// Safe 1.4.1 onwards: the same event with `proxy` indexed, decoded against the
+// ABI its own datasource carries.
+export async function handleProxyCreationIndexed(
+  log: ProxyCreationIndexedLog
+): Promise<void> {
+  await recordProxy(log);
 }
 
 // A proxy emits SafeSetup one log index *below* the ProxyCreation that

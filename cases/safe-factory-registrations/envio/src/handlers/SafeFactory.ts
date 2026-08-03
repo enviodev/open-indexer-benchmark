@@ -1,8 +1,12 @@
 import { indexer } from "envio";
 
-// Register every proxy the factory announces, so its own events are indexed
-// from then on. This is the whole point of the case: the contract set is not
-// known at configuration time and grows to six figures during the run.
+// Register every proxy a factory announces, so its own events are indexed from
+// then on. This is the whole point of the case: the contract set is not known
+// at configuration time and grows throughout the run.
+//
+// The two canonical factory generations are separate contracts here because
+// `proxy` became an indexed argument in 1.4.1 — same event signature, two
+// incompatible payloads — but past decoding they say the same thing.
 indexer.contractRegister(
   { contract: "SafeProxyFactory", event: "ProxyCreation" },
   async ({ event, context }) => {
@@ -10,8 +14,27 @@ indexer.contractRegister(
   }
 );
 
+indexer.contractRegister(
+  { contract: "SafeProxyFactoryModern", event: "ProxyCreation" },
+  async ({ event, context }) => {
+    context.chain.Safe.add(event.params.proxy);
+  }
+);
+
 indexer.onEvent(
   { contract: "SafeProxyFactory", event: "ProxyCreation" },
+  async ({ event, context }) => {
+    context.Safe.set({
+      id: `${event.block.number}-${event.logIndex}`,
+      address: event.params.proxy,
+      singleton: event.params.singleton,
+      timestamp: event.block.timestamp,
+    });
+  }
+);
+
+indexer.onEvent(
+  { contract: "SafeProxyFactoryModern", event: "ProxyCreation" },
   async ({ event, context }) => {
     context.Safe.set({
       id: `${event.block.number}-${event.logIndex}`,

@@ -14,7 +14,11 @@ export interface CaseConfig {
   title: string;
   /** Absolute path to the case directory. */
   dir: string;
-  contract: string;
+  /**
+   * The contract the case indexes. A factory case may list several — different
+   * deployments of the same protocol, which the ground truth reads together.
+   */
+  contract: string | string[];
   startBlock: number;
   /**
    * Inclusive end block of the bounded verification run. Sized so the slowest

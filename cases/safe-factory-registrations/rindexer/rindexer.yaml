@@ -30,11 +30,28 @@ contracts:
   # names the ProxyCreation argument holding the new proxy.
   - name: Safe
     details:
+      # One details block per factory generation: the two emit the same
+      # ProxyCreation signature, but `proxy` became indexed in 1.4.1, so each
+      # needs the ABI that matches its own layout. Both carry the same factory
+      # name, which is what keeps the factory's own rows in a single table.
       - network: ethereum
         factory:
           name: SafeProxyFactory
-          address: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2"
+          address:
+            - "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2" # v1.3.0 canonical
+            - "0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC" # v1.3.0 eip155
           abi: ./abis/SafeProxyFactory.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+      - network: ethereum
+        factory:
+          name: SafeProxyFactory
+          address:
+            - "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67" # v1.4.1 canonical
+            - "0x14F2982D601c9458F93bd70B218933A6f8165e7b" # v1.5.0 canonical
+          abi: ./abis/SafeProxyFactoryModern.abi.json
           event_name: ProxyCreation
           input_name: "proxy"
         start_block: "24600000"

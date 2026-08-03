@@ -1,9 +1,11 @@
 import { TypeormDatabase } from "@subsquid/typeorm-store";
-import { processor } from "./processor";
+import { FACTORIES_V1_3_0, processor } from "./processor";
 import { Safe, SafeSetup } from "./model";
 import { events } from "./abi/Safe";
 
-// Proxies this factory has announced so far. Held in memory: the processor
+const legacyFactories = new Set(FACTORIES_V1_3_0);
+
+// Proxies these factories have announced so far. Held in memory: the processor
 // starts from the case's first block on every run, so the set is rebuilt from
 // the same events each time rather than being state carried across runs.
 const registered = new Set<string>();
@@ -17,7 +19,13 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
 
     for (let log of block.logs) {
       if (log.topics[0] === events.ProxyCreation.topic) {
-        const { proxy, singleton } = events.ProxyCreation.decode(log);
+        // Same topic0, two layouts: `proxy` sits in the data payload up to
+        // 1.3.0 and in a topic from 1.4.1 on, so the emitting factory decides
+        // which decoder applies.
+        const decoder = legacyFactories.has(log.address.toLowerCase())
+          ? events.ProxyCreation
+          : events.ProxyCreationIndexed;
+        const { proxy, singleton } = decoder.decode(log);
         registered.add(proxy.toLowerCase());
         safes.push(
           new Safe({
