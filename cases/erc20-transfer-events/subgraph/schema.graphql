@@ -1,0 +1,9 @@
+# Transfer events are written once and never updated, so they are declared
+# immutable — the storage layout The Graph's docs recommend for event data.
+type TransferEvent @entity(immutable: true) {
+  id: ID!
+  from: String!
+  to: String!
+  amount: BigInt!
+  timestamp: Int!
+}
