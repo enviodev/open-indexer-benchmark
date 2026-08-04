@@ -102,7 +102,12 @@ interface PhaseOutcome {
  */
 async function runPhase(
   driver: Driver,
-  opts: { targetBlocks: number; targetEvents: number; maxSeconds: number }
+  opts: {
+    name: string;
+    targetBlocks: number;
+    targetEvents: number;
+    maxSeconds: number;
+  }
 ): Promise<PhaseOutcome> {
   const { targetBlocks, targetEvents, maxSeconds } = opts;
 
@@ -120,7 +125,7 @@ async function runPhase(
     const baseline = await driver.snapshot();
     if (baseline && (baseline.blocks > 0 || baseline.events > 0)) {
       console.log(
-        `  Warning: ${driver.name} already reports ${baseline.blocks.toLocaleString(
+        `  Warning: ${opts.name} already reports ${baseline.blocks.toLocaleString(
           "en-US"
         )} blocks / ${baseline.events.toLocaleString("en-US")} events at launch — ` +
           `its database was not empty, so this run's rate is not trustworthy.`
@@ -172,7 +177,6 @@ function buildResult(
   key: string,
   verification: Verification,
   parts: {
-    name: string;
     blocks: number;
     events: number;
     seconds: number;
@@ -184,7 +188,6 @@ function buildResult(
 ): BenchmarkResult {
   const { seconds } = parts;
   return {
-    name: parts.name,
     ...TOOLS[key],
     blocksPerSec: seconds > 0 ? parts.blocks / seconds : 0,
     eventsPerSec: seconds > 0 ? parts.events / seconds : 0,
@@ -201,19 +204,12 @@ function buildResult(
 
 /**
  * The row published for a tool the case declares unsupported. Every metric is
- * zero and `unsupported` is what the table actually renders from; the driver is
- * constructed only to borrow its display name, so the row reads identically to
- * one the tool would have produced had it run.
+ * zero and `unsupported` is what the table actually renders from, but the row
+ * is otherwise shaped exactly like one the tool would have produced had it run.
+ * Nothing about the tool is started or constructed to build it.
  */
-function unsupportedResult(
-  key: string,
-  config: CaseConfig,
-  rpcUrl: string,
-  reason: string
-): BenchmarkResult {
-  const driver = DRIVERS[key]({ config, rpcUrl, endBlock: config.verifyEndBlock });
+function unsupportedResult(key: string, reason: string): BenchmarkResult {
   return {
-    name: driver.name,
     ...TOOLS[key],
     blocksPerSec: 0,
     eventsPerSec: 0,
@@ -238,6 +234,7 @@ async function benchmarkIndexer(
   headEndBlock: number
 ): Promise<BenchmarkResult> {
   const factory = DRIVERS[key];
+  const { name } = TOOLS[key];
   const phaseATimeoutS = config.phaseATimeoutS ?? DEFAULT_PHASE_A_TIMEOUT_S;
   // Two different quantities that differ by one. The inclusive range holds
   // this many blocks, which is what the rate is computed over…
@@ -251,7 +248,7 @@ async function benchmarkIndexer(
   // ── Phase A: bounded verification run ──
   const phaseA = factory({ config, rpcUrl, endBlock: config.verifyEndBlock });
   activeDriver = phaseA;
-  console.log(`\n--- ${phaseA.name} — verification range ---\n`);
+  console.log(`\n--- ${name} — verification range ---\n`);
   console.log(
     `Indexing blocks ${config.startBlock.toLocaleString(
       "en-US"
@@ -261,6 +258,7 @@ async function benchmarkIndexer(
 
   await phaseA.prepare();
   const rangeRun = await runPhase(phaseA, {
+    name,
     targetBlocks: rangeTargetBlocks,
     targetEvents: expected.totalEvents,
     maxSeconds: phaseATimeoutS,
@@ -323,11 +321,10 @@ async function benchmarkIndexer(
     const blocks = rangeRun.completed ? rangeBlocks : rangeRun.blocks;
     const events = rangeRun.completed ? expected.totalEvents : rangeRun.events;
     console.log(
-      `\n${phaseA.name}: slower than the ${windowS}s window over the ` +
+      `\n${name}: slower than the ${windowS}s window over the ` +
         `verification range — reporting its rate from that run.\n`
     );
     return buildResult(key, verification, {
-      name: phaseA.name,
       blocks,
       events,
       seconds,
@@ -342,14 +339,12 @@ async function benchmarkIndexer(
     blocksPerSec: number;
     seconds: number;
   }[] = [];
-  let name = phaseA.name;
 
   for (let attempt = 1; attempt <= THROUGHPUT_RUNS; attempt++) {
     const phaseB = factory({ config, rpcUrl, endBlock: headEndBlock });
     activeDriver = phaseB;
-    name = phaseB.name;
     console.log(
-      `\n--- ${phaseB.name} — throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
+      `\n--- ${name} — throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
     );
     console.log(
       `Running for up to ${windowS}s, stopping at block ${headEndBlock.toLocaleString(
@@ -359,6 +354,7 @@ async function benchmarkIndexer(
 
     await phaseB.prepare();
     const windowRun = await runPhase(phaseB, {
+      name,
       targetBlocks: headEndBlock - config.startBlock,
       targetEvents: Number.POSITIVE_INFINITY,
       maxSeconds: windowS,
@@ -542,7 +538,7 @@ async function run(config: CaseConfig) {
       // Published rather than skipped silently. A tool that cannot express the
       // case is a finding about the tool, and dropping its row would make that
       // finding indistinguishable from a job that crashed.
-      const result = unsupportedResult(name, config, rpcUrl, reason);
+      const result = unsupportedResult(name, reason);
       results.push(result);
       console.log(`\n--- ${result.name} — not run ---\n  ${reason}\n`);
       console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);

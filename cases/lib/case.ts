@@ -1,4 +1,9 @@
-import { fetchFactoryLogs, fetchLogs, type DecodedLog } from "./hypersync.ts";
+import {
+  fetchFactoryLogs,
+  fetchLogs,
+  type DecodedLog,
+  type FetchProgress,
+} from "./hypersync.ts";
 import type { EntitySpec } from "./checksum.ts";
 
 export interface ExpectedData {
@@ -86,7 +91,7 @@ export interface CaseConfig {
 export function fetchCaseLogs(
   config: CaseConfig,
   token: string,
-  onProgress?: (block: number, logs: number) => void
+  onProgress?: (progress: FetchProgress) => void
 ): Promise<DecodedLog[]> {
   const range = {
     token,

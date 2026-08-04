@@ -32,16 +32,23 @@ async function generate(name: string, token: string) {
   console.log(
     `Blocks ${config.startBlock.toLocaleString("en-US")}–${config.verifyEndBlock.toLocaleString(
       "en-US"
-    )} (${blocks.toLocaleString("en-US")}) of ${config.contract}`
+    )} (${blocks.toLocaleString("en-US")}) of ${[config.contract].flat().join(", ")}`
   );
 
-  const logs = await fetchCaseLogs(config, token, (block, count) =>
+  // A factory case reads the same range twice, so the pass is named: without it
+  // the block number appears to jump backwards halfway through.
+  let pass = "";
+  const logs = await fetchCaseLogs(config, token, (progress) => {
+    if (progress.pass !== pass) {
+      if (pass) process.stdout.write("\n");
+      pass = progress.pass;
+    }
     process.stdout.write(
-      `\r  fetched to block ${block.toLocaleString("en-US")} — ${count.toLocaleString(
+      `\r  ${progress.pass}: fetched to block ${progress.block.toLocaleString(
         "en-US"
-      )} logs`
-    )
-  );
+      )} — ${progress.logs.toLocaleString("en-US")} logs`
+    );
+  });
   process.stdout.write("\n");
 
   if (logs.length === 0) {

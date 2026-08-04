@@ -8,12 +8,15 @@ import {
   encodeSeconds,
   type EntitySpec,
 } from "../lib/checksum.ts";
-import {
-  addressAtWord,
-  uintAtWord,
-  type DecodedLog,
-  PROXY_CREATION_TOPIC,
-} from "../lib/hypersync.ts";
+import { addressAtWord, uintAtWord, type DecodedLog } from "../lib/hypersync.ts";
+
+/**
+ * `ProxyCreation(address proxy, address singleton)`, and the same signature
+ * with `proxy` indexed from 1.4.1 on — one topic0 either way, which is why the
+ * layouts have to be told apart by the factory that emitted the log.
+ */
+const PROXY_CREATION_TOPIC =
+  "0x4f51faf6c4561ff95f067657e43439f0f856d97c04d9ec9070a6199ad418e235";
 
 /**
  * The canonical Safe (formerly Gnosis Safe) proxy factories on Ethereum
@@ -100,6 +103,15 @@ const CHILD_TOPICS = {
   removedOwner: "0xf8d49fc529812e9a7c5c50e69c20f0dccc0db8fa95c98bc58cc9a4f1c1299eaf",
 } as const;
 
+/**
+ * The reverse of `CHILD_TOPICS`. The eight events that carry one address and
+ * nothing else share a single branch below, which then has to name the entity
+ * the log belongs to; looking it up beats repeating eight near-identical cases.
+ */
+const ENTITY_OF_TOPIC = new Map(
+  Object.entries(CHILD_TOPICS).map(([key, topic]) => [topic as string, key])
+);
+
 /** 32-byte words in a log's data payload. */
 const wordCount = (data: string) => Math.floor((data.length - 2) / 64);
 
@@ -117,8 +129,16 @@ const soleAddressOf = (log: DecodedLog) =>
  * and leaves `payment` as its last word either way. It is the only argument
  * recorded here: `txHash` is a bytes32 with no place in a checksum that
  * encodes addresses, amounts and timestamps.
+ *
+ * Both layouts carry at least one word, so an empty payload is not a layout
+ * this code has not met — it is a truncated log, and reading it as a payment of
+ * zero would bury that in a checksum nobody could trace back.
  */
-const paymentOf = (data: string) => uintAtWord(data, wordCount(data) - 1);
+const paymentOf = (data: string) => {
+  const words = wordCount(data);
+  if (words < 1) throw new Error(`Execution log has no data payload: ${data}`);
+  return uintAtWord(data, words - 1);
+};
 
 /**
  * `SafeSetup(address indexed initiator, address[] owners, uint256 threshold,
@@ -217,11 +237,13 @@ export const caseConfig: CaseConfig = {
     childOf: proxyOf,
   },
 
-  // An order of magnitude more events than the ERC-20 cases, over nine
-  // thousand blocks rather than a thousand. The default fifteen minutes is not
-  // enough for the slower indexers to reach the end of it, and a timeout is
-  // reported as "could not verify", which would say nothing about the tool.
-  phaseATimeoutS: 1_800,
+  // An order of magnitude more events than the ERC-20 cases, and 25,096
+  // contract registrations on top of them — the work this case exists to
+  // measure is also what makes it slow. A tool that runs out of time reports
+  // "could not verify", which says nothing about the tool, so the default
+  // fifteen minutes is raised; not further, because time past this point buys
+  // a slow tool a verdict nobody is waiting for.
+  phaseATimeoutS: 1_200,
 
   unsupported: {
     rindexer:
@@ -362,10 +384,12 @@ export const caseConfig: CaseConfig = {
     const rows: Record<string, string[]> = Object.fromEntries(
       ["safe", ...Object.keys(CHILD_TOPICS)].map((key) => [key, []])
     );
-    // Only proxies these factories announced count as children. `fetchCaseLogs`
-    // already filters the child logs to those addresses, but the case logic is
-    // what defines the rule, so it is applied here too rather than assumed.
-    const registered = new Set<string>();
+    // Only proxies these factories announced count as children, and
+    // `fetchCaseLogs` has already restricted the child logs to those addresses.
+    // Re-checking it here would have to be done in event order, which is the
+    // one thing the ground truth must not do: a proxy emits its SafeSetup one
+    // log index *below* the ProxyCreation announcing it, so an event-order
+    // check would drop the 256 rows the case exists to make visible.
 
     /** Every child event opens with the proxy that emitted it. */
     const safe = (log: DecodedLog) => encodeAddress(log.address);
@@ -374,7 +398,6 @@ export const caseConfig: CaseConfig = {
     for (const log of logs) {
       if (log.topic0 === PROXY_CREATION_TOPIC) {
         const proxy = proxyOf(log);
-        registered.add(proxy);
         rows.safe.push(
           canonicalRow([
             encodeAddress(proxy),
@@ -473,10 +496,7 @@ export const caseConfig: CaseConfig = {
         case CHILD_TOPICS.disabledModule:
         case CHILD_TOPICS.addedOwner:
         case CHILD_TOPICS.removedOwner: {
-          const key = Object.keys(CHILD_TOPICS).find(
-            (name) => CHILD_TOPICS[name as keyof typeof CHILD_TOPICS] === log.topic0
-          )!;
-          rows[key].push(
+          rows[ENTITY_OF_TOPIC.get(log.topic0)!].push(
             canonicalRow([safe(log), encodeAddress(soleAddressOf(log)), at(log)])
           );
           break;

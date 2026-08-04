@@ -26,10 +26,12 @@ jobs:
   benchmark:
     name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
     runs-on: ubuntu-latest
-    # The factory case allows 40 minutes for its verification range alone, and
-    # a job also pays for installs, image pulls and its throughput windows on
-    # top of that. Jobs still end as soon as their benchmark does.
-    timeout-minutes: 75
+    # One job is one indexer on one scenario, and they all run concurrently, so
+    # this bounds a single benchmark rather than the suite: the longest phase A
+    # any case allows (20 minutes) plus its throughput windows and installs.
+    # It is a backstop for a hung runner — a job that reaches it produces no row
+    # at all, which is why it sits well above what a real run costs.
+    timeout-minutes: 45
     # Runs third-party indexer binaries, so it gets the narrowest token that
     # still works: read-only, and enough to resolve a public release tag.
     permissions:

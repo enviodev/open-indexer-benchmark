@@ -25,6 +25,13 @@ const legacyFactories = new Set(FACTORIES_V1_3_0);
 // Proxies these factories have announced so far. Held in memory: the processor
 // starts from the case's first block on every run, so the set is rebuilt from
 // the same events each time rather than being state carried across runs.
+//
+// This is safe here and only here. The benchmark always runs a bounded range
+// that ends far below the chain head, so no block this set is built from is
+// ever rolled back. A head-following indexer would have to derive the set from
+// the `safe` table instead — a fork that unwinds a ProxyCreation unwinds the
+// row, but it cannot unwind a Set — which is a database read per log, and the
+// reason it is not done here: it would measure Postgres rather than the tool.
 const registered = new Set<string>();
 
 processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {

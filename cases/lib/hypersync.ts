@@ -9,14 +9,6 @@ export const APPROVAL_TOPIC =
 
 const HYPERSYNC_URL = "https://eth.hypersync.xyz/query";
 
-/**
- * `ProxyCreation(address proxy, address singleton)` — Safe proxy factory. The
- * factory case's own event topics live with the case; this one is here because
- * it is the topic every factory query in this file is written around.
- */
-export const PROXY_CREATION_TOPIC =
-  "0x4f51faf6c4561ff95f067657e43439f0f856d97c04d9ec9070a6199ad418e235";
-
 export interface DecodedLog {
   blockNumber: number;
   logIndex: number;
@@ -107,6 +99,20 @@ function firstWord(data: string): bigint {
 }
 
 /**
+ * How far a read has got. `pass` names what is being read, because a factory
+ * case reads twice over the same block range and a progress line that silently
+ * restarts at the first block reads as a stall rather than as the second pass
+ * beginning.
+ */
+export interface FetchProgress {
+  pass: string;
+  /** Last block read, within the pass's own range. */
+  block: number;
+  /** Logs collected so far in this pass. */
+  logs: number;
+}
+
+/**
  * Fetch and decode every matching log in `[fromBlock, toBlock]` (both
  * inclusive). HyperSync paginates via `next_block`; its `to_block` is
  * exclusive, and block timestamps come back as hex strings.
@@ -123,7 +129,9 @@ export async function fetchLogs(opts: {
   fromBlock: number;
   /** Inclusive. */
   toBlock: number;
-  onProgress?: (block: number, logs: number) => void;
+  /** Names this read in progress output. */
+  pass?: string;
+  onProgress?: (progress: FetchProgress) => void;
 }): Promise<DecodedLog[]> {
   const { token, address, topics, fromBlock, toBlock } = opts;
   const addresses =
@@ -188,7 +196,11 @@ export async function fetchLogs(opts: {
       break;
     }
     cursor = next;
-    opts.onProgress?.(Math.min(cursor - 1, toBlock), out.length);
+    opts.onProgress?.({
+      pass: opts.pass ?? "logs",
+      block: Math.min(cursor - 1, toBlock),
+      logs: out.length,
+    });
   }
 
   // Logs arrive block-ordered per batch, but sort explicitly so any caller that
@@ -230,7 +242,7 @@ export async function fetchFactoryLogs(opts: {
   fromBlock: number;
   /** Inclusive. */
   toBlock: number;
-  onProgress?: (block: number, logs: number) => void;
+  onProgress?: (progress: FetchProgress) => void;
 }): Promise<DecodedLog[]> {
   const factoryLogs = await fetchLogs({
     token: opts.token,
@@ -238,6 +250,7 @@ export async function fetchFactoryLogs(opts: {
     topics: opts.factoryTopics,
     fromBlock: opts.fromBlock,
     toBlock: opts.toBlock,
+    pass: "factory logs",
     onProgress: opts.onProgress,
   });
 
@@ -249,6 +262,7 @@ export async function fetchFactoryLogs(opts: {
       topics: opts.childTopics,
       fromBlock: opts.fromBlock,
       toBlock: opts.toBlock,
+      pass: "child logs",
       onProgress: opts.onProgress,
     })
   ).filter((log) => children.has(log.address));
