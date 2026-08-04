@@ -33,8 +33,10 @@ jobs:
       cases: ${{ steps.set-matrix.outputs.cases }}
       case1: ${{ steps.set-matrix.outputs.case1 }}
       case2: ${{ steps.set-matrix.outputs.case2 }}
+      case3: ${{ steps.set-matrix.outputs.case3 }}
       indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
       indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
+      indexers3: ${{ steps.set-matrix.outputs.indexers3 }}
       partial: ${{ steps.set-matrix.outputs.partial }}
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
@@ -66,7 +68,7 @@ jobs:
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-transfer-events"]'
+            CASES_JSON='["erc20-account-balances","erc20-transfer-events","safe-factory-registrations"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
@@ -83,25 +85,24 @@ jobs:
 
           # Scenarios run one after another, which needs one `needs`-chained job
           # per scenario below — GitHub cannot order a matrix. That makes the
-          # number of scenario slots fixed: adding a third scenario means adding
-          # a third `scenario-N` job here. Fail loudly rather than silently
+          # number of scenario slots fixed: adding a fourth scenario means adding
+          # a fourth `scenario-N` job here. Fail loudly rather than silently
           # dropping the extra scenario from the run and from the table.
-          if [ "$COUNT" -gt 2 ]; then
-            echo "Only 2 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
+          if [ "$COUNT" -gt 3 ]; then
+            echo "Only 3 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
             exit 1
           fi
 
           # Every scenario measures every indexer, unless a pull request
-          # narrows it: there a full run is fourteen long jobs against shared
+          # narrows it: there a full run is twenty-one long jobs against shared
           # data endpoints, nearly all of them re-measuring untouched code.
           # `main` and manual runs stay full — they publish the README table,
           # which has to hold a complete set of results.
-          INDEXERS1="$INDEXERS_JSON"
-          INDEXERS2="$INDEXERS_JSON"
           PARTIAL=0
-          # Empty unless the run is scoped: the summary reads it to tell an
-          # indexer that was asked to run and reported nothing — a failed job —
-          # apart from one this run never selected.
+          # Both empty unless the run is scoped. SELECTED lets the summary tell
+          # an indexer that was asked to run and reported nothing — a failed
+          # job — apart from one this run never selected.
+          SCOPE=""
           SELECTED=""
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
@@ -130,20 +131,23 @@ jobs:
             fi
           fi
 
-          CASE1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')
-          CASE2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            INDEXERS1=$(echo "$SCOPE" | jq -c --arg c "$CASE1" '.indexers[$c] // []')
-            INDEXERS2=$(echo "$SCOPE" | jq -c --arg c "$CASE2" '.indexers[$c] // []')
-          fi
-
           echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
-          echo "case1=$CASE1" >> "$GITHUB_OUTPUT"
-          echo "case2=$CASE2" >> "$GITHUB_OUTPUT"
-          echo "indexers1=$INDEXERS1" >> "$GITHUB_OUTPUT"
-          echo "indexers2=$INDEXERS2" >> "$GITHUB_OUTPUT"
           echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
           echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
+
+          # One scenario slot per `scenario-N` job below. A slot with no case
+          # is skipped by that job's `if`, so the loop covers a run with fewer
+          # scenarios than slots without special-casing it.
+          for N in 1 2 3; do
+            CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
+            if [ -n "$SCOPE" ]; then
+              INDEXERS_N=$(echo "$SCOPE" | jq -c --arg c "$CASE_N" '.indexers[$c] // []')
+            else
+              INDEXERS_N="$INDEXERS_JSON"
+            fi
+            echo "case$N=$CASE_N" >> "$GITHUB_OUTPUT"
+            echo "indexers$N=$INDEXERS_N" >> "$GITHUB_OUTPUT"
+          done
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
@@ -184,9 +188,20 @@ jobs:
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
+  scenario-3:
+    name: ${{ needs.setup.outputs.case3 }}
+    needs: [setup, scenario-1, scenario-2]
+    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case3 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ needs.setup.outputs.case3 }}
+      indexers: ${{ needs.setup.outputs.indexers3 }}
+      duration: ${{ needs.setup.outputs.duration }}
+    secrets: inherit
+
   summary:
     name: Summary
-    needs: [setup, scenario-1, scenario-2]
+    needs: [setup, scenario-1, scenario-2, scenario-3]
     # A pull request that changed nothing benchmark-related runs no scenario,
     # so there is nothing to tabulate — and an empty table reads as "measured,
     # found nothing" rather than "not measured".

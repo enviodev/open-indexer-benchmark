@@ -10,14 +10,21 @@
 import { existsSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DRIVERS, INDEXERS as REGISTERED } from "../cases/lib/drivers/index.ts";
+import { INDEXERS as REGISTERED } from "../cases/lib/drivers/index.ts";
 import { selectScope } from "./select-scope.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const CASES = readdirSync(resolve(ROOT, "cases")).filter((d) =>
-  existsSync(resolve(ROOT, "cases", d, "run.ts"))
-);
+// Discovered rather than listed, so a new scenario is covered the moment it
+// lands instead of the day someone remembers to add it here.
+const CASES = readdirSync(resolve(ROOT, "cases"))
+  .filter((d) => existsSync(resolve(ROOT, "cases", d, "run.ts")))
+  .sort();
 const INDEXERS = [...REGISTERED];
+
+/** The given indexers, in every scenario — what a repo-wide change selects. */
+const inEvery = (indexers: string[]) =>
+  Object.fromEntries(CASES.map((c) => [c, indexers]));
+const EVERYTHING = inEvery(INDEXERS);
 
 let failures = 0;
 
@@ -89,39 +96,21 @@ check("expected output runs the whole scenario", [
   "cases/erc20-account-balances/expected.json",
 ], { "erc20-account-balances": INDEXERS });
 
-check("a driver runs its indexer in every scenario", ["cases/lib/drivers/sqd.ts"], {
-  "erc20-account-balances": ["sqd"],
-  "erc20-transfer-events": ["sqd"],
-});
+check("a driver runs its indexer in every scenario", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd"]));
 
-check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.ts"], {
-  "erc20-account-balances": ["envio", "envio-rpc"],
-  "erc20-transfer-events": ["envio", "envio-rpc"],
-});
+check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.ts"], inEvery(["envio", "envio-rpc"]));
 
 // Attributing a driver module to no indexer at all would select nothing and
 // publish the untouched carried-forward rows as if they had been re-measured.
 check("an unattributable driver module runs everything", [
   "cases/lib/drivers/helpers.ts",
-], {
-  "erc20-account-balances": INDEXERS,
-  "erc20-transfer-events": INDEXERS,
-});
+], EVERYTHING);
 
-check("shared harness runs everything", ["cases/lib/runner.ts"], {
-  "erc20-account-balances": INDEXERS,
-  "erc20-transfer-events": INDEXERS,
-});
+check("shared harness runs everything", ["cases/lib/runner.ts"], EVERYTHING);
 
-check("driver plumbing runs everything", ["cases/lib/drivers/common.ts"], {
-  "erc20-account-balances": INDEXERS,
-  "erc20-transfer-events": INDEXERS,
-});
+check("driver plumbing runs everything", ["cases/lib/drivers/common.ts"], EVERYTHING);
 
-check("workflow changes run everything", [".github/workflows/benchmark-case.yml"], {
-  "erc20-account-balances": INDEXERS,
-  "erc20-transfer-events": INDEXERS,
-});
+check("workflow changes run everything", [".github/workflows/benchmark-case.yml"], EVERYTHING);
 
 check("docs and local scripts run nothing", [
   "README.md",
@@ -137,26 +126,20 @@ check("a README-suffixed file is not mistaken for docs", [
 
 // These two scripts only ever execute inside the CI pipeline, so a narrowed
 // run would ship a change to them to main unexercised.
-check("the scope filter itself runs everything", ["scripts/select-scope.ts"], {
-  "erc20-account-balances": INDEXERS,
-  "erc20-transfer-events": INDEXERS,
-});
+check("the scope filter itself runs everything", ["scripts/select-scope.ts"], EVERYTHING);
 
-check("the table builder runs everything", ["scripts/build-tables.ts"], {
-  "erc20-account-balances": INDEXERS,
-  "erc20-transfer-events": INDEXERS,
-});
+check("the table builder runs everything", ["scripts/build-tables.ts"], EVERYTHING);
 
-check("a file directly under cases/ is presumed shared", ["cases/helper.ts"], {
-  "erc20-account-balances": INDEXERS,
-  "erc20-transfer-events": INDEXERS,
-});
+check("a file directly under cases/ is presumed shared", ["cases/helper.ts"], EVERYTHING);
 
 check("selections merge across files, in canonical order", [
   "cases/erc20-transfer-events/subquery/schema.graphql",
   "cases/erc20-account-balances/ponder/ponder.config.ts",
   "cases/lib/drivers/envio.ts",
 ], {
+  // The driver change reaches every scenario; the two project-directory
+  // changes add one indexer each to their own.
+  ...inEvery(["envio", "envio-rpc"]),
   "erc20-account-balances": ["envio", "envio-rpc", "ponder"],
   "erc20-transfer-events": ["envio", "envio-rpc", "subquery"],
 });

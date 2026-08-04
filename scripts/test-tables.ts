@@ -148,6 +148,46 @@ check(
     rindexer.cells.correctnessDetail
 );
 
+// A tool that cannot express a case is published as a row of dashes carrying a
+// numbered note, and must survive a round trip like any other row — otherwise
+// it silently disappears from the table on the next run.
+const unsupportedRow = {
+  name: "Rindexer",
+  eventsPerSec: 0,
+  unsupported: "no factory contract support",
+  cells: {
+    tool: "[Rindexer](https://rindexer.xyz)",
+    source: "[RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc)",
+    events: "—",
+    blocks: "—",
+    correctness: "—",
+    correctnessDetail: "",
+    dbSize: "—",
+  },
+};
+const withUnsupported = buildTable([rows[0], unsupportedRow]);
+check(
+  "an unsupported tool renders as dashes with a numbered note",
+  withUnsupported.includes(
+    "| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (1) | — |"
+  ) && withUnsupported.includes("**(1)** Rindexer — no factory contract support"),
+  withUnsupported
+);
+check(
+  "an unsupported tool sorts below every tool that ran",
+  withUnsupported.indexOf("Envio Indexer") < withUnsupported.indexOf("Rindexer")
+);
+const reparsed = parsePublishedTable(
+  `<!-- BENCHMARK:demo:START -->\n${withUnsupported}\n<!-- BENCHMARK:demo:END -->`,
+  "demo"
+).find((row) => row.name === "Rindexer");
+check(
+  "an unsupported row round-trips with its reason",
+  reparsed?.unsupported === "no factory contract support" &&
+    reparsed?.cells.events === "—",
+  JSON.stringify(reparsed)
+);
+
 check("an empty table is handled", buildTable([]) === "_No results collected._");
 check(
   "a missing case yields no rows",

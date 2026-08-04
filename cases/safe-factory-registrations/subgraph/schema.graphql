@@ -1,0 +1,120 @@
+# Every entity is written once and never updated, so they are declared
+# immutable — the storage layout The Graph's docs recommend for event data.
+type Safe @entity(immutable: true) {
+  id: ID!
+  address: String!
+  singleton: String!
+  timestamp: Int!
+}
+
+type SafeSetup @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  initiator: String!
+  threshold: BigInt!
+  timestamp: Int!
+}
+
+type SafeReceived @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  sender: String!
+  value: BigInt!
+  timestamp: Int!
+}
+
+type SafeModuleTransaction @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  module: String!
+  to: String!
+  value: BigInt!
+  operation: Int!
+  timestamp: Int!
+}
+
+type SafeMultiSigTransaction @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  to: String!
+  value: BigInt!
+  operation: Int!
+  timestamp: Int!
+}
+
+type ExecutionSuccess @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  payment: BigInt!
+  timestamp: Int!
+}
+
+type ExecutionFailure @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  payment: BigInt!
+  timestamp: Int!
+}
+
+type ChangedThreshold @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  threshold: BigInt!
+  timestamp: Int!
+}
+
+type ChangedMasterCopy @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  singleton: String!
+  timestamp: Int!
+}
+
+type ChangedFallbackHandler @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  handler: String!
+  timestamp: Int!
+}
+
+type ChangedGuard @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  guard: String!
+  timestamp: Int!
+}
+
+type ChangedModuleGuard @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  moduleGuard: String!
+  timestamp: Int!
+}
+
+type EnabledModule @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  module: String!
+  timestamp: Int!
+}
+
+type DisabledModule @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  module: String!
+  timestamp: Int!
+}
+
+type AddedOwner @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  owner: String!
+  timestamp: Int!
+}
+
+type RemovedOwner @entity(immutable: true) {
+  id: ID!
+  safe: String!
+  owner: String!
+  timestamp: Int!
+}

@@ -1,0 +1,174 @@
+specVersion: 1.3.0
+schema:
+  file: ./schema.graphql
+# One dataSource per canonical factory deployment: a dataSource carries a
+# single address, and the two generations need different ABIs — `proxy` became
+# indexed in 1.4.1, which is the same event signature over a different payload.
+dataSources:
+  - kind: ethereum
+    name: SafeProxyFactory
+    network: mainnet
+    source:
+      address: "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2" # v1.3.0 canonical
+      abi: SafeProxyFactory
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Safe
+      abis:
+        - name: SafeProxyFactory
+          file: ./abis/SafeProxyFactory.json
+      eventHandlers:
+        - event: ProxyCreation(address,address)
+          handler: handleProxyCreation
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: SafeProxyFactoryEip155
+    network: mainnet
+    source:
+      address: "0xc22834581ebc8527d974f8a1c97e1bea4ef910bc" # v1.3.0 eip155
+      abi: SafeProxyFactory
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Safe
+      abis:
+        - name: SafeProxyFactory
+          file: ./abis/SafeProxyFactory.json
+      eventHandlers:
+        - event: ProxyCreation(address,address)
+          handler: handleProxyCreation
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: SafeProxyFactory141
+    network: mainnet
+    source:
+      address: "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67" # v1.4.1 canonical
+      abi: SafeProxyFactoryModern
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Safe
+      abis:
+        - name: SafeProxyFactoryModern
+          file: ./abis/SafeProxyFactoryModern.json
+      eventHandlers:
+        - event: ProxyCreation(indexed address,address)
+          handler: handleProxyCreationIndexed
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: SafeProxyFactory150
+    network: mainnet
+    source:
+      address: "0x14f2982d601c9458f93bd70b218933a6f8165e7b" # v1.5.0 canonical
+      abi: SafeProxyFactoryModern
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Safe
+      abis:
+        - name: SafeProxyFactoryModern
+          file: ./abis/SafeProxyFactoryModern.json
+      eventHandlers:
+        - event: ProxyCreation(indexed address,address)
+          handler: handleProxyCreationIndexed
+      file: ./src/mapping.ts
+# Instantiated per ProxyCreation by the handlers above. A template carries no
+# address of its own — nor a block range, which only a dataSource may declare.
+templates:
+  - kind: ethereum
+    name: Safe
+    network: mainnet
+    source:
+      abi: Safe
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - SafeSetup
+        - SafeReceived
+        - SafeModuleTransaction
+        - SafeMultiSigTransaction
+        - ExecutionSuccess
+        - ExecutionFailure
+        - ChangedThreshold
+        - ChangedMasterCopy
+        - ChangedFallbackHandler
+        - ChangedGuard
+        - ChangedModuleGuard
+        - EnabledModule
+        - DisabledModule
+        - AddedOwner
+        - RemovedOwner
+      abis:
+        - name: Safe
+          file: ./abis/Safe.json
+      # Eight of these events made an argument `indexed` in Safe 1.4.x without
+      # changing the signature, so both layouts share a topic0. Graph Node runs
+      # only the handler whose ABI can decode the log it is given, so declaring
+      # both is enough to tell them apart.
+      eventHandlers:
+        - event: SafeSetup(indexed address,address[],uint256,address,address)
+          handler: handleSafeSetup
+        - event: SafeReceived(indexed address,uint256)
+          handler: handleSafeReceived
+        - event: SafeModuleTransaction(address,address,uint256,bytes,uint8)
+          handler: handleSafeModuleTransaction
+        - event: SafeMultiSigTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes,bytes)
+          handler: handleSafeMultiSigTransaction
+        - event: ExecutionSuccess(bytes32,uint256)
+          handler: handleExecutionSuccess
+        - event: ExecutionSuccess(indexed bytes32,uint256)
+          handler: handleExecutionSuccessV4
+        - event: ExecutionFailure(bytes32,uint256)
+          handler: handleExecutionFailure
+        - event: ExecutionFailure(indexed bytes32,uint256)
+          handler: handleExecutionFailureV4
+        - event: ChangedThreshold(uint256)
+          handler: handleChangedThreshold
+        - event: ChangedMasterCopy(address)
+          handler: handleChangedMasterCopy
+        - event: ChangedFallbackHandler(address)
+          handler: handleChangedFallbackHandler
+        - event: ChangedFallbackHandler(indexed address)
+          handler: handleChangedFallbackHandlerV4
+        - event: ChangedGuard(address)
+          handler: handleChangedGuard
+        - event: ChangedGuard(indexed address)
+          handler: handleChangedGuardV4
+        - event: ChangedModuleGuard(indexed address)
+          handler: handleChangedModuleGuard
+        - event: EnabledModule(address)
+          handler: handleEnabledModule
+        - event: EnabledModule(indexed address)
+          handler: handleEnabledModuleV4
+        - event: DisabledModule(address)
+          handler: handleDisabledModule
+        - event: DisabledModule(indexed address)
+          handler: handleDisabledModuleV4
+        - event: AddedOwner(address)
+          handler: handleAddedOwner
+        - event: AddedOwner(indexed address)
+          handler: handleAddedOwnerV4
+        - event: RemovedOwner(address)
+          handler: handleRemovedOwner
+        - event: RemovedOwner(indexed address)
+          handler: handleRemovedOwnerV4
+      file: ./src/mapping.ts

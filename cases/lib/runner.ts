@@ -26,7 +26,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { CaseConfig } from "./case.ts";
+import { fetchCaseLogs, type CaseConfig } from "./case.ts";
 import type { Expected } from "./checksum.ts";
 import {
   DRIVERS,
@@ -35,7 +35,7 @@ import {
   type Driver,
   type Snapshot,
 } from "./drivers/index.ts";
-import { fetchChainHeight, fetchLogs } from "./hypersync.ts";
+import { fetchChainHeight } from "./hypersync.ts";
 import { psql, sleep } from "./process.ts";
 import { type BenchmarkResult, toTableRow } from "./result.ts";
 import { buildTable, formatBytes, formatRate } from "./table.ts";
@@ -49,8 +49,11 @@ import { verify, type Verification } from "./verify.ts";
  */
 const HEAD_OFFSET = 500;
 
-/** Give up on the verification range after this long and report no result. */
-const PHASE_A_TIMEOUT_S = 900;
+/**
+ * Give up on the verification range after this long and report no result.
+ * A case whose range is deliberately large can raise it via `phaseATimeoutS`.
+ */
+const DEFAULT_PHASE_A_TIMEOUT_S = 900;
 
 /**
  * How many throughput windows to run for indexers fast enough to get one.
@@ -99,7 +102,12 @@ interface PhaseOutcome {
  */
 async function runPhase(
   driver: Driver,
-  opts: { targetBlocks: number; targetEvents: number; maxSeconds: number }
+  opts: {
+    name: string;
+    targetBlocks: number;
+    targetEvents: number;
+    maxSeconds: number;
+  }
 ): Promise<PhaseOutcome> {
   const { targetBlocks, targetEvents, maxSeconds } = opts;
 
@@ -117,7 +125,7 @@ async function runPhase(
     const baseline = await driver.snapshot();
     if (baseline && (baseline.blocks > 0 || baseline.events > 0)) {
       console.log(
-        `  Warning: ${driver.name} already reports ${baseline.blocks.toLocaleString(
+        `  Warning: ${opts.name} already reports ${baseline.blocks.toLocaleString(
           "en-US"
         )} blocks / ${baseline.events.toLocaleString("en-US")} events at launch — ` +
           `its database was not empty, so this run's rate is not trustworthy.`
@@ -169,7 +177,6 @@ function buildResult(
   key: string,
   verification: Verification,
   parts: {
-    name: string;
     blocks: number;
     events: number;
     seconds: number;
@@ -181,7 +188,6 @@ function buildResult(
 ): BenchmarkResult {
   const { seconds } = parts;
   return {
-    name: parts.name,
     ...TOOLS[key],
     blocksPerSec: seconds > 0 ? parts.blocks / seconds : 0,
     eventsPerSec: seconds > 0 ? parts.events / seconds : 0,
@@ -196,6 +202,28 @@ function buildResult(
   };
 }
 
+/**
+ * The row published for a tool the case declares unsupported. Every metric is
+ * zero and `unsupported` is what the table actually renders from, but the row
+ * is otherwise shaped exactly like one the tool would have produced had it run.
+ * Nothing about the tool is started or constructed to build it.
+ */
+function unsupportedResult(key: string, reason: string): BenchmarkResult {
+  return {
+    ...TOOLS[key],
+    blocksPerSec: 0,
+    eventsPerSec: 0,
+    throughputSource: "range",
+    correctness: "unknown",
+    correctnessDetail: reason,
+    dbSizeBytes: null,
+    dbTotalBytes: null,
+    rangeSeconds: null,
+    windowSeconds: null,
+    unsupported: reason,
+  };
+}
+
 async function benchmarkIndexer(
   key: string,
   config: CaseConfig,
@@ -206,6 +234,8 @@ async function benchmarkIndexer(
   headEndBlock: number
 ): Promise<BenchmarkResult> {
   const factory = DRIVERS[key];
+  const { name } = TOOLS[key];
+  const phaseATimeoutS = config.phaseATimeoutS ?? DEFAULT_PHASE_A_TIMEOUT_S;
   // Two different quantities that differ by one. The inclusive range holds
   // this many blocks, which is what the rate is computed over…
   const rangeBlocks = config.verifyEndBlock - config.startBlock + 1;
@@ -218,7 +248,7 @@ async function benchmarkIndexer(
   // ── Phase A: bounded verification run ──
   const phaseA = factory({ config, rpcUrl, endBlock: config.verifyEndBlock });
   activeDriver = phaseA;
-  console.log(`\n--- ${phaseA.name} — verification range ---\n`);
+  console.log(`\n--- ${name} — verification range ---\n`);
   console.log(
     `Indexing blocks ${config.startBlock.toLocaleString(
       "en-US"
@@ -228,9 +258,10 @@ async function benchmarkIndexer(
 
   await phaseA.prepare();
   const rangeRun = await runPhase(phaseA, {
+    name,
     targetBlocks: rangeTargetBlocks,
     targetEvents: expected.totalEvents,
-    maxSeconds: PHASE_A_TIMEOUT_S,
+    maxSeconds: phaseATimeoutS,
   });
   await phaseA.stop();
 
@@ -248,13 +279,7 @@ async function benchmarkIndexer(
         // the report can name what differs instead of just that a checksum did.
         fetchExpectedRows: async () => {
           console.log("  Mismatch found — rebuilding ground truth to diff it...");
-          const logs = await fetchLogs({
-            token: apiToken,
-            address: config.contract,
-            topics: config.topics,
-            fromBlock: config.startBlock,
-            toBlock: config.verifyEndBlock,
-          });
+          const logs = await fetchCaseLogs(config, apiToken);
           return config.computeExpected(logs).entities;
         },
       }
@@ -266,11 +291,11 @@ async function benchmarkIndexer(
   } else {
     // Verifying a partial database would report missing rows, which reads as a
     // data bug rather than what it is: the indexer ran out of time.
-    const timedOut = rangeRun.elapsedS >= PHASE_A_TIMEOUT_S - 1;
+    const timedOut = rangeRun.elapsedS >= phaseATimeoutS - 1;
     verification = {
       status: "unknown",
       detail: timedOut
-        ? `did not finish the verification range within ${PHASE_A_TIMEOUT_S}s`
+        ? `did not finish the verification range within ${phaseATimeoutS}s`
         : `stopped after ${rangeRun.elapsedS.toFixed(0)}s having indexed ` +
           `${rangeRun.events.toLocaleString("en-US")} of ` +
           `${expected.totalEvents.toLocaleString("en-US")} events — ` +
@@ -296,11 +321,10 @@ async function benchmarkIndexer(
     const blocks = rangeRun.completed ? rangeBlocks : rangeRun.blocks;
     const events = rangeRun.completed ? expected.totalEvents : rangeRun.events;
     console.log(
-      `\n${phaseA.name}: slower than the ${windowS}s window over the ` +
+      `\n${name}: slower than the ${windowS}s window over the ` +
         `verification range — reporting its rate from that run.\n`
     );
     return buildResult(key, verification, {
-      name: phaseA.name,
       blocks,
       events,
       seconds,
@@ -315,14 +339,12 @@ async function benchmarkIndexer(
     blocksPerSec: number;
     seconds: number;
   }[] = [];
-  let name = phaseA.name;
 
   for (let attempt = 1; attempt <= THROUGHPUT_RUNS; attempt++) {
     const phaseB = factory({ config, rpcUrl, endBlock: headEndBlock });
     activeDriver = phaseB;
-    name = phaseB.name;
     console.log(
-      `\n--- ${phaseB.name} — throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
+      `\n--- ${name} — throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
     );
     console.log(
       `Running for up to ${windowS}s, stopping at block ${headEndBlock.toLocaleString(
@@ -332,14 +354,16 @@ async function benchmarkIndexer(
 
     await phaseB.prepare();
     const windowRun = await runPhase(phaseB, {
+      name,
       targetBlocks: headEndBlock - config.startBlock,
       targetEvents: Number.POSITIVE_INFINITY,
       maxSeconds: windowS,
     });
-    // The end block sits millions of blocks ahead, so nothing reaches it inside
-    // the window: exiting without completing means the indexer died. Whatever
-    // partial work it did is not a throughput measurement, and keeping it risks
-    // publishing a rate from a broken run.
+    // Reaching the end block is a legitimate way for a run to finish — a case
+    // may pin one close enough to get to — and that leaves `completed` set.
+    // Exiting *without* it means the indexer died, and whatever partial work it
+    // did is not a throughput measurement: keeping it risks publishing a rate
+    // from a broken run.
     const died = phaseB.exited() && !windowRun.completed;
     await phaseB.stop();
     await phaseB.cleanup();
@@ -492,8 +516,11 @@ async function run(config: CaseConfig) {
     process.exit(1);
   }
 
-  const head = await fetchChainHeight(apiToken);
-  const headEndBlock = head - HEAD_OFFSET;
+  // The throughput window normally runs at the chain head, which is as far as
+  // any indexer could get. A case that cares about *what* it is walking pins an
+  // end block instead, and then the height is not needed at all.
+  const headEndBlock =
+    config.throughputEndBlock ?? (await fetchChainHeight(apiToken)) - HEAD_OFFSET;
 
   console.log(`=== ${config.title} Benchmark ===`);
   console.log(
@@ -506,6 +533,18 @@ async function run(config: CaseConfig) {
 
   const results: BenchmarkResult[] = [];
   for (const name of selected) {
+    const reason = config.unsupported?.[name];
+    if (reason) {
+      // Published rather than skipped silently. A tool that cannot express the
+      // case is a finding about the tool, and dropping its row would make that
+      // finding indistinguishable from a job that crashed.
+      const result = unsupportedResult(name, reason);
+      results.push(result);
+      console.log(`\n--- ${result.name} — not run ---\n  ${reason}\n`);
+      console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);
+      continue;
+    }
+
     const result = await benchmarkIndexer(
       name,
       config,

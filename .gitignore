@@ -1,1 +1,4 @@
 .pnpm-store
+
+# Graph Node binary, shared by every scenario's subgraph run.
+.graph-node/

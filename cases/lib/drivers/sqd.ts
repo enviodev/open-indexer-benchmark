@@ -36,7 +36,6 @@ export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   );
 
   return {
-    name: "Sqd",
     dbUrl: SQD_DB_URL,
     async prepare() {
       console.log("Cleaning squid build artifacts...");

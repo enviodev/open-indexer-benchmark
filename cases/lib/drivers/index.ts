@@ -28,51 +28,65 @@ const HYPERRPC_URL = "https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc";
 const SQD_NETWORK_URL = "https://docs.sqd.ai/subsquid-network/overview/";
 
 /**
- * Which network each tool reads chain data from, and where to link it. Tools
- * without their own data source read from Envio HyperRPC, so the source column
- * distinguishes a tool's own pipeline from a plain RPC endpoint.
+ * How each tool is presented: its display name, and which network it reads
+ * chain data from and where to link that. Tools without their own data source
+ * read from Envio HyperRPC, so the source column distinguishes a tool's own
+ * pipeline from a plain RPC endpoint.
+ *
+ * The name lives here rather than on the driver so a row can be published for a
+ * tool the case never starts — and so the two can never disagree.
  */
 export const TOOLS: Record<
   keyof typeof DRIVERS,
-  { toolUrl: string; source: string; sourceUrl: string; storage: string }
+  { name: string; toolUrl: string; source: string; sourceUrl: string; storage: string }
 > = {
   envio: {
+    name: "Envio Indexer",
     toolUrl: "https://envio.dev",
     source: "HyperSync",
     sourceUrl: HYPERSYNC_URL,
     storage: "Postgres",
   },
   "envio-rpc": {
+    name: "Envio Indexer",
     toolUrl: "https://envio.dev",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   ponder: {
+    name: "Ponder",
     toolUrl: "https://ponder.sh",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   rindexer: {
+    name: "Rindexer",
     toolUrl: "https://rindexer.xyz",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   subgraph: {
+    // The subgraph is what is being benchmarked; Graph Node is the runtime that
+    // executes it. The name matches the "Subgraph" column of the May 2025
+    // results kept in the root README.
+    name: "Subgraph",
     toolUrl: "https://thegraph.com",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   sqd: {
+    name: "Sqd",
     toolUrl: "https://www.sqd.ai",
     source: "SQD",
     sourceUrl: SQD_NETWORK_URL,
     storage: "Postgres",
   },
   subquery: {
+    name: "SubQuery",
     toolUrl: "https://subquery.network",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,

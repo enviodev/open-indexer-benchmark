@@ -27,7 +27,6 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const readEvents = createProgressReader(PONDER_DB_URL, config);
 
   return {
-    name: "Ponder",
     dbUrl: PONDER_DB_URL,
     async prepare() {
       console.log("Cleaning .ponder cache...");

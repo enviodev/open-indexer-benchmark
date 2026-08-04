@@ -20,7 +20,6 @@ export interface Snapshot {
 }
 
 export interface Driver {
-  name: string;
   dbUrl: string;
   /** Install, build and start infrastructure. Not part of the measurement. */
   prepare(): Promise<void>;
