@@ -26,8 +26,10 @@ export interface CaseConfig {
   contract: string | string[];
   startBlock: number;
   /**
-   * Inclusive end block of the bounded verification run. Sized so the slowest
-   * indexer still finishes within the phase timeout.
+   * Inclusive end block of the bounded verification run. Size it by what the
+   * case has to demonstrate rather than by what the slowest indexer can reach:
+   * a run that hits the phase timeout is still verified and published, over the
+   * share of the range it covered.
    */
   verifyEndBlock: number;
   /**

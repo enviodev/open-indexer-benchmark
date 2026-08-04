@@ -2,11 +2,17 @@
 //
 // Every indexer goes through the same two phases:
 //
-//   Phase A (verification) — index a small committed block range to
-//     completion, then check the resulting database against the ground truth
-//     and measure how much disk the indexed data occupies. Both metrics are
-//     only comparable when every indexer holds exactly the same data, which is
-//     what a bounded range guarantees and a fixed time window cannot.
+//   Phase A (verification) — index a committed block range to completion, then
+//     check the resulting database against the ground truth and measure how
+//     much disk the indexed data occupies. Both metrics are only comparable
+//     when every indexer holds exactly the same data, which is what a bounded
+//     range guarantees and a fixed time window cannot.
+//
+//     The range is not guaranteed to be reachable: the run is capped at ten
+//     minutes, and an indexer that has not finished by then is verified on what
+//     it did index. That row reports a real check of real data over a known
+//     fraction of the range, with the fraction named and its storage scaled to
+//     what the whole range would have cost — a partial result rather than none.
 //
 //   Phase B (throughput) — only for indexers that finished phase A in under
 //     the benchmark window. Wipe state and re-run with an end block just below
@@ -172,32 +178,51 @@ async function runPhase(
 // ── Benchmark ──────────────────────────────────────────────────────────
 
 /**
- * How much of the range a run that stopped early is missing, and why it
- * stopped. This leads the note under the results table, because every other
- * thing verification says about such a run — rows missing, entities short — is
- * a consequence of it and reads as a data bug without it.
+ * What a run that stopped short of the end block covered.
  *
  * The share is measured in events rather than blocks: blocks are what the
  * indexer walked, events are what it was supposed to record, and it is the
- * records the checksum found missing that the note has to account for.
+ * records the checksum found missing that the report has to account for.
+ *
+ * `indexedShare` is 0 for a run that produced nothing at all, which is not the
+ * same finding as a run that got part of the way — the tool did not index this
+ * case, and nothing is extrapolated from it.
+ */
+function coverageOf(run: PhaseOutcome, expected: Expected) {
+  const indexedShare =
+    expected.totalEvents > 0 ? Math.min(1, run.events / expected.totalEvents) : 0;
+  return {
+    indexedShare,
+    indexedNothing: run.blocks <= 0 && run.events <= 0,
+  };
+}
+
+/**
+ * Why a partial run is partial, and how much of the range it is missing. This
+ * is the whole note under the results table: everything else verification says
+ * about such a run — rows missing, entities short — follows from it, and reads
+ * as a data bug without it.
  */
 function describeShortfall(
   run: PhaseOutcome,
   expected: Expected,
   timeoutS: number
 ): string {
-  const missing =
-    expected.totalEvents > 0
-      ? Math.max(0, 1 - run.events / expected.totalEvents) * 100
-      : 0;
-  const why =
-    run.elapsedS >= timeoutS - 1
-      ? `the verification range was not finished within ${timeoutS}s`
-      : `the indexer exited after ${run.elapsedS.toFixed(0)}s without finishing the ` +
-        `verification range`;
-  // No em-dash: the published notes are parsed back on the first one, which
-  // separates the tool name from its detail.
-  return `missing ${formatShare(missing)}% of the data: ${why}`;
+  const { indexedShare, indexedNothing } = coverageOf(run, expected);
+  const timedOut = run.elapsedS >= timeoutS - 1;
+  // No em-dash anywhere below: the published notes are parsed back on the
+  // first one, which separates the tool name from its detail.
+  if (indexedNothing) {
+    return timedOut
+      ? `indexed nothing in ${timeoutS}s, so there was no data to verify`
+      : `indexed nothing before exiting after ${run.elapsedS.toFixed(0)}s, so there ` +
+          `was no data to verify`;
+  }
+  const why = timedOut
+    ? `the verification range was not finished within ${timeoutS}s`
+    : `the indexer exited after ${run.elapsedS.toFixed(0)}s without finishing the ` +
+      `verification range`;
+  return `missing ${formatShare((1 - indexedShare) * 100)}% of the data: ${why}`;
 }
 
 /**
@@ -243,6 +268,7 @@ function buildResult(
     correctnessDetail: verification.detail,
     dbSizeBytes: verification.dbSizeBytes,
     dbTotalBytes: verification.dbTotalBytes,
+    ...(verification.dbSizeEstimated ? { dbSizeEstimated: true } : {}),
     rangeSeconds: parts.rangeSeconds,
     windowSeconds: parts.windowSeconds,
     ...(parts.windowRuns ? { windowRuns: parts.windowRuns } : {}),
@@ -343,18 +369,31 @@ async function benchmarkIndexer(
   }
 
   if (!rangeRun.completed) {
+    const { indexedShare, indexedNothing } = coverageOf(rangeRun, expected);
     // The rows that are there were still checked, so a partial run reports a
     // real verdict on real data — but it is a verdict on a fraction of the
     // range, and that fraction is the only thing worth publishing about it.
-    // The per-entity breakdown stays in the log above: every entity is short by
-    // the same reason, and a note listing all sixteen of them says no more than
-    // one figure does. Storage is dropped with it, being comparable only
-    // between indexers holding identical data.
+    // The per-entity breakdown stays in the log above: every entity is short
+    // for the same reason, and a note listing all sixteen of them says no more
+    // than one figure does.
+    //
+    // The verdict is "unknown" rather than a mismatch. The data is not wrong,
+    // there is less of it, and marking the row ❌ would put a tool that ran out
+    // of time in the same column as one that wrote the wrong values.
+    //
+    // Storage is scaled to what the full range would hold, from the share of
+    // the events the run recorded, and flagged as the estimate it is. The
+    // entities here are insert-only or one row per key, so the tables grow with
+    // the events written; an indexer that indexed nothing gives nothing to
+    // scale, and keeps a blank cell rather than an extrapolation from zero.
+    const scale = indexedNothing || indexedShare <= 0 ? null : 1 / indexedShare;
     verification = {
       ...verification,
+      status: "unknown",
       detail: describeShortfall(rangeRun, expected, PHASE_A_TIMEOUT_S),
-      dbSizeBytes: null,
-      dbTotalBytes: null,
+      dbSizeBytes: scale && verification.dbSizeBytes ? verification.dbSizeBytes * scale : null,
+      dbTotalBytes: scale && verification.dbTotalBytes ? verification.dbTotalBytes * scale : null,
+      dbSizeEstimated: scale !== null,
     };
   }
 
