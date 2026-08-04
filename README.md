@@ -67,9 +67,9 @@ See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc2
 
 ### Factory Contract Registration
 
-A contract set that is not known at build time and grows to six figures during the run — the indexer discovers each child from a factory event and must index it from then on, so throughput depends on how per-contract bookkeeping and log matching scale. The canonical Safe proxy factories on Ethereum Mainnet, verified over a range that ends at their 25,096th proxy and measured on to block 24,660,000, where the registered set is 199,977 deep. `proxy` became an indexed argument in Safe 1.4.1, so the same event signature arrives in two layouts and both have to be decoded.
+Contracts that are not known at build time. The indexer watches the Safe proxy factories on Ethereum Mainnet, and every proxy they announce becomes a contract it must index from then on — 25,096 of them by the end of the verification range, 199,977 by the end of the throughput window. What is measured is how per-contract bookkeeping and log matching hold up as that set grows.
 
-Safe emits a proxy's `SafeSetup` one log index *below* the `ProxyCreation` announcing it, so the child's event precedes its own registration. Tools that resolve the factory's child set before matching capture those 256 rows; tools that discover children strictly in event order cannot. Both are legitimate designs, and the note under the table says which a tool chose.
+Two details separate the tools. `ProxyCreation` exists in two layouts under one event signature, since `proxy` became indexed in Safe 1.4.1, so both have to be decoded. And a new proxy emits its `SafeSetup` one log index *before* the `ProxyCreation` announcing it, so tools that resolve the factory's child set up front capture those 256 rows while tools that discover children strictly in event order cannot. Both are legitimate designs, and the note under the table says which a tool chose.
 
 <!-- BENCHMARK:safe-factory-registrations:START -->
 _No results collected yet — the table is filled in by the next benchmark run._
