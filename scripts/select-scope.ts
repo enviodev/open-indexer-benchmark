@@ -2,9 +2,10 @@
 //
 //   CHANGED_FILES="$(git diff --name-only base...head)" node scripts/select-scope.ts
 //
-// A full run is fourteen jobs of up to 45 minutes against shared data
-// endpoints, most of them re-measuring code the pull request never touched. On
-// a pull request the run is narrowed to what changed:
+// A full run is one job per indexer per scenario — twenty-one at the time of
+// writing, each up to 45 minutes against shared data endpoints, most of them
+// re-measuring code the pull request never touched. On a pull request the run
+// is narrowed to what changed:
 //
 //   cases/<case>/<indexer>/**   that indexer, in that scenario only
 //   cases/<case>/<anything>     the whole scenario — the case's run logic
@@ -18,7 +19,10 @@
 //                               is in it: a narrowed run would ship them to
 //                               main unexercised
 //
-// Anything else — docs, local scripts — runs nothing. Emits JSON on stdout:
+// Documentation and the known local-only scripts run nothing. Any file the
+// filter does not recognize — say a root package.json that does not exist
+// today — runs everything: over-running only costs runner time, while
+// under-running publishes a stale row as a fresh one. Emits JSON on stdout:
 //
 //   {"cases":["erc20-transfer-events"],
 //    "indexers":{"erc20-transfer-events":["ponder"]},
@@ -33,7 +37,11 @@
 /** Indexers whose project directory is not named after them. */
 const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio" };
 
-/** Driver modules under cases/lib/drivers that back more than one indexer. */
+/**
+ * Driver modules under cases/lib/drivers that back more than one indexer.
+ * Like INDEXER_DIRS, this duplicates a fact the drivers registry owns;
+ * test-scope.ts pins both against the registry so they cannot drift silently.
+ */
 const DRIVER_INDEXERS: Record<string, string[]> = { envio: ["envio", "envio-rpc"] };
 
 /** Driver modules that are shared plumbing rather than one tool's driver. */
@@ -47,6 +55,30 @@ const PIPELINE_SCRIPTS = new Set([
   "scripts/select-scope.ts",
   "scripts/build-tables.ts",
 ]);
+
+/**
+ * Scripts that no benchmark job executes: the test scripts (test-scope.ts is
+ * run by the setup job itself, so a change to it is exercised before it can
+ * matter) and the local runners. Everything else under scripts/ is unknown
+ * and runs the full matrix.
+ */
+const LOCAL_SCRIPTS = new Set([
+  "scripts/test-scope.ts",
+  "scripts/test-tables.ts",
+  "scripts/test-verification.ts",
+  "scripts/run-benchmarks.ts",
+  "scripts/generate-expected.ts",
+]);
+
+/** True for a file that cannot change what a benchmark run measures. */
+function isInert(file: string, parts: string[]): boolean {
+  // Documentation never changes what a run measures, wherever it sits.
+  if (parts[parts.length - 1] === "README.md") return true;
+  if (file === ".gitignore" || file === "LICENSE") return true;
+  // Archived third-party results, kept for reference only.
+  if (parts[0] === "sentio-benchmarks-may-2025") return true;
+  return LOCAL_SCRIPTS.has(file);
+}
 
 export interface Scope {
   cases: string[];
@@ -80,15 +112,20 @@ export function selectScope(
 
     const parts = file.split("/");
 
-    // Documentation never changes what a run measures, wherever it sits.
-    if (parts[parts.length - 1] === "README.md") continue;
+    if (isInert(file, parts)) continue;
 
     if (file.startsWith(".github/workflows/") || PIPELINE_SCRIPTS.has(file)) {
       addEverywhere(allIndexers);
       continue;
     }
 
-    if (parts[0] !== "cases") continue;
+    // A file the filter cannot place — a root config file, a new top-level
+    // directory — is presumed to affect every job, the failure mode that only
+    // costs runner time. Selecting nothing here would ship it unexercised.
+    if (parts[0] !== "cases") {
+      addEverywhere(allIndexers);
+      continue;
+    }
 
     // A file directly under cases/ belongs to no scenario in particular, so
     // it is presumed shared. None exist today; running everything is the

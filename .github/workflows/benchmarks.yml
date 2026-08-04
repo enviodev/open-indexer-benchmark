@@ -41,7 +41,10 @@ jobs:
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
+      # Only pull requests diff and run the filter; `main` and dispatch runs
+      # are always full, so they keep setup down to the one shell step.
       - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
         with:
           # The pull request scope comes from `git diff` against the base
           # commit, which a shallow clone does not have.
@@ -49,6 +52,7 @@ jobs:
           persist-credentials: false
 
       - uses: actions/setup-node@v4
+        if: github.event_name == 'pull_request'
         with:
           node-version: 24
 
@@ -260,13 +264,30 @@ jobs:
             // re-run by this pull request" rather than "this indexer broke".
             const scopeNote = process.env.PARTIAL_RUN === '1'
               ? 'Only the scenarios and indexers this pull request touches were re-run; '
-                + 'the remaining rows are carried forward from the last published results.'
+                + 'other rows are carried forward from the last published results, and '
+                + 'untouched scenarios are left out entirely.'
+              : '';
+
+            // An indexer that WAS selected and still produced nothing is a
+            // failed job, and must not hide behind the scope note above —
+            // build-tables.ts writes one list per case where that happened.
+            const failures = [];
+            for (const benchCase of cases) {
+              const file = `/tmp/benchmark-failed-${benchCase}.txt`;
+              if (!fs.existsSync(file)) continue;
+              const names = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean);
+              if (names.length > 0) failures.push(`${titleOf(benchCase)}: ${names.join(', ')}`);
+            }
+            const failureNote = failures.length > 0
+              ? `> ⚠️ Selected to run but reported no result — ${failures.join('; ')}. `
+                + `These rows show the last published value; [check the failed job(s)](${runUrl}).`
               : '';
 
             const body = [
               '## Benchmark Results',
               '',
               ...(scopeNote ? [scopeNote, ''] : []),
+              ...(failureNote ? [failureNote, ''] : []),
               sections.join('\n\n'),
               '',
               `[Full output](${runUrl}) is available in the workflow run logs.`,

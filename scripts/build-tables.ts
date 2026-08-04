@@ -95,12 +95,18 @@ for (const benchCase of cases) {
     rows.push({ ...prior, carriedOver: true });
     carried.push(`${prior.name} via ${prior.cells.source}`);
   }
+  // A run scoped to part of the matrix — a pull request — carries most rows
+  // forward by design, so annotating those as failures would cry wolf on
+  // every pull request. An indexer that was selected and still reported
+  // nothing is a failed job, and has to stay loud even on such a run — not
+  // only in this log, but in the PR comment, whose scope note would otherwise
+  // pass the failure off as a benign carry-forward. The comment step cannot
+  // import this module, so the list is handed over as a file, like the table.
+  const failed = selected ? (selected[benchCase] ?? []).filter((i) => !reported.has(i)) : null;
+  if (failed !== null && failed.length > 0) {
+    writeFileSync(join(OUT_DIR, `benchmark-failed-${benchCase}.txt`), failed.join("\n"));
+  }
   if (carried.length > 0) {
-    // A run scoped to part of the matrix — a pull request — carries most rows
-    // forward by design, so annotating those as failures would cry wolf on
-    // every pull request. An indexer that was selected and still reported
-    // nothing is a failed job, and has to stay loud even on such a run.
-    const failed = selected ? (selected[benchCase] ?? []).filter((i) => !reported.has(i)) : null;
     const message =
       `${title}: no fresh result for ${carried.join(", ")} this run — ` +
       `carried forward the last published value(s).`;
@@ -110,6 +116,13 @@ for (const benchCase of cases) {
     } else {
       console.log(`${message} Not selected to run by this run's scope.`);
     }
+  } else if (failed !== null && failed.length > 0) {
+    // No published row to carry either: the indexer vanishes from the table
+    // entirely, which is even easier to miss than a stale row.
+    console.log(
+      `::warning::${title}: ${failed.join(", ")} selected but reported nothing, ` +
+        `and no published row to carry forward. Check the failed job(s).`
+    );
   }
 
   const table = buildTable(rows);

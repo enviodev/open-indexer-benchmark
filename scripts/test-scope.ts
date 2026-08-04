@@ -42,9 +42,11 @@ function check(name: string, changed: string[], expected: Record<string, string[
     failures++;
     return;
   }
+  // Derived from what the test expects, not from the scope under test — the
+  // flag must not be allowed to grade itself.
   const expectFull =
-    scope.cases.length === CASES.length &&
-    scope.cases.every((c) => scope.indexers[c].length === INDEXERS.length);
+    Object.keys(expected).length === CASES.length &&
+    Object.values(expected).every((indexers) => indexers.length === INDEXERS.length);
   if (scope.full !== expectFull) {
     console.error(`FAIL ${name} (full flag)\n  expected ${expectFull}, actual ${scope.full}`);
     failures++;
@@ -79,6 +81,32 @@ for (const indexer of REGISTERED) {
   }
 }
 if (failures === 0) console.log(`ok registry: all ${REGISTERED.length} indexers selectable`);
+
+// Same pin for the driver map: every registered indexer must be narrowly
+// selected by some driver file that exists on disk. A driver renamed away
+// from its registry key falls into the run-everything fallback — safe, but
+// this keeps DRIVER_INDEXERS honest instead of letting the fallback paper
+// over a stale map forever.
+const driverFiles = readdirSync(resolve(ROOT, "cases", "lib", "drivers")).filter((f) =>
+  f.endsWith(".ts")
+);
+let driverFailures = 0;
+for (const indexer of REGISTERED) {
+  const file = driverFiles.find((f) => {
+    const picked =
+      selectScope([`cases/lib/drivers/${f}`], CASES, INDEXERS).indexers[CASES[0]] ?? [];
+    return picked.includes(indexer) && picked.length < INDEXERS.length;
+  });
+  if (!file) {
+    console.error(
+      `FAIL drivers: no file under cases/lib/drivers/ narrowly selects "${indexer}" — ` +
+        `does select-scope.ts's DRIVER_INDEXERS know about it?`
+    );
+    failures++;
+    driverFailures++;
+  }
+}
+if (driverFailures === 0) console.log(`ok drivers: all ${REGISTERED.length} indexers driven`);
 
 check("one indexer in one scenario", ["cases/erc20-transfer-events/ponder/src/index.ts"], {
   "erc20-transfer-events": ["ponder"],
@@ -116,9 +144,21 @@ check("docs and local scripts run nothing", [
   "README.md",
   "cases/erc20-transfer-events/README.md",
   "cases/erc20-transfer-events/ponder/README.md",
+  ".gitignore",
+  "sentio-benchmarks-may-2025/results.md",
+  "scripts/test-scope.ts",
   "scripts/test-tables.ts",
+  "scripts/test-verification.ts",
   "scripts/run-benchmarks.ts",
+  "scripts/generate-expected.ts",
 ], {});
+
+// The inert list is an allowlist, not the default: a file the filter cannot
+// place — a root package.json, a new top-level directory — affects every job
+// for all it knows, and selecting nothing would ship it to main unexercised.
+check("an unrecognized root file runs everything", ["package.json"], EVERYTHING);
+
+check("an unrecognized script runs everything", ["scripts/new-tool.ts"], EVERYTHING);
 
 check("a README-suffixed file is not mistaken for docs", [
   "cases/erc20-transfer-events/ponder/NOT-README.md",
