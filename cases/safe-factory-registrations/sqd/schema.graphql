@@ -30,3 +30,89 @@ type SafeModuleTransaction @entity {
   operation: Int!
   timestamp: Int!
 }
+
+type SafeMultiSigTransaction @entity {
+  id: ID!
+  safe: String!
+  to: String!
+  value: BigInt!
+  operation: Int!
+  timestamp: Int!
+}
+
+type ExecutionSuccess @entity {
+  id: ID!
+  safe: String!
+  payment: BigInt!
+  timestamp: Int!
+}
+
+type ExecutionFailure @entity {
+  id: ID!
+  safe: String!
+  payment: BigInt!
+  timestamp: Int!
+}
+
+type ChangedThreshold @entity {
+  id: ID!
+  safe: String!
+  threshold: BigInt!
+  timestamp: Int!
+}
+
+type ChangedMasterCopy @entity {
+  id: ID!
+  safe: String!
+  singleton: String!
+  timestamp: Int!
+}
+
+type ChangedFallbackHandler @entity {
+  id: ID!
+  safe: String!
+  handler: String!
+  timestamp: Int!
+}
+
+type ChangedGuard @entity {
+  id: ID!
+  safe: String!
+  guard: String!
+  timestamp: Int!
+}
+
+type ChangedModuleGuard @entity {
+  id: ID!
+  safe: String!
+  moduleGuard: String!
+  timestamp: Int!
+}
+
+type EnabledModule @entity {
+  id: ID!
+  safe: String!
+  module: String!
+  timestamp: Int!
+}
+
+type DisabledModule @entity {
+  id: ID!
+  safe: String!
+  module: String!
+  timestamp: Int!
+}
+
+type AddedOwner @entity {
+  id: ID!
+  safe: String!
+  owner: String!
+  timestamp: Int!
+}
+
+type RemovedOwner @entity {
+  id: ID!
+  safe: String!
+  owner: String!
+  timestamp: Int!
+}

@@ -7,6 +7,7 @@ import {
     Log as _Log,
     Transaction as _Transaction,
 } from '@subsquid/evm-processor'
+import { TOPICS } from './abi/Safe'
 import * as safeAbi from './abi/Safe'
 import * as dotenv from 'dotenv'
 
@@ -68,9 +69,21 @@ export const processor = new EvmBatchProcessor()
     // is the pattern SQD's own factory-contract guide describes.
     .addLog({
         topic0: [
-            safeAbi.events.SafeSetup.topic,
-            safeAbi.events.SafeReceived.topic,
-            safeAbi.events.SafeModuleTransaction.topic,
+            TOPICS.safeSetup,
+            TOPICS.safeReceived,
+            TOPICS.safeModuleTransaction,
+            TOPICS.safeMultiSigTransaction,
+            TOPICS.executionSuccess,
+            TOPICS.executionFailure,
+            TOPICS.changedThreshold,
+            TOPICS.changedMasterCopy,
+            TOPICS.changedFallbackHandler,
+            TOPICS.changedGuard,
+            TOPICS.changedModuleGuard,
+            TOPICS.enabledModule,
+            TOPICS.disabledModule,
+            TOPICS.addedOwner,
+            TOPICS.removedOwner,
         ],
     })
 

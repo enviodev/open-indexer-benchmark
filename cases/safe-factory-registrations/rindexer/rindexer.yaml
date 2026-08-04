@@ -19,21 +19,27 @@ storage:
     drop_each_run: true
 
 contracts:
-  # Only the child contract is declared. Resolving a factory makes rindexer
-  # index the factory's own ProxyCreation logs into a table of its own, so
-  # declaring the factory a second time as a standalone contract produces two
-  # `proxy_creation` tables in different schemas holding identical rows — which
-  # the benchmark's table resolution rejects as ambiguous rather than guess
-  # between. The factory rows this case needs come from that one table.
+  # Kept as the closest configuration rindexer can express, but the case skips
+  # it — see `unsupported` in ../case.config.ts. Two things are out of reach:
   #
-  # Addresses come from the factory event rather than the config: `input_name`
-  # names the ProxyCreation argument holding the new proxy.
+  #   * A contract's `factory` filter takes one factory. Giving each canonical
+  #     Safe deployment its own `details` block panics with "Contract using
+  #     factory filter must use same factory across all networks", and giving
+  #     each its own contract would produce a second set of identically named
+  #     tables in another schema, which table resolution rejects as ambiguous.
+  #     So only the v1.3.0 pair is reachable, and the children of v1.4.1 and
+  #     v1.5.0 are not indexed at all.
+  #
+  #   * Eight of the child events arrive under one topic0 in two layouts, and
+  #     `include_events` names an event once — there is nowhere to put the
+  #     second decode.
+  #
+  # Only the child contract is declared. Resolving a factory already makes
+  # rindexer index the factory's own ProxyCreation logs into a table of their
+  # own, so declaring the factory again as a standalone contract yields two
+  # `proxy_creation` tables in separate schemas holding identical rows.
   - name: Safe
     details:
-      # One details block per factory generation: the two emit the same
-      # ProxyCreation signature, but `proxy` became indexed in 1.4.1, so each
-      # needs the ABI that matches its own layout. Both carry the same factory
-      # name, which is what keeps the factory's own rows in a single table.
       - network: ethereum
         factory:
           name: SafeProxyFactory
@@ -41,17 +47,6 @@ contracts:
             - "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2" # v1.3.0 canonical
             - "0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC" # v1.3.0 eip155
           abi: ./abis/SafeProxyFactory.abi.json
-          event_name: ProxyCreation
-          input_name: "proxy"
-        start_block: "24600000"
-        end_block: "${RINDEXER_END_BLOCK}"
-      - network: ethereum
-        factory:
-          name: SafeProxyFactory
-          address:
-            - "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67" # v1.4.1 canonical
-            - "0x14F2982D601c9458F93bd70B218933A6f8165e7b" # v1.5.0 canonical
-          abi: ./abis/SafeProxyFactoryModern.abi.json
           event_name: ProxyCreation
           input_name: "proxy"
         start_block: "24600000"

@@ -105,9 +105,25 @@ templates:
         - SafeSetup
         - SafeReceived
         - SafeModuleTransaction
+        - SafeMultiSigTransaction
+        - ExecutionSuccess
+        - ExecutionFailure
+        - ChangedThreshold
+        - ChangedMasterCopy
+        - ChangedFallbackHandler
+        - ChangedGuard
+        - ChangedModuleGuard
+        - EnabledModule
+        - DisabledModule
+        - AddedOwner
+        - RemovedOwner
       abis:
         - name: Safe
           file: ./abis/Safe.json
+      # Eight of these events made an argument `indexed` in Safe 1.4.x without
+      # changing the signature, so both layouts share a topic0. Graph Node runs
+      # only the handler whose ABI can decode the log it is given, so declaring
+      # both is enough to tell them apart.
       eventHandlers:
         - event: SafeSetup(indexed address,address[],uint256,address,address)
           handler: handleSafeSetup
@@ -115,4 +131,44 @@ templates:
           handler: handleSafeReceived
         - event: SafeModuleTransaction(address,address,uint256,bytes,uint8)
           handler: handleSafeModuleTransaction
+        - event: SafeMultiSigTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes,bytes)
+          handler: handleSafeMultiSigTransaction
+        - event: ExecutionSuccess(bytes32,uint256)
+          handler: handleExecutionSuccess
+        - event: ExecutionSuccess(indexed bytes32,uint256)
+          handler: handleExecutionSuccessV4
+        - event: ExecutionFailure(bytes32,uint256)
+          handler: handleExecutionFailure
+        - event: ExecutionFailure(indexed bytes32,uint256)
+          handler: handleExecutionFailureV4
+        - event: ChangedThreshold(uint256)
+          handler: handleChangedThreshold
+        - event: ChangedMasterCopy(address)
+          handler: handleChangedMasterCopy
+        - event: ChangedFallbackHandler(address)
+          handler: handleChangedFallbackHandler
+        - event: ChangedFallbackHandler(indexed address)
+          handler: handleChangedFallbackHandlerV4
+        - event: ChangedGuard(address)
+          handler: handleChangedGuard
+        - event: ChangedGuard(indexed address)
+          handler: handleChangedGuardV4
+        - event: ChangedModuleGuard(indexed address)
+          handler: handleChangedModuleGuard
+        - event: EnabledModule(address)
+          handler: handleEnabledModule
+        - event: EnabledModule(indexed address)
+          handler: handleEnabledModuleV4
+        - event: DisabledModule(address)
+          handler: handleDisabledModule
+        - event: DisabledModule(indexed address)
+          handler: handleDisabledModuleV4
+        - event: AddedOwner(address)
+          handler: handleAddedOwner
+        - event: AddedOwner(indexed address)
+          handler: handleAddedOwnerV4
+        - event: RemovedOwner(address)
+          handler: handleRemovedOwner
+        - event: RemovedOwner(indexed address)
+          handler: handleRemovedOwnerV4
       file: ./src/mapping.ts

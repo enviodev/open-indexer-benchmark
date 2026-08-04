@@ -17,6 +17,34 @@ contracts:
       - event: "SafeSetup(address indexed initiator, address[] owners, uint256 threshold, address initializer, address fallbackHandler)"
       - event: "SafeReceived(address indexed sender, uint256 value)"
       - event: "SafeModuleTransaction(address module, address to, uint256 value, bytes data, uint8 operation)"
+      - event: "SafeMultiSigTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures, bytes additionalInfo)"
+      - event: "ExecutionSuccess(bytes32 txHash, uint256 payment)"
+      - event: "ExecutionSuccess(bytes32 indexed txHash, uint256 payment)"
+        name: ExecutionSuccessV4
+      - event: "ExecutionFailure(bytes32 txHash, uint256 payment)"
+      - event: "ExecutionFailure(bytes32 indexed txHash, uint256 payment)"
+        name: ExecutionFailureV4
+      - event: "ChangedThreshold(uint256 threshold)"
+      - event: "ChangedMasterCopy(address singleton)"
+      - event: "ChangedFallbackHandler(address handler)"
+      - event: "ChangedFallbackHandler(address indexed handler)"
+        name: ChangedFallbackHandlerV4
+      - event: "ChangedGuard(address guard)"
+      - event: "ChangedGuard(address indexed guard)"
+        name: ChangedGuardV4
+      - event: "ChangedModuleGuard(address indexed moduleGuard)"
+      - event: "EnabledModule(address module)"
+      - event: "EnabledModule(address indexed module)"
+        name: EnabledModuleV4
+      - event: "DisabledModule(address module)"
+      - event: "DisabledModule(address indexed module)"
+        name: DisabledModuleV4
+      - event: "AddedOwner(address owner)"
+      - event: "AddedOwner(address indexed owner)"
+        name: AddedOwnerV4
+      - event: "RemovedOwner(address owner)"
+      - event: "RemovedOwner(address indexed owner)"
+        name: RemovedOwnerV4
 chains:
   - id: 1 # Ethereum Mainnet
     start_block: 24600000

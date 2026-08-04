@@ -30,3 +30,89 @@ type SafeModuleTransaction {
   operation: Int!
   timestamp: Int!
 }
+
+type SafeMultiSigTransaction {
+  id: ID!
+  safe: String!
+  to: String!
+  value: BigInt!
+  operation: Int!
+  timestamp: Int!
+}
+
+type ExecutionSuccess {
+  id: ID!
+  safe: String!
+  payment: BigInt!
+  timestamp: Int!
+}
+
+type ExecutionFailure {
+  id: ID!
+  safe: String!
+  payment: BigInt!
+  timestamp: Int!
+}
+
+type ChangedThreshold {
+  id: ID!
+  safe: String!
+  threshold: BigInt!
+  timestamp: Int!
+}
+
+type ChangedMasterCopy {
+  id: ID!
+  safe: String!
+  singleton: String!
+  timestamp: Int!
+}
+
+type ChangedFallbackHandler {
+  id: ID!
+  safe: String!
+  handler: String!
+  timestamp: Int!
+}
+
+type ChangedGuard {
+  id: ID!
+  safe: String!
+  guard: String!
+  timestamp: Int!
+}
+
+type ChangedModuleGuard {
+  id: ID!
+  safe: String!
+  moduleGuard: String!
+  timestamp: Int!
+}
+
+type EnabledModule {
+  id: ID!
+  safe: String!
+  module: String!
+  timestamp: Int!
+}
+
+type DisabledModule {
+  id: ID!
+  safe: String!
+  module: String!
+  timestamp: Int!
+}
+
+type AddedOwner {
+  id: ID!
+  safe: String!
+  owner: String!
+  timestamp: Int!
+}
+
+type RemovedOwner {
+  id: ID!
+  safe: String!
+  owner: String!
+  timestamp: Int!
+}

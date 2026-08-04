@@ -9,24 +9,13 @@ export const APPROVAL_TOPIC =
 
 const HYPERSYNC_URL = "https://eth.hypersync.xyz/query";
 
-/** `ProxyCreation(address proxy, address singleton)` — Safe proxy factory. */
+/**
+ * `ProxyCreation(address proxy, address singleton)` — Safe proxy factory. The
+ * factory case's own event topics live with the case; this one is here because
+ * it is the topic every factory query in this file is written around.
+ */
 export const PROXY_CREATION_TOPIC =
   "0x4f51faf6c4561ff95f067657e43439f0f856d97c04d9ec9070a6199ad418e235";
-/**
- * `SafeSetup(address indexed initiator, address[] owners, uint256 threshold,
- * address initializer, address fallbackHandler)` — emitted by the proxy itself.
- */
-export const SAFE_SETUP_TOPIC =
-  "0x141df868a6331af528e38c83b7aa03edc19be66e37ae67f9285bf4f8e3c6a1a8";
-/** `SafeReceived(address indexed sender, uint256 value)` — bare ETH inbound. */
-export const SAFE_RECEIVED_TOPIC =
-  "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
-/**
- * `SafeModuleTransaction(address module, address to, uint256 value, bytes
- * data, uint8 operation)` — emitted by the L2 singleton on a module call.
- */
-export const SAFE_MODULE_TRANSACTION_TOPIC =
-  "0xb648d3644f584ed1c2232d53c46d87e693586486ad0d1175f8656013110b714e";
 
 export interface DecodedLog {
   blockNumber: number;

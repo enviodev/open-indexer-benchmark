@@ -103,9 +103,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleSafeSetup",
             filter: {
-              topics: [
-                "SafeSetup(address indexed initiator, address[] owners, uint256 threshold, address initializer, address fallbackHandler)",
-              ],
+              topics: ["SafeSetup(address indexed initiator, address[] owners, uint256 threshold, address initializer, address fallbackHandler)"],
             },
           },
           {
@@ -119,9 +117,91 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleSafeModuleTransaction",
             filter: {
-              topics: [
-                "SafeModuleTransaction(address module, address to, uint256 value, bytes data, uint8 operation)",
-              ],
+              topics: ["SafeModuleTransaction(address module, address to, uint256 value, bytes data, uint8 operation)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleSafeMultiSigTransaction",
+            filter: {
+              topics: ["SafeMultiSigTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures, bytes additionalInfo)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleExecutionSuccess",
+            filter: {
+              topics: ["ExecutionSuccess(bytes32 indexed txHash, uint256 payment)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleExecutionFailure",
+            filter: {
+              topics: ["ExecutionFailure(bytes32 indexed txHash, uint256 payment)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleChangedThreshold",
+            filter: {
+              topics: ["ChangedThreshold(uint256 threshold)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleChangedMasterCopy",
+            filter: {
+              topics: ["ChangedMasterCopy(address singleton)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleChangedFallbackHandler",
+            filter: {
+              topics: ["ChangedFallbackHandler(address indexed handler)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleChangedGuard",
+            filter: {
+              topics: ["ChangedGuard(address indexed guard)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleChangedModuleGuard",
+            filter: {
+              topics: ["ChangedModuleGuard(address indexed moduleGuard)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleEnabledModule",
+            filter: {
+              topics: ["EnabledModule(address indexed module)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleDisabledModule",
+            filter: {
+              topics: ["DisabledModule(address indexed module)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleAddedOwner",
+            filter: {
+              topics: ["AddedOwner(address indexed owner)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleRemovedOwner",
+            filter: {
+              topics: ["RemovedOwner(address indexed owner)"],
             },
           },
         ],

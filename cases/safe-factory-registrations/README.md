@@ -13,7 +13,7 @@ The other cases fix the contract set in configuration. This one does not: nothin
   | v1.3.0 (eip155) | [`0xc2283458…10bc`](https://etherscan.io/address/0xc22834581ebc8527d974f8a1c97e1bea4ef910bc) | `(address proxy, address singleton)` |
   | v1.4.1 | [`0x4e1dcf7a…ec67`](https://etherscan.io/address/0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67) | `(address indexed proxy, address singleton)` |
   | v1.5.0 | [`0x14f2982d…5e7b`](https://etherscan.io/address/0x14f2982d601c9458f93bd70b218933a6f8165e7b) | `(address indexed proxy, address singleton)` |
-- **Events Indexed**: `ProxyCreation` on the factories; `SafeSetup`, `SafeReceived` and `SafeModuleTransaction` on every proxy they create
+- **Events Indexed**: `ProxyCreation` on the factories, and the fifteen events a Safe emits on every proxy they create
 - **Block Range**: 24,600,000 to 24,660,000
 - **Verification Range**: 24,600,000 to 24,609,162 — indexed to completion, then checked against `expected.json`
 - **Child contracts registered in that range**: 25,096
@@ -37,24 +37,34 @@ For each **SafeSetup** event emitted by a registered proxy:
 
 1. Insert a safe setup record with the event id, the emitting proxy, the initiator, the threshold, and the timestamp.
 
-For each **SafeReceived** and **SafeModuleTransaction** event emitted by a registered proxy:
+For each of the other **thirteen Safe events** emitted by a registered proxy:
 
 1. Insert a record with the event id, the emitting proxy, the event's own arguments, and the timestamp.
 
 There is no aggregation and nothing is read back. Registration cost is the variable under test, so everything else is kept to a plain insert.
 
-### The other two child events
+### The child events
 
-`SafeSetup` fires once, in the transaction that creates the proxy. The other two fire for the rest of the proxy's life, so unlike the setup they arrive when the child is already registered and no tool loses them to discovery order. They are here for what they cost to match:
+Fifteen events, the whole of what a Safe emits: `SafeSetup`, `SafeReceived`, `SafeModuleTransaction`, `SafeMultiSigTransaction`, `ExecutionSuccess`, `ExecutionFailure`, `ChangedThreshold`, `ChangedMasterCopy`, `ChangedFallbackHandler`, `ChangedGuard`, `ChangedModuleGuard`, `EnabledModule`, `DisabledModule`, `AddedOwner` and `RemovedOwner`.
 
-| event | for this factory's children | chain-wide, same blocks |
-| --- | --- | --- |
-| `SafeReceived` | 413 | 52,882 |
-| `SafeModuleTransaction` | 298 | 840 |
+Only `SafeSetup` fires in the transaction that creates the proxy; the rest fire for the life of the Safe, when the child is already registered and no tool loses them to discovery order. What they cost is matching. Across the throughput range these fifteen topics are emitted 94,298 times chain-wide and 18,663 of those belong to proxies these factories created — `SafeReceived` alone is 52,882 against 413. A tool that hands its child address set to the data source pays for the 18,663. A tool that subscribes by topic and filters in the handler pays for all 94,298, on a contract set of 199,977 addresses.
 
-A tool that hands its child address set to the data source pays for the first column. A tool that subscribes by topic and filters in the handler pays for the second — 128 logs fetched and discarded for every one kept, on a contract set of 199,977 addresses. `SafeModuleTransaction` also carries a dynamic `bytes` payload, so decoding it is not free either.
+### One topic, two layouts
 
-These two were picked because they have a single event layout across every Safe version. Most of the rest of the Safe ABI — `ExecutionSuccess`, `EnabledModule`, `AddedOwner`, `RemovedOwner` — changed an argument to `indexed` in 1.4.x while keeping the signature, so one topic0 arrives in two layouts *from the same contract*. The factory's own `ProxyCreation` has that problem too, but there the emitting address says which layout to expect; for a child it cannot be known ahead of the log. Only some of the tools here can express that, so indexing those events would measure which tool tolerates a mis-decode rather than which indexes faster.
+Safe 1.4.x made an argument `indexed` on eight of these events — `ExecutionSuccess`, `ExecutionFailure`, `ChangedFallbackHandler`, `ChangedGuard`, `EnabledModule`, `DisabledModule`, `AddedOwner`, `RemovedOwner` — without changing the signature. The topic0 is therefore identical and the payload is not, and both versions are live: 5,638 `ExecutionSuccess` of the newer layout in the throughput range against 666 of the older.
+
+`ProxyCreation` has the same split, but there the emitting factory says which layout to expect. For a child it cannot be known before the log arrives — one proxy points at a 1.3.0 singleton, the next at a 1.4.1 one — so a tool has to decide per log. How each does it, and whether it can at all, is part of what the case measures:
+
+| tool | how both layouts are declared |
+| --- | --- |
+| Envio | two events, the second renamed with `name:` |
+| Ponder | two ABI items; an overloaded event is named by its full signature |
+| Sqd | two decoders, picked in the handler from the log's topic count |
+| Subgraph | two handlers; Graph Node runs whichever one's ABI can decode the log |
+| SubQuery | one only — see the note below |
+| Rindexer | neither — the case is skipped |
+
+SubQuery resolves an event from its topic0 alone, so two fragments sharing one make every such log ambiguous and lose both layouts. It declares the 1.4.x layout, which is the majority, and the older layout goes undecoded — visible in the results table as missing rows rather than as a crash.
 
 ### The SafeSetup ordering, and why it is in the case
 
@@ -134,9 +144,13 @@ A `factory()` reads one event layout, so there are two child declarations — `S
 
 ### Rindexer
 
-Runs a native binary (`rindexer start all`) with a separate Postgres container, in `no-code` mode. The `Safe` contract carries one `details` block per factory generation, each naming its factory addresses, ABI, `ProxyCreation` event, and the `proxy` input holding the new address. Both blocks use the same factory name, which keeps the factory's own rows in one table.
+Skipped, and published as a row of dashes with the reason. Two parts of the case are out of reach:
 
-Only the child contract is declared. Resolving a factory already makes rindexer index the factory's own `ProxyCreation` logs into a table of their own, so declaring the factory again as a standalone contract yields two identical `proxy_creation` tables in separate schemas — which table resolution rejects as ambiguous rather than guessing between.
+A contract's `factory` filter takes one factory. Giving each canonical Safe deployment its own `details` block panics on startup with `Contract using factory filter must use same factory across all networks`, and giving each its own contract produces a second set of identically named tables in another schema, which table resolution rejects as ambiguous rather than guessing between. Only the v1.3.0 pair is reachable that way, leaving the children of v1.4.1 and v1.5.0 unindexed.
+
+`include_events` also names an event once, so there is nowhere to put the second decode for the eight events that arrive under one topic0 in two layouts.
+
+`rindexer.yaml` is kept at the closest configuration rindexer can express, with both limits written down beside it.
 
 ### Sqd (Subsquid)
 
@@ -168,3 +182,5 @@ exiting on its own, as with several of the other drivers.
 Runs entirely via Docker Compose (postgres + subquery-node), and carries the heaviest startup overhead — see the [Decoded Event Stream](../erc20-transfer-events/README.md) notes, which apply unchanged.
 
 As with the subgraph, a datasource carries one address, so each factory deployment gets its own. The proxy is indexed through a `Safe` template instantiated per `ProxyCreation` with `createSafeDatasource({ address })`.
+
+Its child ABI declares the 1.4.x layout of the eight overloaded events and not the older one: SubQuery resolves an event from its topic0 with an ethers `Interface`, which treats two fragments sharing a topic0 as ambiguous and would then decode neither. A log of the older layout still reaches the handler, arrives with `args` undefined, and is skipped rather than throwing.

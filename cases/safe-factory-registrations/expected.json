@@ -1,8 +1,8 @@
 {
   "startBlock": 24600000,
   "endBlock": 24609162,
-  "generatedAt": "2026-08-03T13:40:38.383Z",
-  "totalEvents": 25421,
+  "generatedAt": "2026-08-04T06:15:03.258Z",
+  "totalEvents": 25714,
   "entities": {
     "safe": {
       "rowCount": 25096,
@@ -19,6 +19,54 @@
     "safeModuleTransaction": {
       "rowCount": 37,
       "checksum": "20380708079051395120"
+    },
+    "safeMultiSigTransaction": {
+      "rowCount": 6,
+      "checksum": "3958473719280464683"
+    },
+    "executionSuccess": {
+      "rowCount": 205,
+      "checksum": "116600949726289128925"
+    },
+    "executionFailure": {
+      "rowCount": 0,
+      "checksum": "0"
+    },
+    "changedThreshold": {
+      "rowCount": 1,
+      "checksum": "1109553872270075282"
+    },
+    "changedMasterCopy": {
+      "rowCount": 0,
+      "checksum": "0"
+    },
+    "changedFallbackHandler": {
+      "rowCount": 2,
+      "checksum": "1161500299055262709"
+    },
+    "changedGuard": {
+      "rowCount": 0,
+      "checksum": "0"
+    },
+    "changedModuleGuard": {
+      "rowCount": 0,
+      "checksum": "0"
+    },
+    "enabledModule": {
+      "rowCount": 64,
+      "checksum": "36353341322144734255"
+    },
+    "disabledModule": {
+      "rowCount": 3,
+      "checksum": "1401058617906416542"
+    },
+    "addedOwner": {
+      "rowCount": 9,
+      "checksum": "4076045940777907760"
+    },
+    "removedOwner": {
+      "rowCount": 3,
+      "checksum": "1062836896824763972"
     }
   }
 }
