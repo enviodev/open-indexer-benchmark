@@ -52,12 +52,6 @@ export interface CaseConfig {
     childOf: (log: DecodedLog) => string;
   };
   /**
-   * Overrides the default verification-phase timeout, in seconds. Raise it for
-   * a case whose range is deliberately large; the CI job timeout is the real
-   * ceiling.
-   */
-  phaseATimeoutS?: number;
-  /**
    * Tools that cannot express this case at all, keyed by driver name, with the
    * reason. They are skipped rather than run, and published as a row of dashes
    * carrying the reason as a numbered note — a tool that cannot do something

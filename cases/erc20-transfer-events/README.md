@@ -39,6 +39,8 @@ ENVIO_API_TOKEN=your-token node cases/erc20-transfer-events/run.ts
 
 Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
 
+The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it did index, so its row carries a rate and a note naming the share of the data it is missing rather than no result at all.
+
 The throughput window defaults to 100 seconds. Pass a custom duration (in seconds) with `--duration`:
 
 ```bash

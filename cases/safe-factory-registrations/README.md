@@ -100,7 +100,7 @@ ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node cases/safe-factory-registra
 
 Each indexer indexes the range to completion — its database is then checked against `expected.json` and measured — before re-running the same range for the throughput window. Indexers too slow to finish it within that window skip the re-run and report their rate from the verification run.
 
-The verification phase allows 1,800 seconds here rather than the usual 900. The range is sixty thousand blocks, two hundred thousand events and two hundred thousand contract registrations, and a tool that runs out of time reports "could not verify", which would say nothing about the tool.
+The verification run is capped at ten minutes, as in every scenario. The range is sixty thousand blocks, two hundred thousand events and two hundred thousand contract registrations, and this is the case most likely to hit that cap — an indexer that does is stopped there and verified on what it managed, so its row carries the rate it achieved and a note naming the share of the data it is missing.
 
 Unlike the other cases, the throughput window stops at a fixed block rather than at the chain head. Safe's deployment traffic comes in bursts, and these 60,000 blocks hold the canonical factories' creations at 3.3 per block, against a tenth of that density for the next 340,000. Running to the head would spend most of the window scanning near-empty blocks — a measure of how fast an indexer skips, not of how it copes with a contract set growing underneath it. The fastest indexers reach the end block before the window closes, and their rate is computed over the time it took.
 

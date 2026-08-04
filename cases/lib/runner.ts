@@ -50,10 +50,13 @@ import { verify, type Verification } from "./verify.ts";
 const HEAD_OFFSET = 500;
 
 /**
- * Give up on the verification range after this long and report no result.
- * A case whose range is deliberately large can raise it via `phaseATimeoutS`.
+ * Stop the verification run after this long, whatever it has reached. Every
+ * case gets the same ten minutes: a range an indexer cannot finish inside it is
+ * itself the finding, and the run is verified and rated from where it got to
+ * rather than discarded — so a slow tool reports how much of the data it holds
+ * instead of reporting nothing at all.
  */
-const DEFAULT_PHASE_A_TIMEOUT_S = 900;
+const PHASE_A_TIMEOUT_S = 600;
 
 /**
  * How many throughput windows to run for indexers fast enough to get one.
@@ -169,6 +172,50 @@ async function runPhase(
 // ── Benchmark ──────────────────────────────────────────────────────────
 
 /**
+ * How much of the range a run that stopped early is missing, and why it
+ * stopped. This leads the note under the results table, because every other
+ * thing verification says about such a run — rows missing, entities short — is
+ * a consequence of it and reads as a data bug without it.
+ *
+ * The share is measured in events rather than blocks: blocks are what the
+ * indexer walked, events are what it was supposed to record, and it is the
+ * records the checksum found missing that the note has to account for.
+ */
+function describeShortfall(
+  run: PhaseOutcome,
+  expected: Expected,
+  timeoutS: number
+): string {
+  const missing =
+    expected.totalEvents > 0
+      ? Math.max(0, 1 - run.events / expected.totalEvents) * 100
+      : 0;
+  const why =
+    run.elapsedS >= timeoutS - 1
+      ? `the verification range was not finished within ${timeoutS}s`
+      : `the indexer exited after ${run.elapsedS.toFixed(0)}s without finishing the ` +
+        `verification range`;
+  // No em-dash: the published notes are parsed back on the first one, which
+  // separates the tool name from its detail.
+  return `missing ${formatShare(missing)}% of the data: ${why}`;
+}
+
+/**
+ * A percentage that never rounds away the thing it is reporting. An indexer
+ * that recorded a thousand of two hundred thousand events is missing 99.5% of
+ * them, and printing that as "100%" would say it recorded nothing; an indexer
+ * short by a handful reads as "0%", which says it is short by nothing. Both
+ * ends get a bound instead of a rounded figure.
+ */
+function formatShare(pct: number): string {
+  if (pct <= 0 || pct >= 100) return pct <= 0 ? "0" : "100";
+  const rounded = pct >= 10 ? pct.toFixed(0) : pct.toFixed(pct >= 1 ? 1 : 2);
+  if (Number(rounded) === 0) return "<0.01";
+  if (Number(rounded) === 100) return ">99";
+  return rounded;
+}
+
+/**
  * Assemble a result from the parts that vary. Every exit reports the same
  * fourteen fields, and building them in one place means a new field cannot be
  * added to two of the three paths and forgotten in the third.
@@ -235,7 +282,6 @@ async function benchmarkIndexer(
 ): Promise<BenchmarkResult> {
   const factory = DRIVERS[key];
   const { name } = TOOLS[key];
-  const phaseATimeoutS = config.phaseATimeoutS ?? DEFAULT_PHASE_A_TIMEOUT_S;
   // Two different quantities that differ by one. The inclusive range holds
   // this many blocks, which is what the rate is computed over…
   const rangeBlocks = config.verifyEndBlock - config.startBlock + 1;
@@ -261,50 +307,55 @@ async function benchmarkIndexer(
     name,
     targetBlocks: rangeTargetBlocks,
     targetEvents: expected.totalEvents,
-    maxSeconds: phaseATimeoutS,
+    maxSeconds: PHASE_A_TIMEOUT_S,
   });
   await phaseA.stop();
 
-  let verification: Verification;
-  if (rangeRun.completed) {
-    console.log(
-      `\nIndexed the range in ${rangeRun.elapsedS.toFixed(1)}s — verifying...`
-    );
-    verification = await verify(
-      (query) => psql(phaseA.dbUrl, query),
-      config.entities,
-      expected,
-      {
-        // Only reached when something mismatched: rebuild the expected rows so
-        // the report can name what differs instead of just that a checksum did.
-        fetchExpectedRows: async () => {
-          console.log("  Mismatch found — rebuilding ground truth to diff it...");
-          const logs = await fetchCaseLogs(config, apiToken);
-          return config.computeExpected(logs).entities;
-        },
-      }
-    );
-    console.log(`  ${verification.status}: ${verification.detail}`);
-    for (const entity of verification.entities) {
-      for (const example of entity.examples) console.log(`    ${example}`);
-    }
-  } else {
-    // Verifying a partial database would report missing rows, which reads as a
-    // data bug rather than what it is: the indexer ran out of time.
-    const timedOut = rangeRun.elapsedS >= phaseATimeoutS - 1;
+  console.log(
+    rangeRun.completed
+      ? `\nIndexed the range in ${rangeRun.elapsedS.toFixed(1)}s — verifying...`
+      : `\nStopped after ${rangeRun.elapsedS.toFixed(0)}s short of the end block ` +
+          `— verifying what was indexed...`
+  );
+  let verification: Verification = await verify(
+    (query) => psql(phaseA.dbUrl, query),
+    config.entities,
+    expected,
+    // Rebuilding the ground-truth rows turns "the checksum differs" into
+    // "512 of 1,747 balances hold the wrong value", which is worth a second
+    // pass over HyperSync when a completed run disagrees. A run that stopped
+    // early disagrees by construction — every entity is short — so the diff
+    // would cost the same fetch to restate what the shortfall already says.
+    rangeRun.completed
+      ? {
+          fetchExpectedRows: async () => {
+            console.log("  Mismatch found — rebuilding ground truth to diff it...");
+            const logs = await fetchCaseLogs(config, apiToken);
+            return config.computeExpected(logs).entities;
+          },
+        }
+      : {}
+  );
+
+  console.log(`  ${verification.status}: ${verification.detail}`);
+  for (const entity of verification.entities) {
+    for (const example of entity.examples) console.log(`    ${example}`);
+  }
+
+  if (!rangeRun.completed) {
+    // The rows that are there were still checked, so a partial run reports a
+    // real verdict on real data — but it is a verdict on a fraction of the
+    // range, and that fraction is the only thing worth publishing about it.
+    // The per-entity breakdown stays in the log above: every entity is short by
+    // the same reason, and a note listing all sixteen of them says no more than
+    // one figure does. Storage is dropped with it, being comparable only
+    // between indexers holding identical data.
     verification = {
-      status: "unknown",
-      detail: timedOut
-        ? `did not finish the verification range within ${phaseATimeoutS}s`
-        : `stopped after ${rangeRun.elapsedS.toFixed(0)}s having indexed ` +
-          `${rangeRun.events.toLocaleString("en-US")} of ` +
-          `${expected.totalEvents.toLocaleString("en-US")} events — ` +
-          `the indexer exited before completing the range`,
-      entities: [],
+      ...verification,
+      detail: describeShortfall(rangeRun, expected, PHASE_A_TIMEOUT_S),
       dbSizeBytes: null,
       dbTotalBytes: null,
     };
-    console.log(`\n  ${verification.detail}`);
   }
 
   await phaseA.cleanup();

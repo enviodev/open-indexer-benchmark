@@ -236,14 +236,6 @@ export const caseConfig: CaseConfig = {
     childOf: proxyOf,
   },
 
-  // Two orders of magnitude more events than the ERC-20 cases, and 199,977
-  // contract registrations on top of them — the work this case exists to
-  // measure is also what makes it slow. A tool that runs out of time reports
-  // "could not verify", which says nothing about the tool, so the default
-  // fifteen minutes is raised; not further, because time past this point buys
-  // a slow tool a verdict nobody is waiting for.
-  phaseATimeoutS: 1_800,
-
   unsupported: {
     rindexer:
       "its factory filter takes one factory per contract — `Contract using " +
