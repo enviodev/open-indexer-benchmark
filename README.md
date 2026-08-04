@@ -92,22 +92,19 @@ See the full breakdown in [./cases/safe-factory-registrations/README.md](./cases
 
 ## Methodology
 
-Each scenario runs in two phases.
+Each scenario runs twice. Once over a fixed block range, to check the indexer's data against ground truth and measure it on disk. Once as a timed window, to measure how fast it goes. Everything runs in GitHub CI on `ubuntu-latest`, one job per tool per source, each started the way that tool's own documentation recommends for production.
 
-**Verification**: the indexer indexes a fixed block range to completion, then its database is checked against ground truth and measured on disk. Both are only comparable when every indexer holds identical data — which a fixed block range guarantees and a fixed time window does not.
+What the columns mean:
 
-The run is capped at ten minutes in every scenario. An indexer that has not finished by then is stopped where it got to, and what it did index is verified and rated all the same — so the table reports how much of the data a slow tool holds rather than reporting nothing. Its row is marked ❓ rather than ❌: the data is not wrong, there is less of it, and the note below the table says what share is missing and that the range was not finished in time. Storage for those rows is scaled from the share of the range that was indexed and written with a `~`. An indexer that produced nothing at all is reported as exactly that, with no rate and no storage to extrapolate from.
+**events/s, blocks/s** — measured over a 100-second window that stops short of the chain head, so it is backfill speed rather than head tracking. The window runs twice and the better rate is reported. A tool too slow to get through the fixed range in that time reports the rate it managed there instead.
 
-**Throughput**: the indexer re-runs from a clean database for 100 seconds, stopping just short of the chain head so the measurement stays in backfill rather than drifting into head tracking. The window runs twice and the better rate is reported, since contention on a shared CI runner only ever costs throughput. Indexers too slow to finish the verification range within the window skip this phase and report their rate from that run instead — including the ones that never finished the range, whose rate is what they managed in the ten minutes they had.
+**data** — ✅ every row matches ground truth, ❌ it does not, ❓ only part of the range got indexed, or the check could not run. Ground truth is built by replaying each scenario's documented logic over [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs. Anything but ✅ carries a numbered note under the table.
 
-**Data correctness**: ground truth is built from [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs by replaying each scenario's documented logic, then compared against the indexer's own database by a checksum that ignores row order but catches missing rows, duplicated rows, and wrong values. ✅ every entity matched, ❌ the data disagrees, ❓ the check could not run or ran on part of the range; the latter two carry a numbered note below the table.
+**storage** — the scenario's own tables and indexes, excluding each tool's internal bookkeeping. A `~` means the tool covered part of the range and the figure is scaled up from what it did index.
 
-**Storage**: on-disk size of the tables the scenario defines, including their indexes, at the data state the verification phase produces. A `~` marks a size extrapolated from an indexer that covered only part of the range. Each tool's internal bookkeeping is excluded, since it varies with how much a tool caches or retains.
+**source** — where the tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
 
-**Source**: where a tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool — Envio Indexer supports both HyperSync and RPC and so appears twice. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
-
-All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per source per scenario, each running the command that tool's own documentation recommends for production.
-
+The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 
 
 ## Sentio Benchmark Cases, May 2025

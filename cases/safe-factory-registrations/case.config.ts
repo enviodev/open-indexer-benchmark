@@ -66,7 +66,7 @@ const START_BLOCK = 24_600_000;
 // It also stops here rather than at the chain head, unlike the other cases.
 // Safe's deployment traffic comes in bursts: these 60,000 blocks hold the
 // canonical factories' creations at 3.3 per block, and the 340,000 blocks that
-// follow add only 65,000 more at a tenth of the density. Running to the head
+// follow add only 65,000 more, a fifth of one per block. Running to the head
 // would spend most of the window scanning near-empty blocks, which measures
 // how fast an indexer skips rather than how it copes with a contract set
 // growing underneath it.
