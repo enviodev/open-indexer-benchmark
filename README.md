@@ -34,13 +34,13 @@ Derived state that every event updates — the indexer must read a row, apply a 
 <!-- BENCHMARK:erc20-account-balances:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 13,220.1 | 96,621.1 | — | ✅ | Postgres 2.2 MB |
-| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 693.0 | 5,280.1 | 19.1x slower | ✅ | Postgres 2.2 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 631.1 | 4,923.8 | 20.9x slower | ✅ | Postgres 4.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 439.7 | 2,986.4 | 30.1x slower | ✅ | Postgres 2.2 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 66.1 | 870.9 | 199.9x slower | ✅ | Postgres 3.3 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 41.1 | 541.7 | 321.3x slower | ✅ | Postgres 6.9 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 23.3 | 307.0 | 567x slower | ✅ | Postgres 4.4 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 17,767.6 | 129,946.8 | — | ✅ | Postgres 2.2 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 874.3 | 6,543.5 | 20.3x slower | ✅ | Postgres 2.2 MB |
+| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 556.8 | 3,900.8 | 31.9x slower | ✅ | Postgres 2.2 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 304.7 | 3,343.7 | 58.3x slower | ✅ | Postgres 4.4 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 61.8 | 813.7 | 287.5x slower | ✅ | Postgres 3.3 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 33.2 | 437.1 | 535.3x slower | ✅ | Postgres 6.9 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 14.1 | 185.5 | 1261.2x slower | ✅ | Postgres 4.4 MB |
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 See the full breakdown in [./cases/erc20-account-balances/README.md](./cases/erc20-account-balances/README.md).
@@ -53,13 +53,13 @@ Every decoded event written once, with no aggregation and nothing to read back �
 <!-- BENCHMARK:erc20-transfer-events:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 71,339.8 | 7,706.9 | — | ✅ | Postgres 1.4 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 17,076.8 | 1,992.3 | 4.2x slower | ✅ | Postgres 3.4 MB |
-| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 16,274.5 | 1,897.6 | 4.4x slower | ✅ | Postgres 1.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 3,028.1 | 362.5 | 23.6x slower | ✅ | Postgres 1.4 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 230.6 | 29.4 | 309.3x slower | ✅ | Postgres 2.5 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 19.1 | 2.4 | 3734x slower | ✅ | Postgres 2.0 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ✅ | Postgres 2.8 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 70,970.1 | 7,677.0 | — | ✅ | Postgres 1.4 MB |
+| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 17,053.0 | 1,989.8 | 4.2x slower | ✅ | Postgres 1.4 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 7,584.2 | 951.7 | 9.4x slower | ✅ | Postgres 3.4 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 839.8 | 118.8 | 84.5x slower | ✅ | Postgres 1.4 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 219.3 | 27.9 | 323.6x slower | ✅ | Postgres 2.5 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 91.9 | 11.4 | 772.2x slower | ✅ | Postgres 2.8 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 19.7 | 2.4 | 3594.8x slower | ✅ | Postgres 1.9 MB |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc20-transfer-events/README.md).
@@ -72,7 +72,19 @@ Contracts that are not known at build time. The indexer watches the Safe proxy f
 Two details separate the tools. `ProxyCreation` arrives in two layouts under one event signature, so both have to be decoded. And a new proxy emits its `SafeSetup` one log index *before* the `ProxyCreation` announcing it, so tools that resolve the child set up front capture those 10,524 rows and tools that discover children in event order cannot — both legitimate, and the note under the table says which a tool chose.
 
 <!-- BENCHMARK:safe-factory-registrations:START -->
-_No results collected yet — the table is filled in by the next benchmark run._
+| tool | source | events/s | blocks/s | vs best | data | storage |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 10,822.4 | 2,969.9 | — | ✅ | Postgres 4.6 MB |
+| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 3,808.5 | 1,099.9 | 2.8x slower | ❌ (1) | Postgres 4.5 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 2,623.9 | 720.1 | 4.1x slower | ✅ | Postgres 4.6 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 171.1 | 61.0 | 63.2x slower | ✅ | Postgres 8.0 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 45.3 | 16.1 | 239.1x slower | ✅ | Postgres 9.5 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (2) | — |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (3) | — |
+
+> **(1)** Sqd — 255 of 256 safe setups missing; 2 of 2 fallback handler changes missing; 57 of 64 module enables missing
+> **(2)** SubQuery — did not finish the verification range within 1200s
+> **(3)** Rindexer — its factory filter takes one factory per contract — `Contract using factory filter must use same factory across all networks` — so the children of Safe's four canonical factory deployments cannot be collected into one contract, and its no-code mode names tables after events, which leaves no way to declare the eight events Safe emits under one topic in two layouts
 <!-- BENCHMARK:safe-factory-registrations:END -->
 
 See the full breakdown in [./cases/safe-factory-registrations/README.md](./cases/safe-factory-registrations/README.md).
@@ -95,6 +107,7 @@ The run is capped at ten minutes in every scenario. An indexer that has not fini
 **Source**: where a tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool — Envio Indexer supports both HyperSync and RPC and so appears twice. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
 
 All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per source per scenario, each running the command that tool's own documentation recommends for production.
+
 
 
 ## Sentio Benchmark Cases, May 2025
