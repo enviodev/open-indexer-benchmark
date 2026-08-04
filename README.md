@@ -107,6 +107,7 @@ Each scenario runs in two phases.
 All benchmarks run in GitHub CI on `ubuntu-latest` runners, one job per tool per source per scenario, each running the command that tool's own documentation recommends for production.
 
 
+
 ## Sentio Benchmark Cases, May 2025
 
 Six real-world indexing scenarios covering events, blocks, transactions, and traces on Ethereum Mainnet. These figures come from the original May 2025 research and predate the methodology above — they are total sync times, not throughput rates, and are kept for reference rather than re-run.

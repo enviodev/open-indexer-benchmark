@@ -26,16 +26,36 @@ jobs:
   setup:
     name: Setup matrix
     runs-on: ubuntu-latest
-    # Only echoes the matrix to GITHUB_OUTPUT; touches neither repo nor API.
-    permissions: {}
+    # Reads the diff to scope pull request runs; touches nothing else.
+    permissions:
+      contents: read
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
       cases: ${{ steps.set-matrix.outputs.cases }}
       case1: ${{ steps.set-matrix.outputs.case1 }}
       case2: ${{ steps.set-matrix.outputs.case2 }}
       case3: ${{ steps.set-matrix.outputs.case3 }}
+      indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
+      indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
+      indexers3: ${{ steps.set-matrix.outputs.indexers3 }}
+      partial: ${{ steps.set-matrix.outputs.partial }}
+      selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
+      # Only pull requests diff and run the filter; `main` and dispatch runs
+      # are always full, so they keep setup down to the one shell step.
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          # The pull request scope comes from `git diff` against the base
+          # commit, which a shallow clone does not have.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'pull_request'
+        with:
+          node-version: 24
+
       - id: set-matrix
         # Dispatch inputs are read from the environment rather than expanded
         # into the script text, so they reach the shell as data.
@@ -43,19 +63,19 @@ jobs:
           INDEXERS: ${{ inputs.indexers }}
           CASES: ${{ inputs.cases }}
           DURATION_INPUT: ${{ inputs.duration }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ -z "$INDEXERS" ]; then
-            echo 'matrix=["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]' >> "$GITHUB_OUTPUT"
+            INDEXERS_JSON='["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]'
           else
-            MATRIX=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
-            echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+            INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
             CASES_JSON='["erc20-account-balances","erc20-transfer-events","safe-factory-registrations"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
-          echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
 
           COUNT=$(echo "$CASES_JSON" | jq 'length')
 
@@ -76,16 +96,72 @@ jobs:
             echo "Only 3 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
             exit 1
           fi
-          echo "case1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')" >> "$GITHUB_OUTPUT"
-          echo "case2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')" >> "$GITHUB_OUTPUT"
-          echo "case3=$(echo "$CASES_JSON" | jq -r '.[2] // ""')" >> "$GITHUB_OUTPUT"
+
+          # Every scenario measures every indexer, unless a pull request
+          # narrows it: there a full run is twenty-one long jobs against shared
+          # data endpoints, nearly all of them re-measuring untouched code.
+          # `main` and manual runs stay full — they publish the README table,
+          # which has to hold a complete set of results.
+          PARTIAL=0
+          # Both empty unless the run is scoped. SELECTED lets the summary tell
+          # an indexer that was asked to run and reported nothing — a failed
+          # job — apart from one this run never selected.
+          SCOPE=""
+          SELECTED=""
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # The filter has no execution path other than right here, so it
+            # vouches for itself before it decides anything.
+            node scripts/test-scope.ts
+
+            # HEAD is the merge commit GitHub built against the base. The
+            # event's base sha can lag the merge base it actually used, in
+            # which case files from the base branch leak into the diff — that
+            # only ever widens the selection, never narrows it.
+            CHANGED_FILES=$(git diff --name-only "$BASE_SHA" HEAD)
+            echo "Changed files:"
+            echo "$CHANGED_FILES" | sed 's/^/  /'
+
+            SCOPE=$(CHANGED_FILES="$CHANGED_FILES" ALL_CASES="$CASES_JSON" \
+              ALL_INDEXERS="$INDEXERS_JSON" node scripts/select-scope.ts)
+            echo "Scope: $SCOPE"
+
+            CASES_JSON=$(echo "$SCOPE" | jq -c '.cases')
+            SELECTED=$(echo "$SCOPE" | jq -c '.indexers')
+            [ "$(echo "$SCOPE" | jq '.full')" = "true" ] || PARTIAL=1
+
+            if [ "$CASES_JSON" = "[]" ]; then
+              echo "Nothing benchmark-related changed; skipping the benchmark run."
+            fi
+          fi
+
+          echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
+          echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
+          echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
+
+          # One scenario slot per `scenario-N` job below. A slot with no case
+          # is skipped by that job's `if`, so the loop covers a run with fewer
+          # scenarios than slots without special-casing it.
+          for N in 1 2 3; do
+            CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
+            if [ -n "$SCOPE" ]; then
+              INDEXERS_N=$(echo "$SCOPE" | jq -c --arg c "$CASE_N" '.indexers[$c] // []')
+            else
+              INDEXERS_N="$INDEXERS_JSON"
+            fi
+            echo "case$N=$CASE_N" >> "$GITHUB_OUTPUT"
+            echo "indexers$N=$INDEXERS_N" >> "$GITHUB_OUTPUT"
+          done
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
-  # The harness has two test scripts — scripts/test-verification.ts and
-  # scripts/test-tables.ts — that are run locally when either the verification
-  # layer or the result table changes. They are deliberately not a CI job: the
-  # verification test needs a live HyperSync token, which forks do not have.
+  # The harness has three test scripts — scripts/test-verification.ts,
+  # scripts/test-tables.ts and scripts/test-scope.ts — that are run locally when
+  # the verification layer, the result table or the pull request run filter
+  # changes. They are deliberately not a CI job: the verification test needs a
+  # live HyperSync token, which forks do not have. The one exception is
+  # test-scope.ts, which the setup job runs before trusting the filter's
+  # decision, since it needs no credentials and takes under a second.
 
   # One scenario at a time: every indexer of scenario 1 runs in parallel, and
   # scenario 2 only starts once they have all finished. Keeping the scenarios
@@ -98,7 +174,7 @@ jobs:
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ needs.setup.outputs.case1 }}
-      indexers: ${{ needs.setup.outputs.matrix }}
+      indexers: ${{ needs.setup.outputs.indexers1 }}
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
@@ -112,7 +188,7 @@ jobs:
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ needs.setup.outputs.case2 }}
-      indexers: ${{ needs.setup.outputs.matrix }}
+      indexers: ${{ needs.setup.outputs.indexers2 }}
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
@@ -123,14 +199,17 @@ jobs:
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ needs.setup.outputs.case3 }}
-      indexers: ${{ needs.setup.outputs.matrix }}
+      indexers: ${{ needs.setup.outputs.indexers3 }}
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
   summary:
     name: Summary
     needs: [setup, scenario-1, scenario-2, scenario-3]
-    if: always() && needs.setup.result == 'success'
+    # A pull request that changed nothing benchmark-related runs no scenario,
+    # so there is nothing to tabulate — and an empty table reads as "measured,
+    # found nothing" rather than "not measured".
+    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -148,6 +227,7 @@ jobs:
       - name: Build comparison tables
         env:
           CASES: ${{ needs.setup.outputs.cases }}
+          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
         run: node scripts/build-tables.ts
 
       - name: Comment results on PR
@@ -155,6 +235,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           CASES: ${{ needs.setup.outputs.cases }}
+          PARTIAL_RUN: ${{ needs.setup.outputs.partial }}
         with:
           script: |
             const fs = require('fs');
@@ -179,9 +260,34 @@ jobs:
 
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
+            // Say so when the run was narrowed, so a ⚠️ row reads as "not
+            // re-run by this pull request" rather than "this indexer broke".
+            const scopeNote = process.env.PARTIAL_RUN === '1'
+              ? 'Only the scenarios and indexers this pull request touches were re-run; '
+                + 'other rows are carried forward from the last published results, and '
+                + 'untouched scenarios are left out entirely.'
+              : '';
+
+            // An indexer that WAS selected and still produced nothing is a
+            // failed job, and must not hide behind the scope note above —
+            // build-tables.ts writes one list per case where that happened.
+            const failures = [];
+            for (const benchCase of cases) {
+              const file = `/tmp/benchmark-failed-${benchCase}.txt`;
+              if (!fs.existsSync(file)) continue;
+              const names = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean);
+              if (names.length > 0) failures.push(`${titleOf(benchCase)}: ${names.join(', ')}`);
+            }
+            const failureNote = failures.length > 0
+              ? `> ⚠️ Selected to run but reported no result — ${failures.join('; ')}. `
+                + `These rows show the last published value; [check the failed job(s)](${runUrl}).`
+              : '';
+
             const body = [
               '## Benchmark Results',
               '',
+              ...(scopeNote ? [scopeNote, ''] : []),
+              ...(failureNote ? [failureNote, ''] : []),
               sections.join('\n\n'),
               '',
               `[Full output](${runUrl}) is available in the workflow run logs.`,
