@@ -67,9 +67,9 @@ See the full breakdown in [./cases/erc20-transfer-events/README.md](./cases/erc2
 
 ### Factory Contract Registration
 
-Contracts that are not known at build time. The indexer watches the Safe proxy factories on Ethereum Mainnet, and every proxy they announce becomes a contract it must index from then on — 25,096 of them by the end of the verification range, 199,977 by the end of the throughput window. What is measured is how per-contract bookkeeping and log matching hold up as that set grows.
+Contracts that are not known at build time. The indexer watches the Safe proxy factories on Ethereum Mainnet, and every proxy they announce becomes a contract it must index from then on — 199,977 of them over the range. What is measured is how per-contract bookkeeping and log matching hold up as that set grows.
 
-Two details separate the tools. `ProxyCreation` exists in two layouts under one event signature, since `proxy` became indexed in Safe 1.4.1, so both have to be decoded. And a new proxy emits its `SafeSetup` one log index *before* the `ProxyCreation` announcing it, so tools that resolve the factory's child set up front capture those 256 rows while tools that discover children strictly in event order cannot. Both are legitimate designs, and the note under the table says which a tool chose.
+Two details separate the tools. `ProxyCreation` arrives in two layouts under one event signature, so both have to be decoded. And a new proxy emits its `SafeSetup` one log index *before* the `ProxyCreation` announcing it, so tools that resolve the child set up front capture those 10,524 rows and tools that discover children in event order cannot — both legitimate, and the note under the table says which a tool chose.
 
 <!-- BENCHMARK:safe-factory-registrations:START -->
 _No results collected yet — the table is filled in by the next benchmark run._

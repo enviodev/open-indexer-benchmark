@@ -1,6 +1,6 @@
 # Factory Contract Registration
 
-Index the canonical Safe proxy factories on Ethereum Mainnet from block 24,600,000 and every proxy they create. The verification range ends once the factories have announced their 25,096th proxy; the throughput window carries the same configuration on to block 24,660,000, by which point the registered contract set is 199,977 deep.
+Index the canonical Safe proxy factories on Ethereum Mainnet from block 24,600,000 to 24,660,000 and every proxy they create. Both phases run that one range, by the end of which the registered contract set is 199,977 deep.
 
 The other cases fix the contract set in configuration. This one does not: nothing is known about the children at build time, and the set grows throughout the run. What is measured is the cost of that growth — how an indexer's per-contract bookkeeping, address matching and log filtering hold up as the set gets large.
 
@@ -14,10 +14,8 @@ The other cases fix the contract set in configuration. This one does not: nothin
   | v1.4.1 | [`0x4e1dcf7a…ec67`](https://etherscan.io/address/0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67) | `(address indexed proxy, address singleton)` |
   | v1.5.0 | [`0x14f2982d…5e7b`](https://etherscan.io/address/0x14f2982d601c9458f93bd70b218933a6f8165e7b) | `(address indexed proxy, address singleton)` |
 - **Events Indexed**: `ProxyCreation` on the factories, and the fifteen events a Safe emits on every proxy they create
-- **Block Range**: 24,600,000 to 24,660,000
-- **Verification Range**: 24,600,000 to 24,609,162 — indexed to completion, then checked against `expected.json`
-- **Child contracts registered in that range**: 25,096
-- **Throughput Range**: 24,600,000 to 24,660,000 — 199,977 registrations, six figures of dynamic contracts
+- **Block Range**: 24,600,000 to 24,660,000 — indexed to completion, then checked against `expected.json`
+- **Child contracts registered in that range**: 199,977, six figures of dynamic contracts
 - **Features**: `dynamic contract registration`, `event decoding`, `storage write` (insert-only, no updates)
 
 Only the canonical factories are indexed. Several other contracts on mainnet emit the same `ProxyCreation` topic — some of them heavily — but they are not Safe deployments, and including them would make the case a topic scan rather than a factory case. The pre-1.3.0 factories are left out for the opposite reason: they emit a different event (`ProxyCreation(address)`) and have created nothing in this range.
@@ -47,11 +45,11 @@ There is no aggregation and nothing is read back. Registration cost is the varia
 
 Fifteen events, the whole of what a Safe emits: `SafeSetup`, `SafeReceived`, `SafeModuleTransaction`, `SafeMultiSigTransaction`, `ExecutionSuccess`, `ExecutionFailure`, `ChangedThreshold`, `ChangedMasterCopy`, `ChangedFallbackHandler`, `ChangedGuard`, `ChangedModuleGuard`, `EnabledModule`, `DisabledModule`, `AddedOwner` and `RemovedOwner`.
 
-Only `SafeSetup` fires in the transaction that creates the proxy; the rest fire for the life of the Safe, when the child is already registered and no tool loses them to discovery order. What they cost is matching. Across the throughput range these fifteen topics are emitted 94,298 times chain-wide and 18,663 of those belong to proxies these factories created — `SafeReceived` alone is 52,882 against 413. A tool that hands its child address set to the data source pays for the 18,663. A tool that subscribes by topic and filters in the handler pays for all 94,298, on a contract set of 199,977 addresses.
+Only `SafeSetup` fires in the transaction that creates the proxy; the rest fire for the life of the Safe, when the child is already registered and no tool loses them to discovery order. What they cost is matching. Across the range these fifteen topics are emitted 94,298 times chain-wide and 18,663 of those belong to proxies these factories created — `SafeReceived` alone is 52,882 against 413. A tool that hands its child address set to the data source pays for the 18,663. A tool that subscribes by topic and filters in the handler pays for all 94,298, on a contract set of 199,977 addresses.
 
 ### One topic, two layouts
 
-Safe 1.4.x made an argument `indexed` on eight of these events — `ExecutionSuccess`, `ExecutionFailure`, `ChangedFallbackHandler`, `ChangedGuard`, `EnabledModule`, `DisabledModule`, `AddedOwner`, `RemovedOwner` — without changing the signature. The topic0 is therefore identical and the payload is not, and both versions are live: 5,638 `ExecutionSuccess` of the newer layout in the throughput range against 666 of the older.
+Safe 1.4.x made an argument `indexed` on eight of these events — `ExecutionSuccess`, `ExecutionFailure`, `ChangedFallbackHandler`, `ChangedGuard`, `EnabledModule`, `DisabledModule`, `AddedOwner`, `RemovedOwner` — without changing the signature. The topic0 is therefore identical and the payload is not, and both versions are live: 5,638 `ExecutionSuccess` of the newer layout in the range against 666 of the older.
 
 `ProxyCreation` has the same split, but there the emitting factory says which layout to expect. For a child it cannot be known before the log arrives — one proxy points at a 1.3.0 singleton, the next at a 1.4.1 one — so a tool has to decide per log. How each does it, and whether it can at all, is part of what the case measures:
 
@@ -68,7 +66,7 @@ SubQuery resolves an event from its topic0 alone, so two fragments sharing one m
 
 ### The SafeSetup ordering, and why it is in the case
 
-Most of the proxies these factories deploy are not Safes at all — a proxy points at whatever singleton its deployer chose, and only a small share of them are set up as a Safe and emit `SafeSetup`. That is why 25,096 registrations yield 256 setups. The rare event is the interesting one, because of where it lands.
+Most of the proxies these factories deploy are not Safes at all — a proxy points at whatever singleton its deployer chose, and only a small share of them are set up as a Safe and emit `SafeSetup`. That is why 199,977 registrations yield 10,524 setups. The rare event is the interesting one, because of where it lands.
 
 A Safe proxy is deployed and set up in a single transaction, and the two logs come out in this order:
 
@@ -79,7 +77,7 @@ logIndex n + 1  ProxyCreation  ← emitted by the factory, announcing that proxy
 
 The child's event precedes the factory event that announces it. An indexer that discovers children strictly in event order has not registered the proxy at the moment its `SafeSetup` goes past, and cannot record it. An indexer that resolves the factory's child address set ahead of matching child logs can.
 
-This is deliberate. Both designs are defensible, the difference is invisible in the usual factory example where children only emit events days later, and it decides whether a real Safe indexer sees the owners and threshold a safe was created with. The case exists partly to make that difference measurable, so a tool recording 0 of the 256 `SafeSetup` rows is reporting a design choice, not a bug, and the note under the results table says so.
+This is deliberate. Both designs are defensible, the difference is invisible in the usual factory example where children only emit events days later, and it decides whether a real Safe indexer sees the owners and threshold a safe was created with. The case exists partly to make that difference measurable, so a tool recording 0 of the 10,524 `SafeSetup` rows is reporting a design choice, not a bug, and the note under the results table says so.
 
 Every implementation here is written the way that tool's own documentation recommends. None of them is nudged toward or away from capturing the setup events.
 
@@ -100,11 +98,11 @@ Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC
 ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node cases/safe-factory-registrations/run.ts
 ```
 
-Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
+Each indexer indexes the range to completion — its database is then checked against `expected.json` and measured — before re-running the same range for the throughput window. Indexers too slow to finish it within that window skip the re-run and report their rate from the verification run.
 
-The verification phase allows 1,200 seconds here rather than the usual 900. The range is nine thousand blocks, twenty-five thousand events and twenty-five thousand contract registrations, and a tool that runs out of time reports "could not verify", which would say nothing about the tool.
+The verification phase allows 1,800 seconds here rather than the usual 900. The range is sixty thousand blocks, two hundred thousand events and two hundred thousand contract registrations, and a tool that runs out of time reports "could not verify", which would say nothing about the tool.
 
-Unlike the other cases, the throughput window stops at a fixed block rather than at the chain head. Safe's deployment traffic comes in bursts, and these 60,000 blocks hold 199,977 of the canonical factories' creations at 3.3 per block, against a tenth of that density for the next 340,000. Running to the head would spend most of the window scanning near-empty blocks — a measure of how fast an indexer skips, not of how it copes with a contract set growing underneath it. The fastest indexers reach the end block before the window closes, and their rate is computed over the time it took.
+Unlike the other cases, the throughput window stops at a fixed block rather than at the chain head. Safe's deployment traffic comes in bursts, and these 60,000 blocks hold the canonical factories' creations at 3.3 per block, against a tenth of that density for the next 340,000. Running to the head would spend most of the window scanning near-empty blocks — a measure of how fast an indexer skips, not of how it copes with a contract set growing underneath it. The fastest indexers reach the end block before the window closes, and their rate is computed over the time it took.
 
 The throughput window defaults to 60 seconds. Pass a custom duration (in seconds) with `--duration`:
 
@@ -182,7 +180,5 @@ exiting on its own, as with several of the other drivers.
 Runs entirely via Docker Compose (postgres + subquery-node), and carries the heaviest startup overhead — see the [Decoded Event Stream](../erc20-transfer-events/README.md) notes, which apply unchanged.
 
 As with the subgraph, a datasource carries one address, so each factory deployment gets its own. The proxy is indexed through a `Safe` template instantiated per `ProxyCreation` with `createSafeDatasource({ address })`.
-
-It is also the only tool here that checks what the RPC hands back. `fetchBlock` asks for a block, then asks for that block's logs by `blockHash`, and rejects the response if any log carries a different hash — `Log BlockHash does not match block: N … got block N+1`, then `Maximum number of retries reached`. The check is doing its job: HyperRPC mis-slices batched `eth_getLogs` responses, and when two requests in one JSON-RPC batch cover contiguous blocks, the earlier one's response also carries the later one's logs. SubQuery batches its per-block `eth_getLogs` calls, so consecutive blocks land in the same batch and the response is rejected. Sending the same requests unbatched, or with a gap between the ranges, returns them correctly, so the fault is on the RPC side rather than in SubQuery.
 
 Its child ABI declares the 1.4.x layout of the eight overloaded events and not the older one: SubQuery resolves an event from its topic0 with an ethers `Interface`, which treats two fragments sharing a topic0 as ambiguous and would then decode neither. A log of the older layout still reaches the handler, arrives with `args` undefined, and is skipped rather than throwing.

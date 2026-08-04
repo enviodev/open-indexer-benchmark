@@ -57,21 +57,20 @@ const singletonOf = (log: DecodedLog) =>
 
 const START_BLOCK = 24_600_000;
 
-// The 25,096th proxy of this run lands here. The range is sized by contract
-// registrations rather than by blocks: what the phase has to demonstrate is
-// that an indexer stays correct while its contract set grows into five
-// figures, and the throughput window — which runs the same configuration on
-// towards the chain head — is where the size of that set is measured.
-const VERIFY_END_BLOCK = 24_609_162;
-
-// The throughput window stops here rather than at the chain head. Safe's
-// deployment traffic comes in bursts: these 60,000 blocks hold 199,977 of the
+// Both phases run this one range. It is sized by contract registrations rather
+// than by blocks — 199,977 of them, six figures of dynamic contracts — since
+// what the case has to demonstrate is that an indexer stays correct while its
+// contract set grows, and the throughput phase re-runs the same configuration
+// rather than a different one.
+//
+// It also stops here rather than at the chain head, unlike the other cases.
+// Safe's deployment traffic comes in bursts: these 60,000 blocks hold the
 // canonical factories' creations at 3.3 per block, and the 340,000 blocks that
 // follow add only 65,000 more at a tenth of the density. Running to the head
 // would spend most of the window scanning near-empty blocks, which measures
 // how fast an indexer skips rather than how it copes with a contract set
 // growing underneath it.
-const THROUGHPUT_END_BLOCK = 24_660_000;
+const END_BLOCK = 24_660_000;
 
 // ── The Safe ABI, as it is actually deployed ────────────────────────────
 //
@@ -228,8 +227,8 @@ export const caseConfig: CaseConfig = {
   dir: dirname(fileURLToPath(import.meta.url)),
   contract: FACTORIES,
   startBlock: START_BLOCK,
-  verifyEndBlock: VERIFY_END_BLOCK,
-  throughputEndBlock: THROUGHPUT_END_BLOCK,
+  verifyEndBlock: END_BLOCK,
+  throughputEndBlock: END_BLOCK,
   topics: [PROXY_CREATION_TOPIC],
 
   child: {
@@ -237,13 +236,13 @@ export const caseConfig: CaseConfig = {
     childOf: proxyOf,
   },
 
-  // An order of magnitude more events than the ERC-20 cases, and 25,096
+  // Two orders of magnitude more events than the ERC-20 cases, and 199,977
   // contract registrations on top of them — the work this case exists to
   // measure is also what makes it slow. A tool that runs out of time reports
   // "could not verify", which says nothing about the tool, so the default
   // fifteen minutes is raised; not further, because time past this point buys
   // a slow tool a verdict nobody is waiting for.
-  phaseATimeoutS: 1_200,
+  phaseATimeoutS: 1_800,
 
   unsupported: {
     rindexer:
