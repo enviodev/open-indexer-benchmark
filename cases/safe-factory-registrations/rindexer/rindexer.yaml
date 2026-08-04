@@ -1,0 +1,61 @@
+name: safe-factory-indexer
+description: Safe proxy factory registrations and the setup events of the proxies it creates
+project_type: no-code
+timestamps: true
+
+networks:
+  - name: ethereum
+    chain_id: 1
+    rpc: ${ETHEREUM_RPC}
+    # The factory burst indexed here creates proxies faster than an unbounded
+    # eth_getLogs range will serve, so pin an explicit per-request range and
+    # fan the historic backfill across several concurrent workers.
+    max_block_range: 1000
+    fetch_concurrency: 10
+
+storage:
+  postgres:
+    enabled: true
+    drop_each_run: true
+
+contracts:
+  # Kept as the closest configuration rindexer can express, but the case skips
+  # it — see `unsupported` in ../case.config.ts. Two things are out of reach:
+  #
+  #   * A contract's `factory` filter takes one factory. Giving each canonical
+  #     Safe deployment its own `details` block panics with "Contract using
+  #     factory filter must use same factory across all networks", and giving
+  #     each its own contract would produce a second set of identically named
+  #     tables in another schema, which table resolution rejects as ambiguous.
+  #     So only the v1.3.0 pair is reachable, and the children of v1.4.1 and
+  #     v1.5.0 are not indexed at all.
+  #
+  #   * Eight of the child events arrive under one topic0 in two layouts, and
+  #     `include_events` names an event once — there is nowhere to put the
+  #     second decode.
+  #
+  # Only the child contract is declared. Resolving a factory already makes
+  # rindexer index the factory's own ProxyCreation logs into a table of their
+  # own, so declaring the factory again as a standalone contract yields two
+  # `proxy_creation` tables in separate schemas holding identical rows.
+  - name: Safe
+    details:
+      - network: ethereum
+        factory:
+          name: SafeProxyFactory
+          address:
+            - "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2" # v1.3.0 canonical
+            - "0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC" # v1.3.0 eip155
+          abi: ./abis/SafeProxyFactory.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/Safe.abi.json
+    include_events:
+      - SafeSetup
+      - SafeReceived
+      - SafeModuleTransaction
+
+global:
+  health_port: 8082

@@ -32,6 +32,12 @@ export interface BenchmarkResult {
   windowSeconds: number | null;
   /** Every throughput window run, for transparency about run-to-run spread. */
   windowRuns?: { eventsPerSec: number; blocksPerSec: number; seconds: number }[];
+  /**
+   * Why the tool cannot express this case. Present only for tools the case
+   * declares unsupported — they are never run, so every metric above is zero
+   * and must not be read as a measurement.
+   */
+  unsupported?: string;
 }
 
 /** Status marker only; the explanation becomes a note under the table. */
@@ -45,6 +51,7 @@ export function toTableRow(result: BenchmarkResult): TableRow {
   return {
     name: result.name,
     eventsPerSec: result.eventsPerSec,
+    ...(result.unsupported ? { unsupported: result.unsupported } : {}),
     cells: {
       tool: `[${result.name}](${result.toolUrl})`,
       source: `[${result.source}](${result.sourceUrl})`,

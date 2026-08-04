@@ -14,6 +14,8 @@ export interface DecodedLog {
   logIndex: number;
   /** Unix seconds of the containing block. */
   timestamp: number;
+  /** Lowercase address of the contract that emitted the log. */
+  address: string;
   topic0: string;
   /** First indexed argument as a lowercase address (`from` / `owner`). */
   arg0: string;
@@ -21,6 +23,29 @@ export interface DecodedLog {
   arg1: string;
   /** The non-indexed `value` argument. */
   value: bigint;
+  /** Raw `data` payload, for cases that need a word other than the first. */
+  data: string;
+}
+
+/**
+ * The n-th 32-byte word of a log's data payload, as a lowercase address.
+ * Reading a specific word is the only way to get at arguments past the first
+ * for events whose payload holds several — `SafeSetup`, for instance.
+ */
+export function addressAtWord(data: string, index: number): string {
+  return `0x${wordHex(data, index).slice(24)}`;
+}
+
+/** The n-th 32-byte word of a log's data payload, as a bigint. */
+export function uintAtWord(data: string, index: number): bigint {
+  const hex = wordHex(data, index);
+  return hex ? BigInt(`0x${hex}`) : BigInt(0);
+}
+
+function wordHex(data: string, index: number): string {
+  const body = (data.startsWith("0x") ? data.slice(2) : data).toLowerCase();
+  const start = index * 64;
+  return body.length >= start + 64 ? body.slice(start, start + 64) : "";
 }
 
 const MAX_ATTEMPTS = 5;
@@ -56,8 +81,13 @@ async function post(url: string, token: string, body?: unknown): Promise<any> {
   throw new Error(`HyperSync request failed after ${MAX_ATTEMPTS} attempts — ${lastError}`);
 }
 
-/** `0x…32 bytes` topic → lowercase 20-byte address. */
-function topicToAddress(topic: string): string {
+/**
+ * `0x…32 bytes` topic → lowercase 20-byte address. Absent topics read as the
+ * zero address: an event with fewer indexed arguments than another is normal,
+ * and the case logic decides which of `arg0`/`arg1` it actually looks at.
+ */
+function topicToAddress(topic: string | undefined | null): string {
+  if (!topic) return `0x${"0".repeat(40)}`;
   return `0x${topic.slice(-40).toLowerCase()}`;
 }
 
@@ -69,20 +99,45 @@ function firstWord(data: string): bigint {
 }
 
 /**
+ * How far a read has got. `pass` names what is being read, because a factory
+ * case reads twice over the same block range and a progress line that silently
+ * restarts at the first block reads as a stall rather than as the second pass
+ * beginning.
+ */
+export interface FetchProgress {
+  pass: string;
+  /** Last block read, within the pass's own range. */
+  block: number;
+  /** Logs collected so far in this pass. */
+  logs: number;
+}
+
+/**
  * Fetch and decode every matching log in `[fromBlock, toBlock]` (both
  * inclusive). HyperSync paginates via `next_block`; its `to_block` is
  * exclusive, and block timestamps come back as hex strings.
  */
 export async function fetchLogs(opts: {
   token: string;
-  address: string;
+  /**
+   * Contract(s) to read logs from. Omit entirely to match on topics alone,
+   * which is how the child half of a factory case is collected: its contracts
+   * are not known until the factory logs have been read.
+   */
+  address?: string | string[];
   topics: string[];
   fromBlock: number;
   /** Inclusive. */
   toBlock: number;
-  onProgress?: (block: number, logs: number) => void;
+  /** Names this read in progress output. */
+  pass?: string;
+  onProgress?: (progress: FetchProgress) => void;
 }): Promise<DecodedLog[]> {
   const { token, address, topics, fromBlock, toBlock } = opts;
+  const addresses =
+    address === undefined
+      ? undefined
+      : (Array.isArray(address) ? address : [address]).map((a) => a.toLowerCase());
   const out: DecodedLog[] = [];
   let cursor = fromBlock;
 
@@ -90,9 +145,17 @@ export async function fetchLogs(opts: {
     const body = {
       from_block: cursor,
       to_block: toBlock + 1,
-      logs: [{ address: [address.toLowerCase()], topics: [topics] }],
+      logs: [{ ...(addresses ? { address: addresses } : {}), topics: [topics] }],
       field_selection: {
-        log: ["block_number", "log_index", "topic0", "topic1", "topic2", "data"],
+        log: [
+          "address",
+          "block_number",
+          "log_index",
+          "topic0",
+          "topic1",
+          "topic2",
+          "data",
+        ],
         block: ["number", "timestamp"],
       },
     };
@@ -117,10 +180,12 @@ export async function fetchLogs(opts: {
           blockNumber,
           logIndex: Number(log.log_index),
           timestamp,
+          address: String(log.address).toLowerCase(),
           topic0: log.topic0.toLowerCase(),
           arg0: topicToAddress(log.topic1),
           arg1: topicToAddress(log.topic2),
           value: firstWord(log.data),
+          data: String(log.data ?? "0x"),
         });
       }
     }
@@ -131,7 +196,11 @@ export async function fetchLogs(opts: {
       break;
     }
     cursor = next;
-    opts.onProgress?.(Math.min(cursor - 1, toBlock), out.length);
+    opts.onProgress?.({
+      pass: opts.pass ?? "logs",
+      block: Math.min(cursor - 1, toBlock),
+      logs: out.length,
+    });
   }
 
   // Logs arrive block-ordered per batch, but sort explicitly so any caller that
@@ -142,6 +211,67 @@ export async function fetchLogs(opts: {
       : a.blockNumber - b.blockNumber
   );
   return out;
+}
+
+/**
+ * Ground truth for a factory case, in two passes: read the factory's own logs,
+ * derive the child contracts they announce, then read the children's logs.
+ *
+ * The second pass filters on topics alone and discards non-children locally,
+ * rather than asking HyperSync to match against the child address set. A
+ * factory case registers children by the hundred thousand, and an address
+ * filter that large is both slower to serve and awkward to page; the child
+ * event is rare enough chain-wide that fetching all of it and rejecting the
+ * strangers costs less than either.
+ *
+ * The result is one merged, block-and-log-index ordered stream, so case logic
+ * sees events in exactly the order an indexer would.
+ */
+export async function fetchFactoryLogs(opts: {
+  token: string;
+  /**
+   * The factory address, or several when a protocol has more than one
+   * deployment. They are read in a single pass: what distinguishes them is how
+   * each announces its child, which is `childOf`'s problem, not the query's.
+   */
+  factory: string | string[];
+  factoryTopics: string[];
+  childTopics: string[];
+  /** Child contract announced by a factory log, lowercase. */
+  childOf: (log: DecodedLog) => string;
+  fromBlock: number;
+  /** Inclusive. */
+  toBlock: number;
+  onProgress?: (progress: FetchProgress) => void;
+}): Promise<DecodedLog[]> {
+  const factoryLogs = await fetchLogs({
+    token: opts.token,
+    address: opts.factory,
+    topics: opts.factoryTopics,
+    fromBlock: opts.fromBlock,
+    toBlock: opts.toBlock,
+    pass: "factory logs",
+    onProgress: opts.onProgress,
+  });
+
+  const children = new Set(factoryLogs.map((log) => opts.childOf(log).toLowerCase()));
+
+  const childLogs = (
+    await fetchLogs({
+      token: opts.token,
+      topics: opts.childTopics,
+      fromBlock: opts.fromBlock,
+      toBlock: opts.toBlock,
+      pass: "child logs",
+      onProgress: opts.onProgress,
+    })
+  ).filter((log) => children.has(log.address));
+
+  return [...factoryLogs, ...childLogs].sort((a, b) =>
+    a.blockNumber === b.blockNumber
+      ? a.logIndex - b.logIndex
+      : a.blockNumber - b.blockNumber
+  );
 }
 
 /** Current chain height as seen by HyperSync. */

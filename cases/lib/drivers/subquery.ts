@@ -27,7 +27,6 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const readEvents = createProgressReader(SUBQUERY_DB_URL, config);
 
   return {
-    name: "SubQuery",
     dbUrl: SUBQUERY_DB_URL,
     async prepare() {
       console.log("Cleaning subquery cache...");

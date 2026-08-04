@@ -33,6 +33,7 @@ jobs:
       cases: ${{ steps.set-matrix.outputs.cases }}
       case1: ${{ steps.set-matrix.outputs.case1 }}
       case2: ${{ steps.set-matrix.outputs.case2 }}
+      case3: ${{ steps.set-matrix.outputs.case3 }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
       - id: set-matrix
@@ -50,7 +51,7 @@ jobs:
             echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-transfer-events"]'
+            CASES_JSON='["erc20-account-balances","erc20-transfer-events","safe-factory-registrations"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
@@ -68,15 +69,16 @@ jobs:
 
           # Scenarios run one after another, which needs one `needs`-chained job
           # per scenario below — GitHub cannot order a matrix. That makes the
-          # number of scenario slots fixed: adding a third scenario means adding
-          # a third `scenario-N` job here. Fail loudly rather than silently
+          # number of scenario slots fixed: adding a fourth scenario means adding
+          # a fourth `scenario-N` job here. Fail loudly rather than silently
           # dropping the extra scenario from the run and from the table.
-          if [ "$COUNT" -gt 2 ]; then
-            echo "Only 2 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
+          if [ "$COUNT" -gt 3 ]; then
+            echo "Only 3 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
             exit 1
           fi
           echo "case1=$(echo "$CASES_JSON" | jq -r '.[0] // ""')" >> "$GITHUB_OUTPUT"
           echo "case2=$(echo "$CASES_JSON" | jq -r '.[1] // ""')" >> "$GITHUB_OUTPUT"
+          echo "case3=$(echo "$CASES_JSON" | jq -r '.[2] // ""')" >> "$GITHUB_OUTPUT"
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
@@ -114,9 +116,20 @@ jobs:
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
+  scenario-3:
+    name: ${{ needs.setup.outputs.case3 }}
+    needs: [setup, scenario-1, scenario-2]
+    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case3 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ needs.setup.outputs.case3 }}
+      indexers: ${{ needs.setup.outputs.matrix }}
+      duration: ${{ needs.setup.outputs.duration }}
+    secrets: inherit
+
   summary:
     name: Summary
-    needs: [setup, scenario-1, scenario-2]
+    needs: [setup, scenario-1, scenario-2, scenario-3]
     if: always() && needs.setup.result == 'success'
     runs-on: ubuntu-latest
     steps:

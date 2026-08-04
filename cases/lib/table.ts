@@ -19,6 +19,9 @@ export interface ResultCells {
   dbSize: string;
 }
 
+/** A metric cell with no value — an unsupported tool has one in every column. */
+const NO_VALUE = "—";
+
 export interface TableRow {
   /** Display name. Not unique — the same tool appears once per data source. */
   name: string;
@@ -27,6 +30,12 @@ export interface TableRow {
   cells: ResultCells;
   /** True when re-published from the README because this run produced none. */
   carriedOver?: boolean;
+  /**
+   * Set when the tool cannot express the case. The row renders as dashes and
+   * the reason becomes its numbered note; it sorts last regardless of rate,
+   * because it has no rate to compare.
+   */
+  unsupported?: string;
 }
 
 /**
@@ -67,8 +76,13 @@ function relative(best: number, rate: number): string {
 export function buildTable(rows: TableRow[]): string {
   if (rows.length === 0) return "_No results collected._";
 
-  const sorted = [...rows].sort((a, b) => b.eventsPerSec - a.eventsPerSec);
-  const best = sorted[0].eventsPerSec;
+  // Unsupported tools sink to the bottom: they have no rate, so ranking them
+  // among tools that do would be meaningless either way it went.
+  const sorted = [...rows].sort((a, b) => {
+    if (!!a.unsupported !== !!b.unsupported) return a.unsupported ? 1 : -1;
+    return b.eventsPerSec - a.eventsPerSec;
+  });
+  const best = sorted.find((row) => !row.unsupported)?.eventsPerSec ?? 0;
 
   const lines = [
     `| ${COLUMNS.join(" | ")} |`,
@@ -80,6 +94,26 @@ export function buildTable(rows: TableRow[]): string {
   for (const row of sorted) {
     const tool = row.cells.tool || row.name;
     const name = row.carriedOver ? `${tool} ⚠️` : tool;
+
+    if (row.unsupported) {
+      // Every measured column is a dash — there is nothing to report — and the
+      // note explains why, so the tool's absence from the ranking is legible
+      // rather than looking like a job that failed to run.
+      notes.push(`**(${notes.length + 1})** ${row.name} — ${row.unsupported}`);
+      lines.push(
+        `| ${[
+          name,
+          row.cells.source,
+          NO_VALUE,
+          NO_VALUE,
+          NO_VALUE,
+          `${NO_VALUE} (${notes.length})`,
+          NO_VALUE,
+        ].join(" | ")} |`
+      );
+      continue;
+    }
+
     let correctness = row.cells.correctness;
     if (correctness !== "✅" && row.cells.correctnessDetail) {
       notes.push(`**(${notes.length + 1})** ${row.name} — ${row.cells.correctnessDetail}`);
@@ -145,10 +179,34 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
     const label = cells[0].replace(/\s*⚠️\s*$/, "").trim();
     const name = linkText(label);
     const eventsPerSec = parseFloat(cells[2].replace(/,/g, ""));
+
+    // "❌ (1)" refers to note 1 below the table; recover both halves. An
+    // unsupported row carries its note the same way, in a dashed cell.
+    const reference = cells[5].match(/^(\S+)\s*\((\d+)\)$/);
+
+    // A published unsupported row has no rate to parse. Recovering it as such
+    // matters: dropping it would silently delete the tool from the table on
+    // any run where its job produced nothing, which is every run — it is
+    // skipped by design.
+    if (name && cells[2] === NO_VALUE && reference?.[1] === NO_VALUE) {
+      rows.push({
+        name,
+        eventsPerSec: 0,
+        unsupported: notes.get(reference[2]) ?? "",
+        cells: {
+          tool: label,
+          source: cells[1],
+          events: NO_VALUE,
+          blocks: NO_VALUE,
+          correctness: NO_VALUE,
+          correctnessDetail: "",
+          dbSize: NO_VALUE,
+        },
+      });
+      continue;
+    }
     if (!name || !Number.isFinite(eventsPerSec)) continue;
 
-    // "❌ (1)" refers to note 1 below the table; recover both halves.
-    const reference = cells[5].match(/^(\S+)\s*\((\d+)\)$/);
     rows.push({
       name,
       eventsPerSec,

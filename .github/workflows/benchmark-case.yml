@@ -26,6 +26,11 @@ jobs:
   benchmark:
     name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
     runs-on: ubuntu-latest
+    # One job is one indexer on one scenario, and they all run concurrently, so
+    # this bounds a single benchmark rather than the suite: the longest phase A
+    # any case allows (20 minutes) plus its throughput windows and installs.
+    # It is a backstop for a hung runner — a job that reaches it produces no row
+    # at all, which is why it sits well above what a real run costs.
     timeout-minutes: 45
     # Runs third-party indexer binaries, so it gets the narrowest token that
     # still works: read-only, and enough to resolve a public release tag.
@@ -73,12 +78,12 @@ jobs:
         if: matrix.indexer == 'subgraph'
         uses: actions/cache@v4
         with:
-          path: cases/${{ inputs.case }}/subgraph/bin
-          # Keyed per case as well as per driver revision: both cases install
-          # the same binary into their own directory, and a shared key would
-          # have the second job to finish fail to save what the first already
-          # wrote under that name.
-          key: gnd-${{ inputs.case }}-${{ hashFiles('cases/lib/drivers/subgraph.ts') }}
+          path: .graph-node/bin
+          # Shared by every scenario: the binary is identical whichever case
+          # asks for it, and scenarios run one after another, so no two jobs
+          # race to save under this key. The driver revision is the only thing
+          # that has to change it, since that is where the release is pinned.
+          key: gnd-${{ hashFiles('cases/lib/drivers/subgraph.ts') }}
 
       # The rust rindexer project pulls in alloy and the rindexer crate, which
       # is several minutes of compilation from cold. It happens before the

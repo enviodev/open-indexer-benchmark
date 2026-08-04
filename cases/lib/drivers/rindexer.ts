@@ -42,7 +42,6 @@ export const rindexerDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const readProgress = createProgressReader(RINDEXER_DB_URL, config, "block_number");
 
   return {
-    name: "Rindexer",
     dbUrl: RINDEXER_DB_URL,
     async prepare() {
       // A rust project runs its own binary, so the CLI is only needed to drive
