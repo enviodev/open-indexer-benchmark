@@ -2,7 +2,7 @@
 //
 //   CHANGED_FILES="$(git diff --name-only base...head)" node scripts/select-scope.ts
 //
-// A full run is one job per indexer per scenario — twenty-one at the time of
+// A full run is one job per indexer per scenario — twenty-eight at the time of
 // writing, each up to 45 minutes against shared data endpoints, most of them
 // re-measuring code the pull request never touched. On a pull request the run
 // is narrowed to what changed:
@@ -65,6 +65,7 @@ const PIPELINE_SCRIPTS = new Set([
 const LOCAL_SCRIPTS = new Set([
   "scripts/test-scope.ts",
   "scripts/test-tables.ts",
+  "scripts/test-rpc-mock.ts",
   "scripts/test-verification.ts",
   "scripts/run-benchmarks.ts",
   "scripts/generate-expected.ts",

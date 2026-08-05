@@ -81,6 +81,18 @@ What happens when you do not know the contracts up front? The indexer watches th
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
 
 
+### External Contract Calls
+
+Not everything an indexer needs is in the logs. Here every approval on the eight busiest ERC-20s is followed by a read of the allowance the token reports for that pair, at that block — 15,703 calls over the range, 300ms each, with the benchmark itself answering them so every tool waits exactly as long. What separates the rows is how many of those waits happen at the same time.
+
+<!-- BENCHMARK:erc20-allowance-calls:START -->
+| tool | source | events/s | blocks/s | vs best | data | storage |
+| --- | --- | --- | --- | --- | --- | --- |
+<!-- BENCHMARK:erc20-allowance-calls:END -->
+
+[How this case works, and how to run it →](./cases/erc20-allowance-calls/README.md)
+
+
 ## Sentio Benchmark Cases, May 2025
 
 Six scenarios from the original 2025 research, kept here for reference. They are total sync times rather than throughput rates, and they predate the current methodology, so do not compare them with the tables above.

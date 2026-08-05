@@ -5,6 +5,7 @@ import {
   type FetchProgress,
 } from "./hypersync.ts";
 import type { EntitySpec } from "./checksum.ts";
+import type { EthCallInterceptor } from "./rpc-mock.ts";
 
 export interface ExpectedData {
   totalEvents: number;
@@ -53,6 +54,13 @@ export interface CaseConfig {
     topics: string[];
     childOf: (log: DecodedLog) => string;
   };
+  /**
+   * Set for a case whose handlers read contract state. Every tool is then
+   * pointed at an endpoint that answers those calls itself — same latency,
+   * same concurrency ceiling, same answers for everyone — instead of at a real
+   * node, whose response times no two runs would share. See ./rpc-mock.ts.
+   */
+  ethCall?: EthCallInterceptor;
   /**
    * Tools that cannot express this case at all, keyed by driver name, with the
    * reason. They are skipped rather than run, and published as a row of dashes

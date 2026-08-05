@@ -2,6 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, kill, psql, start, waitPg } from "../process.ts";
+import { containerUrl } from "../rpc-mock.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -18,7 +19,9 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const dir = resolve(config.dir, "subquery");
   const env = {
     ...process.env,
-    ETHEREUM_RPC_URL: rpcUrl,
+    // This is the one indexer that runs inside a container, so a case serving
+    // its own contract calls from the host has to be addressed as the host.
+    ETHEREUM_RPC_URL: containerUrl(rpcUrl),
     SUBQUERY_END_BLOCK: String(endBlock),
   };
   let proc: ChildProcess | null = null;
@@ -43,7 +46,10 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       await exec("pnpm", ["codegen"], dir, env);
       await exec("pnpm", ["build"], dir, env);
 
-      writeFileSync(resolve(dir, ".env"), `ETHEREUM_RPC_URL=${rpcUrl}\n`);
+      writeFileSync(
+        resolve(dir, ".env"),
+        `ETHEREUM_RPC_URL=${env.ETHEREUM_RPC_URL}\n`
+      );
 
       console.log("Cleaning previous docker state...");
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});

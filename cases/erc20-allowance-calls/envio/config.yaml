@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: erc20-allowance-indexer
+description: ERC-20 approvals, with the resulting allowance read back from the chain
+contracts:
+  - name: ERC20
+    events:
+      - event: "Approval(address indexed owner, address indexed spender, uint256 value)"
+chains:
+  - id: 1 # Ethereum Mainnet
+    start_block: 25600000
+    end_block: ${ENVIO_END_BLOCK}
+    rpc:
+      url: ${ENVIO_RPC_URL}
+      for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: ERC20
+        address:
+          - 0xdac17f958d2ee523a2206206994597c13d831ec7 # USDT
+          - 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 # USDC
+          - 0x68749665ff8d2d112fa859aa293f07a622782f38 # XAUt
+          - 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 # WETH
+          - 0x4c9edd5852cd905f086c759e8383e09bff1e68b3 # USDe
+          - 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599 # WBTC
+          - 0x6b175474e89094c44da98b954eedeac495271d0f # DAI
+          - 0xf939e0a03fb07f59a73314e73794be0e57ac1b4e # crvUSD

@@ -12,6 +12,8 @@ What the result table columns mean:
 
 **source** — where the tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
 
+**contract calls** — a scenario whose handlers read contract state does not read it from a real node. The benchmark answers those calls itself, at a fixed latency and a fixed number in flight, from the call's own arguments — so every tool waits exactly as long for exactly the same answers, and what the scenario measures is how much of that ceiling each one keeps in use. Any other call is refused rather than answered, and the answers appear in no log, so a matching checksum is proof the calls were really made.
+
 The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 
 Each scenario's own page documents its block range, contracts, entities and per-tool implementation notes.

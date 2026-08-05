@@ -18,6 +18,7 @@ const ALL_CASES = [
   "erc20-transfer-events",
   "erc20-account-balances",
   "safe-factory-registrations",
+  "erc20-allowance-calls",
 ];
 
 async function loadCase(name: string): Promise<CaseConfig> {
