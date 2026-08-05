@@ -2,11 +2,7 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?logo=discord&logoColor=white)](https://discord.com/invite/envio)
 
-An open and honest benchmark for blockchain indexers. Every number below comes from code in this repository, so you can run it yourself and check. Contributions from any indexer team are welcome.
-
-It started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s research. That repository was later closed, so [Envio](https://envio.dev) picked the benchmark up and has kept it current since. We are not affiliated with Sentio, and although this now lives under the Envio organisation, the point of it is a fair comparison.
-
-The implementations are not all ours, and we would rather they never were. The [SQD](https://www.sqd.ai) team rewrote theirs to be properly idiomatic, the [Ponder](https://ponder.sh) landing page is where the first scenario came from, and every tool here is better represented when the people who build it have a hand in its code. If yours is in the tables and you would write it differently, please do — a pull request is the fastest way to fix a number you disagree with.
+An open and honest benchmark for blockchain indexers. Every number below comes from code in this repository, so you can run it yourself and check, and the tables are refreshed automatically by scheduled CI runs.
 
 If you want to know how the numbers are produced, or what a column means, that is all in [METHODOLOGY.md](./METHODOLOGY.md).
 
@@ -101,6 +97,9 @@ Arguments are passed straight through, so `node scripts/run-benchmarks.ts envio 
 
 ## Contributing
 
-Spotted a result that looks wrong? Want to add your indexer, or a scenario you think is missing? Open an issue or a pull request — we would rather hear about it. Indexer teams especially: nobody knows how to get the best out of your tool better than you do. You can also just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
+Spotted a result that looks wrong? Want to add your indexer, or a scenario you think is missing? Open an issue or a pull request — we would rather hear about it. Indexer teams especially: nobody knows how to get the best out of your tool better than you do, and the more implementations that come from the teams themselves, the better — the [SQD](https://www.sqd.ai) team already rewrote theirs. You can also just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
 
-> Benchmark data on the [Envio landing page](https://envio.dev) and in [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) comes from this repository.
+
+## History
+
+The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s research. That repository was later closed, so [Envio](https://envio.dev) picked it up and has kept it current since. We are not affiliated with Sentio, and although the project now lives under the Envio organisation — its data is what the [Envio landing page](https://envio.dev) and the [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) article cite — the point of it is a fair comparison.
