@@ -14,7 +14,7 @@ The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s re
 
 ## Contributing
 
-Spotted a result that looks wrong? Want to add your indexer, or a scenario you think is missing? Open an issue or a pull request — we would rather hear about it. Indexer teams especially: nobody knows how to get the best out of your tool better than you do, and the more implementations that come from the teams themselves, the better — the [SQD](https://www.sqd.ai) team already rewrote theirs. You can also just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
+Contributions are welcome. Open an issue or a pull request to add an indexer, add a scenario, report a result that looks wrong, or improve the methodology. Indexer teams especially: nobody knows your tool better than you do, and if yours is in the tables and you would write it differently, a pull request is the fastest way to fix a number you disagree with — the [SQD](https://www.sqd.ai) team already rewrote theirs. You can also just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
 
 
 ## Scenarios
