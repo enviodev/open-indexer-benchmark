@@ -26,8 +26,10 @@ export interface CaseConfig {
   contract: string | string[];
   startBlock: number;
   /**
-   * Inclusive end block of the bounded verification run. Sized so the slowest
-   * indexer still finishes within the phase timeout.
+   * Inclusive end block of the bounded verification run. Size it by what the
+   * case has to demonstrate rather than by what the slowest indexer can reach:
+   * a run that hits the phase timeout is still verified and published, over the
+   * share of the range it covered.
    */
   verifyEndBlock: number;
   /**
@@ -51,12 +53,6 @@ export interface CaseConfig {
     topics: string[];
     childOf: (log: DecodedLog) => string;
   };
-  /**
-   * Overrides the default verification-phase timeout, in seconds. Raise it for
-   * a case whose range is deliberately large; the CI job timeout is the real
-   * ceiling.
-   */
-  phaseATimeoutS?: number;
   /**
    * Tools that cannot express this case at all, keyed by driver name, with the
    * reason. They are skipped rather than run, and published as a row of dashes

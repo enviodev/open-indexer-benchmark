@@ -27,11 +27,11 @@ jobs:
     name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
     runs-on: ubuntu-latest
     # One job is one indexer on one scenario, and they all run concurrently, so
-    # this bounds a single benchmark rather than the suite: the longest phase A
-    # any case allows (20 minutes) plus its throughput windows and installs.
-    # It is a backstop for a hung runner — a job that reaches it produces no row
-    # at all, which is why it sits well above what a real run costs.
-    timeout-minutes: 45
+    # this bounds a single benchmark rather than the suite: phase A's ten-minute
+    # cap, two throughput windows, and the install and build each of the three
+    # runs pays for. It is a backstop for a hung runner — a job that reaches it
+    # produces no row at all, which is why it sits above what a real run costs.
+    timeout-minutes: 30
     # Runs third-party indexer binaries, so it gets the narrowest token that
     # still works: read-only, and enough to resolve a public release tag.
     permissions:

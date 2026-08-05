@@ -56,6 +56,12 @@ export interface Verification {
   dbSizeBytes: number | null;
   /** Size of every non-system relation, including internal bookkeeping. */
   dbTotalBytes: number | null;
+  /**
+   * Set when the sizes above are scaled up from a database holding only part of
+   * the range, rather than measured on a complete one. The runner sets it; this
+   * module only ever measures what is actually there.
+   */
+  dbSizeEstimated?: boolean;
 }
 
 interface ColumnInfo {

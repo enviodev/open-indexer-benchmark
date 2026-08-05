@@ -26,6 +26,12 @@ export interface BenchmarkResult {
   dbSizeBytes: number | null;
   /** Whole-database size, including each indexer's internal bookkeeping. */
   dbTotalBytes: number | null;
+  /**
+   * The two sizes above are extrapolated from a run that covered part of the
+   * range, not measured on a complete database. The table prefixes them with
+   * "~" so an estimate is never read as a measurement.
+   */
+  dbSizeEstimated?: boolean;
   /** Seconds taken to index the verification range, if it completed. */
   rangeSeconds: number | null;
   /** Length of the throughput window that produced the reported rate. */
@@ -59,7 +65,10 @@ export function toTableRow(result: BenchmarkResult): TableRow {
       events: formatRate(result.eventsPerSec),
       correctness: correctnessCell(result),
       correctnessDetail: result.correctness === "ok" ? "" : result.correctnessDetail,
-      dbSize: size === "—" ? size : `${result.storage} ${size}`,
+      dbSize:
+        size === "—"
+          ? size
+          : `${result.storage} ${result.dbSizeEstimated ? "~" : ""}${size}`,
     },
   };
 }
