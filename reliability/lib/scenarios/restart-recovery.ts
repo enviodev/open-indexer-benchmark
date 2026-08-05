@@ -8,32 +8,44 @@
 // them. Both look identical while running and only show up after a kill.
 //
 // So the kills are SIGKILL rather than SIGTERM — a graceful shutdown tests the
-// shutdown path, not the recovery path — and they land at three different
-// points: early in the backfill, late in the backfill, and at the head with the
-// chain still moving. A separate graceful stop at the end checks the other
-// half: that a tool asked politely to stop does not drop what it had buffered.
+// shutdown path, not the recovery path — and they land at four points: after
+// the first writes, twice inside a burst of new blocks the tool is still
+// working through, and once at the head with the chain still moving. A graceful
+// stop at the end checks the other half: that a tool asked politely to stop
+// does not drop what it had buffered.
+//
+// How far behind a tool actually is when it is killed depends on how fast it
+// is, and there is no fair way to hold every tool to the same lag. So the
+// position at the moment of the kill is measured and published with the result
+// rather than assumed: "killed at block 137 of 460" says what was tested, where
+// "killed mid-backfill" only says what was intended.
 
 import { sleep } from "../../../cases/lib/process.ts";
 import type { Check, Scenario, ScenarioOutcome } from "../harness.ts";
 import { finalData, startTicker, worst } from "./helpers.ts";
 
-const TOTAL_BLOCKS = 250;
+/** Blocks in place before the tool is started. */
+const WARMUP_BLOCKS = 60;
+
+/** Blocks released in one go, to be killed in the middle of. */
+const BURST_BLOCKS = 400;
+
 const BLOCK_INTERVAL_MS = 2_000;
 
-/** How long a restarted tool gets to write its next row. */
+/** How long a restarted tool gets to work through everything it missed. */
 const RESUME_TIMEOUT_MS = 180_000;
 
 export const restartRecovery: Scenario = {
   key: "restart-recovery",
   title: "Restart recovery",
   summary:
-    "The indexer is SIGKILLed three times — early in the backfill, late in it, and at the " +
-    "head — then stopped gracefully once. Checks that it resumes, and that the final data " +
-    "has no gaps and no duplicates.",
+    "The indexer is SIGKILLed four times — after its first writes, twice during a burst of " +
+    "400 new blocks, and once at the head — then stopped gracefully. Checks that it comes " +
+    "back and catches up, and that the final data has no gaps and no duplicates.",
   chain: { blockTimeSeconds: 2, transfersPerBlock: 2 },
 
   setup(chain) {
-    chain.append(TOTAL_BLOCKS);
+    chain.append(WARMUP_BLOCKS);
   },
 
   async run(ctx): Promise<ScenarioOutcome> {
@@ -44,6 +56,7 @@ export const restartRecovery: Scenario = {
     /** Kill, restart, and measure what the crash cost. */
     async function cycle(name: string, signal: NodeJS.Signals): Promise<void> {
       const before = await ctx.progress();
+      const chainAt = ctx.chain.height;
       // The harness must not count this as a crash: it is the scenario's own
       // doing, and a restart it asked for is not a restart the tool needed.
       await ctx.halt(signal);
@@ -55,45 +68,52 @@ export const restartRecovery: Scenario = {
       const rewind = Math.max(0, before - onDisk);
       totalRewind += rewind;
 
+      // A few blocks arrive while it is down, so "did it resume" is a question
+      // with an answer even for a tool that was already at the head. Without
+      // them, a tool that never came back at all would satisfy the check simply
+      // by having been finished before it was killed.
+      ctx.chain.append(5);
+      const target = ctx.chain.height;
+
       const startedAt = Date.now();
       await ctx.start();
-      const resumed = await ctx.waitForBlock(onDisk + 1, RESUME_TIMEOUT_MS);
+      const resumed = await ctx.waitForBlock(target, RESUME_TIMEOUT_MS);
       const seconds = (Date.now() - startedAt) / 1_000;
       worstResumeS = Math.max(worstResumeS, seconds);
 
+      const where = `killed at block ${before} of ${chainAt}`;
       checks.push({
         name,
         status: resumed ? "pass" : "fail",
         detail: resumed
-          ? `resumed after ${seconds.toFixed(1)}s` +
+          ? `${where}, back at the head after ${seconds.toFixed(1)}s` +
             (rewind > 0 ? `, re-reading ${rewind} block${rewind === 1 ? "" : "s"}` : "")
-          : `did not write another row within ${RESUME_TIMEOUT_MS / 1_000}s of restarting`,
+          : `${where}, then did not reach block ${target} within ` +
+            `${RESUME_TIMEOUT_MS / 1_000}s of being restarted`,
       });
       ctx.log(`  ${name}: ${checks[checks.length - 1].detail}`);
     }
 
     await ctx.start();
 
-    // Early in the backfill: enough rows to have committed something, far
-    // enough from the end that there is plenty left to get wrong.
-    if (!(await ctx.waitForBlock(Math.floor(TOTAL_BLOCKS * 0.2), 300_000))) {
-      return { status: "fail", detail: "never got far enough into the backfill to be killed" };
+    // Enough rows to have committed something, with plenty left to get wrong.
+    if (!(await ctx.waitForBlock(Math.floor(WARMUP_BLOCKS / 3), 300_000))) {
+      return { status: "fail", detail: "never wrote a row, so there was nothing to kill" };
     }
-    await cycle("kill early in backfill", "SIGKILL");
+    await cycle("kill after first writes", "SIGKILL");
 
-    if (!(await ctx.waitForBlock(Math.floor(TOTAL_BLOCKS * 0.7), 300_000))) {
-      return {
-        status: "fail",
-        detail: "did not get back through the backfill after the first kill",
-        checks,
-      };
+    // Two kills inside a burst the tool is still working through. How far it
+    // gets before each one is its own speed, and is reported as such.
+    for (const attempt of [1, 2]) {
+      ctx.chain.append(BURST_BLOCKS);
+      await sleep(attempt * 500);
+      await cycle(`kill during a ${BURST_BLOCKS}-block burst`, "SIGKILL");
     }
-    await cycle("kill late in backfill", "SIGKILL");
 
     if (!(await ctx.settle(300_000))) {
       return {
         status: "fail",
-        detail: "did not reach the head after the second kill",
+        detail: "did not get through the burst after being restarted",
         checks,
       };
     }
@@ -105,10 +125,8 @@ export const restartRecovery: Scenario = {
     try {
       await sleep(4_000);
       await cycle("kill at the head", "SIGKILL");
-      await ctx.settle(180_000);
       await sleep(4_000);
       await cycle("graceful stop", "SIGTERM");
-      await ctx.settle(180_000);
     } finally {
       stopTicker();
     }

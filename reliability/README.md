@@ -65,9 +65,9 @@ wrong.
 
 ### Restart recovery
 
-The indexer is SIGKILLed three times — early in the backfill, late in it, and at
-the head with blocks still arriving while the process is dead — and then stopped
-gracefully once.
+The indexer is SIGKILLed four times — after its first writes, twice inside a
+burst of 400 blocks released in one go, and once at the head with blocks still
+arriving while the process is dead — and then stopped gracefully.
 
 SIGKILL rather than SIGTERM, because a graceful shutdown tests the shutdown path
 and not the recovery path. What is being checked is the invariant that makes a
@@ -76,8 +76,15 @@ accounts for. A tool that commits progress first loses whatever was in flight
 and never looks for it again; a tool that commits rows first re-processes them
 and duplicates them. Both look identical while running.
 
-Reported: whether it resumed, how long that took, how many blocks it had to
-re-read, and whether the final data has any gaps or duplicates.
+How far behind a tool actually is when the knife falls depends on how fast it
+is, and there is no fair way to hold every tool to the same lag — so the
+position at the moment of the kill is measured and published rather than
+assumed. "Killed at block 137 of 460" says what was tested; "killed
+mid-backfill" only says what was intended.
+
+Reported: whether it came back and caught up, how long that took, how many
+blocks it had to re-read, and whether the final data has any gaps or
+duplicates.
 
 ### Database outage
 
