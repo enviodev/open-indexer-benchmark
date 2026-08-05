@@ -6,6 +6,9 @@
 # environment substitution cannot express.
 name: reliability-indexer
 description: Reliability scenarios against the mock chain
+# The default, set explicitly: a reorg scenario whose result turned on an
+# unstated default would be reporting the default rather than the tool.
+rollback_on_reorg: true
 contracts:
   - name: MockToken
     events:

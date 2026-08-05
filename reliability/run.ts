@@ -3,6 +3,7 @@
 //   node reliability/run.ts                          every tool, every scenario
 //   node reliability/run.ts ponder envio              two tools
 //   node reliability/run.ts --scenarios=reorg,db-outage
+//   node reliability/run.ts ponder --keep-db          leave the rows to look at
 //
 // Everything runs one at a time. The scenarios share a PostgreSQL container, a
 // fixed RPC port and the machine's CPU, and half of them measure how long
@@ -38,6 +39,13 @@ const positional = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const tools = positional.length > 0 ? positional : TOOLS;
 const scenarioKeys = parseList("scenarios") ?? SCENARIO_KEYS;
 
+/**
+ * Leave the database container up at the end. A published failure is only worth
+ * publishing if someone can go and look at the rows behind it, and by default
+ * the container that held them is gone by the time the table is printed.
+ */
+const keepDatabase = process.argv.includes("--keep-db");
+
 for (const tool of tools) {
   if (!TOOLS.includes(tool)) {
     console.error(`Unknown tool "${tool}". Available: ${TOOLS.join(", ")}`);
@@ -60,7 +68,7 @@ let tearingDown = false;
 async function teardown(code: number) {
   if (tearingDown) return;
   tearingDown = true;
-  await db.stopContainer().catch(() => {});
+  if (!keepDatabase) await db.stopContainer().catch(() => {});
   process.exit(code);
 }
 process.on("SIGINT", () => void teardown(130));
@@ -112,7 +120,11 @@ for (const scenario of selected) {
   }
 }
 
-await db.stopContainer().catch(() => {});
+if (keepDatabase) {
+  console.log(`\nLeaving the database up: psql "${db.urlFor("rel_<tool>")}"`);
+} else {
+  await db.stopContainer().catch(() => {});
+}
 
 console.log(`\n=== Results ===\n`);
 console.log(summariseRun(results));

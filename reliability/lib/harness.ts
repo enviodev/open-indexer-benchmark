@@ -139,6 +139,20 @@ const POLL_MS = 250;
 /** Restarts before the harness gives up on a tool for this scenario. */
 const MAX_RESTARTS = 12;
 
+/**
+ * How long to wait before restarting a tool that has just died, doubling each
+ * consecutive time and capped here.
+ *
+ * Without backoff the harness is a worse supervisor than anything anyone runs
+ * in production. A tool pointed at a database that is deliberately down for ten
+ * seconds dies on connect, is restarted, dies again, and burns every restart it
+ * is allowed inside the outage it was supposed to be measured across — which
+ * says nothing about the tool and everything about the loop. systemd and
+ * Kubernetes both back off; so does this.
+ */
+const RESTART_BACKOFF_MS = 1_000;
+const MAX_RESTART_BACKOFF_MS = 15_000;
+
 export async function runScenario(
   tool: string,
   scenario: Scenario,
@@ -160,6 +174,16 @@ export async function runScenario(
   let watchdog: NodeJS.Timeout | null = null;
   let pendingRecovery: { crash: Crash; from: number; at: number } | null = null;
   let givenUp = false;
+  /** Consecutive crashes with no progress in between, which drives the backoff. */
+  let consecutiveCrashes = 0;
+  /**
+   * True while a crash is being handled. The watchdog fires every quarter
+   * second and the handler waits out a backoff before relaunching, so without
+   * this every tick during that wait sees the same dead process and records the
+   * same crash again — thirteen of them inside one real crash, which is a
+   * number about the polling interval rather than about the tool.
+   */
+  let handlingExit = false;
 
   const log = (message: string) => console.log(`  ${message}`);
 
@@ -213,6 +237,15 @@ export async function runScenario(
   async function onExit(): Promise<void> {
     const exit = driver.exit();
     if (!exit) return;
+    handlingExit = true;
+    try {
+      await handleCrash(exit);
+    } finally {
+      handlingExit = false;
+    }
+  }
+
+  async function handleCrash(exit: NonNullable<ReturnType<typeof driver.exit>>) {
     const crash: Crash = {
       at: exit.at,
       code: exit.code,
@@ -235,10 +268,18 @@ export async function runScenario(
     }
     restarts++;
     const from = await progress();
-    // A moment before relaunching: a tool that has just died may still be
-    // holding a listening socket, and a relaunch that fails on that would be
-    // recorded as another crash of the tool's own making.
-    await sleep(1_000);
+    // Back off before relaunching. Partly because a tool that has just died may
+    // still be holding a listening socket, and a relaunch that failed on that
+    // would be recorded as another crash of the tool's own making; mostly
+    // because a tool dying on a database that is deliberately down should not
+    // exhaust its restarts inside the outage.
+    consecutiveCrashes++;
+    await sleep(
+      Math.min(
+        MAX_RESTART_BACKOFF_MS,
+        RESTART_BACKOFF_MS * 2 ** (consecutiveCrashes - 1)
+      )
+    );
     await driver.launch();
     pendingRecovery = { crash, from, at: Date.now() };
   }
@@ -247,12 +288,16 @@ export async function runScenario(
     if (watchdog) return;
     watchdog = setInterval(() => {
       void (async () => {
-        if (supervising && !driver.alive() && driver.exit()) await onExit();
+        if (supervising && !handlingExit && !driver.alive() && driver.exit()) {
+          await onExit();
+        }
         if (pendingRecovery && driver.alive()) {
           const now = await progress();
           if (now > pendingRecovery.from) {
             pendingRecovery.crash.recoveredAfterMs = Date.now() - pendingRecovery.at;
             pendingRecovery = null;
+            // It got somewhere, so the next crash starts the backoff over.
+            consecutiveCrashes = 0;
           }
         }
       })().catch(() => {});

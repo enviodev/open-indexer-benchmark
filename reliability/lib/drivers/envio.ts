@@ -3,6 +3,9 @@ import { resolve } from "node:path";
 import { exec } from "../../../cases/lib/process.ts";
 import { Supervised, type DriverFactory } from "./common.ts";
 
+/** Where Envio's health endpoint binds; nothing here reads it. */
+const PORT = 19_897;
+
 /**
  * Envio reads the chain through HyperSync by default. Reliability scenarios run
  * against the mock endpoint, so RPC is made the sync source rather than the
@@ -22,6 +25,11 @@ export const envioDriver: DriverFactory = (ctx) => {
     ENVIO_PG_DATABASE: ctx.database,
     ENVIO_RPC_URL: ctx.rpcUrl,
     ENVIO_RPC_FOR: "sync",
+    // Envio serves a health endpoint whether or not anything reads it, and
+    // defaults it to a port other things use. Pinned here alongside the other
+    // tools' ports so a relaunch never fails on "address already in use" — a
+    // crash the harness caused and would have published as the tool's.
+    ENVIO_INDEXER_PORT: String(PORT),
   };
   const proc = new Supervised("envio");
 

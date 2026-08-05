@@ -118,6 +118,11 @@ canonical chain after each one:
 | during backfill | the tool is put 80 blocks behind, then blocks it has not read yet are rewritten. A tool that only compares hashes at the tip has nothing to compare |
 | beyond finality | deeper than the finality the endpoint promised. Reported, but a failure here costs a ⚠️ rather than a ❌ — no tool promises to survive an endpoint breaking its own guarantee |
 
+After each reorg the chain keeps producing — ten more blocks, one every 700ms —
+before anything is checked. A real chain does not stop dead the instant it
+reorganises, and the difference decides the result: a tool that re-checks block
+hashes as new blocks arrive needs new blocks to arrive.
+
 A case is judged on the problems it introduced, not on problems an earlier case
 left behind, so one mishandled reorg does not fail every case after it.
 

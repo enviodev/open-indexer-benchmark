@@ -27,6 +27,9 @@ import { awaitData, worst } from "./helpers.ts";
 
 const WARMUP_BLOCKS = 120;
 
+/** Blocks produced after each reorg, one every 700ms, before the check. */
+const BLOCKS_AFTER_REORG = 10;
+
 /** How long a tool gets to converge on the canonical chain after each case. */
 const CONVERGE_TIMEOUT_MS = 120_000;
 
@@ -137,9 +140,19 @@ export const reorg: Scenario = {
       ctx.log(`Reorg case: ${variant.name}`);
       await variant.apply(ctx.chain, ctx);
 
-      // Grow past wherever the head was, so "caught up" is a question the tool
-      // can answer — after a shortening reorg it is already past the new head,
-      // and settling on that would prove nothing.
+      // A real chain does not stop dead the instant it reorganises, and the
+      // difference matters: a tool that re-checks block hashes as new blocks
+      // arrive needs new blocks to arrive. Ten of them over seven seconds is
+      // both a fair chance to notice and a fixed finish line to be measured
+      // against afterwards.
+      //
+      // It also grows the chain past wherever the head was, so "caught up" is a
+      // question the tool can answer — after a shortening reorg it is already
+      // past the new head, and settling on that would prove nothing.
+      for (let block = 0; block < BLOCKS_AFTER_REORG; block++) {
+        ctx.chain.append(1);
+        await sleep(700);
+      }
       ctx.chain.appendTo(headBefore + 2);
 
       const startedAt = Date.now();
