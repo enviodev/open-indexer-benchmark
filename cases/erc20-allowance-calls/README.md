@@ -15,9 +15,10 @@ fixed concurrency ceiling, identically for every tool. What is left to measure
 is the only thing that differs — how much of that ceiling each indexer manages
 to keep in use.
 
-The difference is not subtle. An indexer that issues the calls a hundred at a
-time gets through the range in about a minute. One that waits for each call
-before starting the next needs an hour and a half for the same work.
+The difference is not subtle. An indexer that keeps the endpoint's hundred call
+slots busy gets through the range in under a minute. One that waits for each
+call before starting the next needs the better part of an hour and a half for
+the same work.
 
 ## Benchmark Specification
 
@@ -28,7 +29,8 @@ before starting the next needs an hour and a half for the same work.
 - **Verification Range**: 25,600,000 to 25,601,199 — indexed to completion, then
   checked against `expected.json`
 - **Contract calls**: `allowance(owner, spender)`, at the event's block, for
-  every approval with a non-zero value — 15,703 of the range's 19,125 approvals
+  every approval with a non-zero value — 15,703 of the range's 19,125 approvals,
+  or 14,114 once identical calls in the same block are collapsed
 - **Features**: `event decoding`, `external calls`, `storage write`,
   `storage update on conflict`
 
@@ -233,10 +235,11 @@ whole batch first and then issues every allowance read at once through
 `Promise.all`. Reading inside the decode loop would put one 300ms round trip
 between each approval and the next.
 
-The RPC client's `capacity` is raised from its default of 10 concurrent requests
-to 20, with the default 100 calls per request left alone: the defaults leave the
-endpoint's 100 call slots mostly idle, and what limits the run should be the
-endpoint rather than the client's own queue.
+The RPC client's `capacity` is raised from its default of 10 requests in flight
+to 100, the endpoint's own ceiling. Left at the default it caps the run at ten
+calls at a time however many the handler hands it, so nine tenths of the
+endpoint would sit idle and the client's queue, rather than the endpoint, would
+be what the row measured.
 
 Sqd ingests from the SQD archive, which requires an API key as of 19 May 2026.
 Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the

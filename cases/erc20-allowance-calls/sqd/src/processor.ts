@@ -42,13 +42,13 @@ export const processor = new EvmBatchProcessor()
     .setGateway('https://v2.archive.subsquid.io/network/ethereum-mainnet')
     .setRpcEndpoint({
         url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
-        // The allowance reads are the whole case, and they are issued a batch
-        // of events at a time. The defaults (10 requests in flight, 100 calls
-        // per request) leave the endpoint's concurrency mostly idle, so both
-        // are raised: what limits the run should be the endpoint, not the
-        // client's own queue.
-        capacity: 20,
-        maxBatchCallSize: 100,
+        // The allowance reads are the whole case, and the handler issues a
+        // batch of them at once. The client's default of 10 requests in flight
+        // would cap the run at 10 calls at a time however many the handler
+        // hands it, leaving nine tenths of the endpoint idle; raised to the
+        // endpoint's own ceiling so what limits the run is the endpoint rather
+        // than the client's queue.
+        capacity: 100,
     })
     .setFinalityConfirmation(75)
     .setFields({

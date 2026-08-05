@@ -14,9 +14,7 @@
 // at once: a rust project gets the batch, so the 300ms round trips overlap
 // instead of adding up.
 use alloy::{
-    eips::BlockId,
     primitives::{Address, U256},
-    rpc::types::TransactionRequest,
     sol,
     sol_types::SolCall,
 };
@@ -33,7 +31,7 @@ use tokio::sync::OnceCell;
 use super::super::super::typings::erc_20indexer::events::erc_20::{
     no_extensions, ApprovalEvent, ERC20EventType,
 };
-use super::super::super::typings::networks::get_ethereum_provider;
+use super::super::super::typings::networks::get_ethereum_provider_cache;
 
 sol! {
     interface IERC20 {
@@ -55,9 +53,11 @@ async fn ensure_case_tables(database: &Arc<PostgresClient>) -> Result<(), String
         .get_or_init(|| async {
             let statements = [
                 // Column types match the ones rindexer picks for the same
-                // Solidity types: an address is CHAR(42), a uint256 its decimal
-                // string. `block_number` is what the benchmark reads indexing
-                // progress from.
+                // values in the tables it generates: an address is CHAR(42), a
+                // uint256 its decimal string, a block number NUMERIC. They have
+                // to — the bulk insert writes binary, so a column whose type
+                // differs from the wrapper's is rejected outright.
+                // `block_number` is what the benchmark reads progress from.
                 format!(
                     "CREATE TABLE IF NOT EXISTS {SCHEMA}.approval_event (
                          token CHAR(42) NOT NULL,
@@ -65,7 +65,7 @@ async fn ensure_case_tables(database: &Arc<PostgresClient>) -> Result<(), String
                          spender CHAR(42) NOT NULL,
                          approved VARCHAR(78) NOT NULL,
                          allowance VARCHAR(78) NOT NULL,
-                         block_number BIGINT NOT NULL,
+                         block_number NUMERIC NOT NULL,
                          block_timestamp TIMESTAMPTZ
                      )"
                 ),
@@ -103,7 +103,7 @@ async fn approval_handler(manifest_path: &PathBuf, registry: &mut EventCallbackR
             }
             ensure_case_tables(&context.database).await?;
 
-            let provider = get_ethereum_provider().await;
+            let provider = get_ethereum_provider_cache().await;
 
             // Every allowance read in the batch is issued at once. An approval
             // of zero revokes it — a revoked allowance is zero whatever the
@@ -113,28 +113,22 @@ async fn approval_handler(manifest_path: &PathBuf, registry: &mut EventCallbackR
                 let token = result.tx_information.address;
                 let owner = result.event_data.owner;
                 let spender = result.event_data.spender;
-                let block = result.tx_information.block_number.to::<u64>();
+                let block = result.tx_information.block_number;
                 let approved = result.event_data.value;
                 async move {
                     if approved.is_zero() {
                         return Ok(U256::ZERO);
                     }
                     let input = IERC20::allowanceCall { owner, spender }.abi_encode();
-                    let request = TransactionRequest::default().to(token).input(input.into());
-                    // Read at the block the approval was in: the allowance is a
-                    // value at a point in the chain's history, not at the head.
+                    // rindexer's own provider call, which takes the block to
+                    // read at: the allowance is a value at a point in the
+                    // chain's history, not at the head.
                     let returned = provider
-                        .call(request)
-                        .block(BlockId::from(block))
+                        .eth_call(token, input.into(), block)
                         .await
                         .map_err(|e| format!("allowance call failed: {e:?}"))?;
-                    if returned.len() != 32 {
-                        return Err(format!(
-                            "allowance call returned {} bytes, expected 32",
-                            returned.len()
-                        ));
-                    }
-                    Ok(U256::from_be_slice(returned.as_ref()))
+                    U256::from_str_radix(returned.trim_start_matches("0x"), 16)
+                        .map_err(|e| format!("allowance call returned {returned}: {e:?}"))
                 }
             }))
             .await;
