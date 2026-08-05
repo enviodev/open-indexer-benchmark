@@ -7,7 +7,14 @@ An open and honest benchmark for blockchain indexers. Every number below comes f
 If you want to know how the numbers are produced, or what a column means, that is all in [METHODOLOGY.md](./METHODOLOGY.md).
 
 
-## State Aggregation
+## Contributing
+
+Spotted a result that looks wrong? Want to add your indexer, or a scenario you think is missing? Open an issue or a pull request — we would rather hear about it. Indexer teams especially: nobody knows how to get the best out of your tool better than you do, and the more implementations that come from the teams themselves, the better — the [SQD](https://www.sqd.ai) team already rewrote theirs. You can also just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
+
+
+## Scenarios
+
+### State Aggregation
 
 How well does an indexer cope with data it has to read back? Every rETH transfer changes a balance, so for each one the indexer has to find the right row, update it, and save it again. The scenario follows the benchmark on the [Ponder landing page](https://ponder.sh).
 
@@ -26,7 +33,7 @@ How well does an indexer cope with data it has to read back? Every rETH transfer
 [How this case works, and how to run it →](./cases/erc20-account-balances/README.md)
 
 
-## Decoded Event Stream
+### Decoded Event Stream
 
 How fast can an indexer write? Every USDC transfer is stored once, with nothing to aggregate and nothing to look up first. This is the ingestion path on its own.
 
@@ -45,7 +52,7 @@ How fast can an indexer write? Every USDC transfer is stored once, with nothing 
 [How this case works, and how to run it →](./cases/erc20-transfer-events/README.md)
 
 
-## Factory Contract Registration
+### Factory Contract Registration
 
 What happens when you do not know the contracts up front? The indexer watches the Safe proxy factories, and every one of the 199,977 proxies they create becomes another contract it has to follow from that moment on.
 
@@ -93,11 +100,6 @@ ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node scripts/run-benchmarks.ts
 ```
 
 Arguments are passed straight through, so `node scripts/run-benchmarks.ts envio ponder --duration=100` picks which indexers to run and how long the window is, and `--cases=erc20-transfer-events` narrows it to one scenario. You will need an [Envio](https://envio.dev) API token for the RPC endpoint and the ground truth; the [SQD](https://portal.sqd.dev) key is only needed if you are running the Sqd implementation.
-
-
-## Contributing
-
-Spotted a result that looks wrong? Want to add your indexer, or a scenario you think is missing? Open an issue or a pull request — we would rather hear about it. Indexer teams especially: nobody knows how to get the best out of your tool better than you do, and the more implementations that come from the teams themselves, the better — the [SQD](https://www.sqd.ai) team already rewrote theirs. You can also just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
 
 
 ## History
