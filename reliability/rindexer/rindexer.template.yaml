@@ -1,0 +1,38 @@
+# Written to rindexer.yaml by the reliability driver before every run: the block
+# range has to be in the manifest, and most scenarios have no end block at all —
+# they follow the head until the harness stops them.
+name: reliability_indexer
+description: Reliability scenarios against the mock chain
+project_type: no-code
+timestamps: true
+
+networks:
+  # The mock chain answers as chain 1, so the ordinary mainnet configuration
+  # applies unchanged.
+  - name: ethereum
+    chain_id: 1
+    rpc: ${ETHEREUM_RPC}
+    max_block_range: 1000
+
+storage:
+  postgres:
+    enabled: true
+    # Emphatically not `true`: every restart in these scenarios is a recovery
+    # from a crash, and dropping the tables on the way back up would turn every
+    # restart-recovery result into a full re-index.
+    drop_each_run: false
+
+contracts:
+  - name: MockToken
+    details:
+      - network: ethereum
+        address: "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+        start_block: "__START_BLOCK__"
+        __END_BLOCK_LINE__
+    abi: ./abis/MockToken.abi.json
+    include_events:
+      - Transfer
+      - MetadataUpdated
+
+global:
+  health_port: 19896

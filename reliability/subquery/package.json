@@ -1,0 +1,28 @@
+{
+  "name": "subquery-reliability",
+  "version": "0.0.1",
+  "description": "SubQuery indexer for the reliability scenarios",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "subql build",
+    "codegen": "subql codegen",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ethersproject/abi": "^5.8.0",
+    "@ethersproject/providers": "^5.8.0",
+    "@subql/types-core": "latest",
+    "@subql/types-ethereum": "^3.13.1",
+    "assert": "^2.1.0",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@subql/cli": "^5.14.1",
+    "@subql/node-ethereum": "^5.6.2",
+    "ethers": "^5.8.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.14"
+  }
+}

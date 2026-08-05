@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+#
+# Written to config.yaml by the reliability driver before every run. The block
+# range has to be baked into the manifest, and most scenarios have no end block
+# at all — they follow the head until the harness stops them — which an
+# environment substitution cannot express.
+name: reliability-indexer
+description: Reliability scenarios against the mock chain
+contracts:
+  - name: MockToken
+    events:
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+      - event: "MetadataUpdated(string symbol, string name)"
+chains:
+  # The mock chain answers as chain 1, so every tool's ordinary mainnet
+  # configuration applies unchanged.
+  - id: 1
+    start_block: __START_BLOCK__
+    __END_BLOCK_LINE__
+    rpc:
+      url: ${ENVIO_RPC_URL}
+      # RPC is the sync source rather than the fallback: HyperSync cannot be
+      # pointed at a chain that only exists inside this process.
+      for: sync
+    contracts:
+      - name: MockToken
+        address: 0x5fbdb2315678afecb367f032d93f642f64180aa3

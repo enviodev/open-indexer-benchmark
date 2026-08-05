@@ -1,0 +1,20 @@
+# Both entities are written once per event and never updated, so they are
+# declared immutable — the layout The Graph's docs recommend for event data, and
+# the one Graph Node reverts by deleting rows above the reorg point.
+type TransferEvent @entity(immutable: true) {
+  id: ID!
+  blockNumber: Int!
+  logIndex: Int!
+  from: String!
+  to: String!
+  value: BigInt!
+  timestamp: Int!
+}
+
+type TokenMetadata @entity(immutable: true) {
+  id: ID!
+  blockNumber: Int!
+  logIndex: Int!
+  symbol: String!
+  name: String!
+}

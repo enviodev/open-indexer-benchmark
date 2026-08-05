@@ -1,0 +1,17 @@
+type TransferEvent {
+  id: ID!
+  blockNumber: Int!
+  logIndex: Int!
+  from: String!
+  to: String!
+  value: BigInt!
+  timestamp: Int!
+}
+
+type TokenMetadata {
+  id: ID!
+  blockNumber: Int!
+  logIndex: Int!
+  symbol: String!
+  name: String!
+}

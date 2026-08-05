@@ -15,3 +15,13 @@ What the result table columns mean:
 The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 
 Each scenario's own page documents its block range, contracts, entities and per-tool implementation notes.
+
+## Reliability
+
+The reliability scenarios are measured differently and deliberately so. They run against a chain this repository generates in-process rather than against Ethereum, because what they test cannot be requested of a real chain: a reorg on cue, a token symbol containing a NUL byte, a database that disappears mid-write. The chain is deterministic, so the same run twice gives the same answer, and no API token or network access is involved.
+
+Every tool writes to one shared PostgreSQL container — not its own, as in the throughput runs — since "what happens when the database goes away" only compares across tools if it is the same database going away in the same way. Verdicts are reached by reading every row back and comparing it against the chain as it finally stands, in both directions: rows that should be there and are not, and rows that are there and belong to no block on the canonical chain.
+
+An exit the tool was not asked to make is counted as a crash, published beside the verdict with the last error it logged, and followed by a restart so the run continues. Only tools that can be pointed at an arbitrary RPC endpoint can be covered; ones reading their own data network are published as a row of dashes carrying that reason.
+
+[The scenarios, and what each one is looking for →](./reliability/README.md)

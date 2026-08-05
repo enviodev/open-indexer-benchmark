@@ -66,6 +66,7 @@ const LOCAL_SCRIPTS = new Set([
   "scripts/test-scope.ts",
   "scripts/test-tables.ts",
   "scripts/test-verification.ts",
+  "scripts/test-reliability.ts",
   "scripts/run-benchmarks.ts",
   "scripts/generate-expected.ts",
 ]);
@@ -77,6 +78,13 @@ function isInert(file: string, parts: string[]): boolean {
   if (file === ".gitignore" || file === "LICENSE") return true;
   // Archived third-party results, kept for reference only.
   if (parts[0] === "sentio-benchmarks-may-2025") return true;
+  // The reliability suite is a separate workflow with its own indexer
+  // projects and its own mock chain. It shares cases/lib/process.ts and the
+  // Graph Node installer with the benchmark — a change to either of those is
+  // a change under cases/ and still runs everything — but nothing under
+  // reliability/ can alter a throughput measurement.
+  if (parts[0] === "reliability") return true;
+  if (file === ".github/workflows/reliability.yml") return true;
   return LOCAL_SCRIPTS.has(file);
 }
 

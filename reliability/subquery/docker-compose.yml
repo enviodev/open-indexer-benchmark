@@ -1,0 +1,33 @@
+# SubQuery's node runs in a container, so unlike every other tool here it does
+# not have the host's network. Both the mock RPC endpoint and the shared
+# PostgreSQL live on the host, and it reaches them through the gateway mapped in
+# below — which is also what makes the database outage scenario apply to it: the
+# container it is talking to is the same one the harness stops.
+#
+# No `restart:` policy on purpose. A node that Compose silently brings back
+# would make a tool that crashed on every block look like one that never
+# crashed at all, which is the single most important thing these runs measure.
+services:
+  subquery-node:
+    image: subquerynetwork/subql-node-ethereum:latest
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL}
+    volumes:
+      - ./:/app
+    command:
+      - -f=/app
+      - --db-schema=app
+      - --workers=4
+      - --batch-size=30
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://subquery-node:3000/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 10

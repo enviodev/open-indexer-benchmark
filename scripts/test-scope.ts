@@ -149,8 +149,18 @@ check("docs and local scripts run nothing", [
   "scripts/test-scope.ts",
   "scripts/test-tables.ts",
   "scripts/test-verification.ts",
+  "scripts/test-reliability.ts",
   "scripts/run-benchmarks.ts",
   "scripts/generate-expected.ts",
+], {});
+
+// The reliability suite runs on its own workflow, against a mock chain, with
+// its own indexer projects. None of it can move a throughput number.
+check("the reliability suite runs no benchmarks", [
+  "reliability/run.ts",
+  "reliability/lib/chain.ts",
+  "reliability/ponder/ponder.config.ts",
+  ".github/workflows/reliability.yml",
 ], {});
 
 // The inert list is an allowlist, not the default: a file the filter cannot

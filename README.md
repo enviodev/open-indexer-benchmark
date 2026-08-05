@@ -81,6 +81,24 @@ What happens when you do not know the contracts up front? The indexer watches th
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
 
 
+## Reliability
+
+Throughput is one half of the question. The other is what an indexer does when
+the database is restarted under it, when the chain reorganises twelve blocks
+deep, when the endpoint starts returning 500s, when the process is killed
+mid-write, or when a contract emits a byte PostgreSQL cannot store. None of that
+can be asked of a live chain on demand, so this suite generates its own:
+a deterministic chain in-process, an RPC endpoint with a fault switch, and one
+PostgreSQL container the scenarios take away on purpose. No API token, no
+network, same answer twice.
+
+<!-- RELIABILITY:summary:START -->
+_Published by the weekly reliability run; see [the scenario page](./reliability/README.md) to run it yourself._
+<!-- RELIABILITY:summary:END -->
+
+[What each scenario does, and how to run them →](./reliability/README.md)
+
+
 ## Sentio Benchmark Cases, May 2025
 
 Six scenarios from the original 2025 research, kept here for reference. They are total sync times rather than throughput rates, and they predate the current methodology, so do not compare them with the tables above.

@@ -1,0 +1,293 @@
+name: Reliability
+
+# The reliability scenarios, one job per (scenario, tool) pair.
+#
+# Unlike the throughput benchmark these jobs measure nothing that contention can
+# distort — no rate is reported — so they all run at once. What they do need is
+# a machine to themselves for Docker and a fixed set of ports, which is exactly
+# what one GitHub runner per job provides.
+#
+# On a pull request only the harness self-check and the cheapest scenario run:
+# the full matrix is thirty jobs, and a pull request that did not touch the
+# suite would be re-running all of it to learn nothing. `main`, the schedule and
+# manual runs are full, because they publish the README table.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tools:
+        description: 'Tools to run (space-separated). Leave empty for all.'
+        required: false
+        default: ''
+        type: string
+      scenarios:
+        description: 'Scenarios to run (space-separated). Leave empty for all.'
+        required: false
+        default: ''
+        type: string
+  schedule:
+    # Weekly, on Monday morning UTC. These results move when a tool releases,
+    # not when the chain does, so there is nothing to gain from running daily.
+    - cron: '0 4 * * 1'
+  # The two path lists below are duplicated rather than shared through a YAML
+  # anchor: GitHub does not expand anchors in workflow files, and one that
+  # silently resolved to nothing would run this suite on every commit in the
+  # repository.
+  push:
+    branches: [main]
+    paths:
+      - 'reliability/**'
+      - 'scripts/test-reliability.ts'
+      - 'scripts/build-reliability-tables.ts'
+      - '.github/workflows/reliability.yml'
+      # Shared with the throughput benchmark: the process helpers every driver
+      # uses, and the Graph Node installer the subgraph driver calls.
+      - 'cases/lib/process.ts'
+      - 'cases/lib/drivers/subgraph.ts'
+  pull_request:
+    paths:
+      - 'reliability/**'
+      - 'scripts/test-reliability.ts'
+      - 'scripts/build-reliability-tables.ts'
+      - '.github/workflows/reliability.yml'
+      - 'cases/lib/process.ts'
+      - 'cases/lib/drivers/subgraph.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  harness:
+    name: Harness self-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # No credentials, no Docker, no network: the mock chain is generated
+      # in-process, which is what makes it checkable at all.
+      - run: node scripts/test-reliability.ts
+
+  setup:
+    name: Setup matrix
+    needs: harness
+    runs-on: ubuntu-latest
+    outputs:
+      tools: ${{ steps.matrix.outputs.tools }}
+      scenarios: ${{ steps.matrix.outputs.scenarios }}
+      full: ${{ steps.matrix.outputs.full }}
+    steps:
+      - id: matrix
+        env:
+          TOOLS: ${{ inputs.tools }}
+          SCENARIOS: ${{ inputs.scenarios }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ -z "$TOOLS" ]; then
+            TOOLS_JSON='["envio","ponder","rindexer","subgraph","subquery"]'
+          else
+            TOOLS_JSON=$(echo "$TOOLS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
+          fi
+
+          if [ -n "$SCENARIOS" ]; then
+            SCENARIOS_JSON=$(echo "$SCENARIOS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            # Restart recovery exercises the whole loop — start, kill, resume,
+            # verify — in the least time, so it is the one worth paying for on
+            # every pull request.
+            SCENARIOS_JSON='["restart-recovery"]'
+          else
+            SCENARIOS_JSON='["restart-recovery","db-outage","reorg","hostile-data","head-latency","rpc-chaos"]'
+          fi
+
+          # Only a run covering every tool and every scenario may publish the
+          # README table: a partial one would replace a complete matrix with a
+          # single column and read as though the rest had been measured and
+          # found missing.
+          ALL_TOOLS='["envio","ponder","rindexer","subgraph","subquery"]'
+          ALL_SCENARIOS='["restart-recovery","db-outage","reorg","hostile-data","head-latency","rpc-chaos"]'
+          FULL=false
+          if [ "$TOOLS_JSON" = "$ALL_TOOLS" ] && [ "$SCENARIOS_JSON" = "$ALL_SCENARIOS" ]; then
+            FULL=true
+          fi
+
+          echo "tools=$TOOLS_JSON" >> "$GITHUB_OUTPUT"
+          echo "scenarios=$SCENARIOS_JSON" >> "$GITHUB_OUTPUT"
+          echo "full=$FULL" >> "$GITHUB_OUTPUT"
+
+  scenario:
+    name: "${{ matrix.scenario }} / ${{ matrix.tool }}"
+    needs: setup
+    runs-on: ubuntu-latest
+    # One scenario for one tool. The longest of them stops the tool four times
+    # and waits for it to come back each time, on top of the install and build
+    # it pays for first; this is a backstop for a hung runner rather than a
+    # budget.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: ${{ fromJSON(needs.setup.outputs.tools) }}
+        scenario: ${{ fromJSON(needs.setup.outputs.scenarios) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Shared with the throughput benchmark: the same pinned release, from the
+      # same installer, under the same key.
+      - name: Cache Graph Node binary
+        if: matrix.tool == 'subgraph'
+        uses: actions/cache@v4
+        with:
+          path: .graph-node/bin
+          key: gnd-${{ hashFiles('cases/lib/drivers/subgraph.ts') }}
+
+      - name: Prepare
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TOOL: ${{ matrix.tool }}
+        run: |
+          docker pull postgres:17-alpine
+          case "$TOOL" in
+            rindexer)
+              # install.sh resolves "latest" through an UNAUTHENTICATED GitHub
+              # API call (60/h, shared across runners) and does not guard an
+              # empty result: when throttled the download URL 404s and the tool
+              # silently drops out of the table. Resolve the tag ourselves with
+              # an authenticated call and pin it, which still tracks latest.
+              RINDEXER_VERSION=""
+              for i in 1 2 3; do
+                RINDEXER_VERSION=$(curl -fsSL \
+                  -H "Authorization: Bearer $GITHUB_TOKEN" \
+                  -H "Accept: application/vnd.github+json" \
+                  https://api.github.com/repos/joshstevens19/rindexer/releases/latest \
+                  | jq -r '.tag_name // empty' | sed 's/^v//') || true
+                [ -n "$RINDEXER_VERSION" ] && break
+                echo "rindexer version lookup attempt $i failed; retrying..." >&2
+                sleep $((i * 5))
+              done
+              if [ -z "$RINDEXER_VERSION" ]; then
+                echo "Failed to resolve latest rindexer version" >&2
+                exit 1
+              fi
+              curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$RINDEXER_VERSION"
+              ;;
+            subquery)
+              docker compose -f reliability/subquery/docker-compose.yml pull
+              ;;
+          esac
+
+      - name: Run scenario
+        run: |
+          set -o pipefail
+          node reliability/run.ts "$TOOL" --scenarios="$SCENARIO" 2>&1 \
+            | tee /tmp/reliability-output.txt
+        env:
+          TOOL: ${{ matrix.tool }}
+          SCENARIO: ${{ matrix.scenario }}
+
+      - name: Post output to job summary
+        if: always()
+        env:
+          TOOL: ${{ matrix.tool }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          {
+            echo "## $SCENARIO / $TOOL"
+            echo ""
+            echo '```'
+            cat /tmp/reliability-output.txt 2>/dev/null || echo "No output captured"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reliability-${{ matrix.scenario }}--${{ matrix.tool }}
+          path: /tmp/reliability-output.txt
+          if-no-files-found: ignore
+
+  summary:
+    name: Summary
+    needs: [setup, scenario]
+    if: always() && needs.setup.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: reliability-*
+
+      - name: Build tables
+        run: node scripts/build-reliability-tables.ts
+
+      - name: Comment results on the pull request
+        if: github.event_name == 'pull_request' && !cancelled()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const detail = fs.existsSync('/tmp/reliability-detail.md')
+              ? fs.readFileSync('/tmp/reliability-detail.md', 'utf8')
+              : '_No reliability results collected._';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                '## Reliability',
+                '',
+                'Pull requests run one scenario; the full suite runs on `main` and weekly.',
+                '',
+                detail,
+                '',
+                `[Full output](${runUrl}) is available in the workflow run logs.`,
+              ].join('\n'),
+            });
+
+      - name: Update README
+        if: >-
+          github.event_name != 'pull_request' && !cancelled()
+          && needs.setup.outputs.full == 'true'
+        run: |
+          COVERED=$(grep -c '^|' /tmp/reliability-summary.md || echo 0)
+          [ "$COVERED" -gt 0 ] || exit 0
+
+          awk -v start="<!-- RELIABILITY:summary:START -->" \
+              -v end="<!-- RELIABILITY:summary:END -->" \
+              -v tablefile="/tmp/reliability-summary.md" '
+            $0 ~ start { print; while ((getline line < tablefile) > 0) print line; skip=1; next }
+            $0 ~ end { skip=0 }
+            !skip { print }
+          ' README.md > README.tmp && mv README.tmp README.md
+
+          git diff --quiet README.md && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Update reliability results in README"
+          git push
