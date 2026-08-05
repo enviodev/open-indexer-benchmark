@@ -2,14 +2,14 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?logo=discord&logoColor=white)](https://discord.com/invite/envio)
 
-An open, honest, and objective benchmark for blockchain indexers. Every result is reproducible from this repository, and contributions from any indexer team are welcome.
+An open and honest benchmark for blockchain indexers. Every number below comes from code in this repository, so you can run it yourself and check. Contributions from any indexer team are welcome.
 
-It began in May 2025 as a fork of [Sentio](https://sentio.xyz)'s research, which was later closed; [Envio](https://envio.dev) reopened and extended it. We are not affiliated with Sentio. The benchmark lives under the Envio organisation, but the goal is a fair comparison — see [METHODOLOGY.md](./METHODOLOGY.md) for how results are produced and what the table columns mean.
+It started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s research. That repository was later closed, so [Envio](https://envio.dev) picked the benchmark up and has kept it current since. We are not affiliated with Sentio, and although this now lives under the Envio organisation, the point of it is a fair comparison. If you want to know how the numbers are produced, or what a column means, that is all in [METHODOLOGY.md](./METHODOLOGY.md).
 
 
 ## State Aggregation
 
-Balances and allowances over the Rocket Pool rETH contract: every event reads a row, changes it, and writes it back.
+How well does an indexer cope with data it has to read back? Every rETH transfer changes a balance, so for each one the indexer has to find the right row, update it, and save it again.
 
 <!-- BENCHMARK:erc20-account-balances:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -23,12 +23,12 @@ Balances and allowances over the Rocket Pool rETH contract: every event reads a 
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 14.1 | 185.5 | 1261.2x slower | ✅ | Postgres 4.4 MB |
 <!-- BENCHMARK:erc20-account-balances:END -->
 
-[Details and setup →](./cases/erc20-account-balances/README.md)
+[How this case works, and how to run it →](./cases/erc20-account-balances/README.md)
 
 
 ## Decoded Event Stream
 
-USDC transfers written once each, nothing aggregated and nothing read back — the ingestion path on its own.
+How fast can an indexer write? Every USDC transfer is stored once, with nothing to aggregate and nothing to look up first. This is the ingestion path on its own.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -42,12 +42,12 @@ USDC transfers written once each, nothing aggregated and nothing read back — t
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 19.7 | 2.4 | 3594.8x slower | ✅ | Postgres 1.9 MB |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
-[Details and setup →](./cases/erc20-transfer-events/README.md)
+[How this case works, and how to run it →](./cases/erc20-transfer-events/README.md)
 
 
 ## Factory Contract Registration
 
-The Safe proxy factories, plus every one of the 199,977 proxies they create — a contract set that is unknown at build time and grows throughout the run.
+What happens when you do not know the contracts up front? The indexer watches the Safe proxy factories, and every one of the 199,977 proxies they create becomes another contract it has to follow from that moment on.
 
 <!-- BENCHMARK:safe-factory-registrations:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -65,12 +65,12 @@ The Safe proxy factories, plus every one of the 199,977 proxies they create — 
 > **(3)** Rindexer — its factory filter takes one factory per contract — `Contract using factory filter must use same factory across all networks` — so the children of Safe's four canonical factory deployments cannot be collected into one contract, and its no-code mode names tables after events, which leaves no way to declare the eight events Safe emits under one topic in two layouts
 <!-- BENCHMARK:safe-factory-registrations:END -->
 
-[Details and setup →](./cases/safe-factory-registrations/README.md)
+[How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
 
 
 ## Sentio Benchmark Cases, May 2025
 
-Six scenarios from the original research, kept for reference. These are total sync times rather than throughput rates, and predate the current methodology.
+Six scenarios from the original 2025 research, kept here for reference. They are total sync times rather than throughput rates, and they predate the current methodology, so do not compare them with the tables above.
 
 | Case                   | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio_Subgraph | Goldsky_Subgraph |
 | ---------------------- | ------ | --------------- | ---------------- | ------ | -------- | -------- | --------------- | ---------------- |
@@ -81,22 +81,22 @@ Six scenarios from the original research, kept for reference. These are total sy
 | case_5_on_trace        | 16m    | 41s             |                  | N/A§   | 2m       | 8m       | 1h21m           |                  |
 | case_6_template        | 19m    |                 | 8s               | 21m    | 2m       | 19m      | 10m             | 20h24m           |
 
-[Details →](./sentio-benchmarks-may-2025/README.md)
+[More about these cases →](./sentio-benchmarks-may-2025/README.md)
 
 
 ## Running the benchmarks
 
-Each scenario runs on its own — see its page above — or all of them in CI order:
+Want to try it yourself? Each scenario page above has its own setup instructions, or you can run the whole suite the way CI does:
 
 ```bash
 ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node scripts/run-benchmarks.ts
 ```
 
-Arguments pass through to each scenario: `node scripts/run-benchmarks.ts envio ponder --duration=100` picks indexers and the window, and `--cases=erc20-transfer-events` picks scenarios. The [Envio](https://envio.dev) token supplies the RPC endpoint and ground truth; the [SQD](https://portal.sqd.dev) key is needed only for the Sqd implementation.
+Arguments are passed straight through, so `node scripts/run-benchmarks.ts envio ponder --duration=100` picks which indexers to run and how long the window is, and `--cases=erc20-transfer-events` narrows it to one scenario. You will need an [Envio](https://envio.dev) API token for the RPC endpoint and the ground truth; the [SQD](https://portal.sqd.dev) key is only needed if you are running the Sqd implementation.
 
 
 ## Contributing
 
-Open an issue or pull request to add an indexer, add a scenario, report a result that looks wrong, or improve the methodology. Questions: [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
+Spotted a result that looks wrong? Want to add your indexer, or a scenario you think is missing? Open an issue or a pull request — we would rather hear about it. You can also just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
 
 > Benchmark data on the [Envio landing page](https://envio.dev) and in [Best Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) comes from this repository.
