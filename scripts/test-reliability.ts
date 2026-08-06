@@ -22,7 +22,7 @@ import {
 import { CONTRACT, HOSTILE_SYMBOL, MockChain } from "../reliability/lib/chain.ts";
 import { MockRpcServer } from "../reliability/lib/rpc-server.ts";
 import { diffRows, expectedRows } from "../reliability/lib/entities.ts";
-import { buildSummaryTable } from "../reliability/lib/report.ts";
+import { buildScenarioTable, buildSummaryTable } from "../reliability/lib/report.ts";
 import { SCENARIOS } from "../reliability/lib/scenarios/index.ts";
 import type { ScenarioResult } from "../reliability/lib/harness.ts";
 
@@ -348,6 +348,29 @@ console.log("\nreport");
       .split("\n")
       .filter((line) => line.startsWith("> **("))
       .every((line) => line.split("—").length === 2)
+  );
+
+  // A crashed tool's last words are arbitrary bytes, and they go straight into
+  // a table cell. SubQuery's first published row carried a pipe, a newline and
+  // a screenful of ANSI colour codes, and took the table apart.
+  const hostile = buildScenarioTable(SCENARIOS[0], [
+    result({
+      status: "fail",
+      detail: "died",
+      crashDetail: "subquery-node-1  | \u001b[31mError:\u001b[39m a | b\nnext line",
+    }),
+  ]);
+  // Cells are separated by unescaped pipes; an escaped one is content.
+  const cellsOf = (line: string) => line.split(/(?<!\\)\|/);
+  const rows = hostile.split("\n");
+  const body = rows.filter((line) => line.startsWith("| ["));
+  equal("a crash note stays on one row", body.length, 1);
+  check("the pipe in a crash note is escaped", body[0].includes("\\|"));
+  check("ANSI colour codes are stripped", !body[0].includes("\u001b"));
+  equal(
+    "every row has the same number of cells as the header",
+    new Set(rows.map((line) => cellsOf(line).length)).size,
+    1
   );
 }
 

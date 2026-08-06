@@ -19,7 +19,7 @@ chains:
   # configuration applies unchanged.
   - id: 1
     start_block: __START_BLOCK__
-    __END_BLOCK_LINE__
+    # __END_BLOCK__
     rpc:
       url: ${ENVIO_RPC_URL}
       # RPC is the sync source rather than the fallback: HyperSync cannot be

@@ -107,7 +107,9 @@ export const restartRecovery: Scenario = {
     for (const attempt of [1, 2]) {
       ctx.chain.append(BURST_BLOCKS);
       await sleep(attempt * 500);
-      await cycle(`kill during a ${BURST_BLOCKS}-block burst`, "SIGKILL");
+      // Numbered: two checks sharing a name are two table rows nothing can
+      // tell apart, and any lookup by name would only ever find the first.
+      await cycle(`kill ${attempt} during a ${BURST_BLOCKS}-block burst`, "SIGKILL");
     }
 
     if (!(await ctx.settle(300_000))) {

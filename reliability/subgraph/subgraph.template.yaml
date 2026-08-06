@@ -14,7 +14,7 @@ dataSources:
       address: "0x5fbdb2315678afecb367f032d93f642f64180aa3"
       abi: MockToken
       startBlock: __START_BLOCK__
-      __END_BLOCK_LINE__
+      # __END_BLOCK__
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

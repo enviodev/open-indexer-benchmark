@@ -30,7 +30,12 @@ const MEASURED_BLOCKS = 20;
 /** How often the database is asked what it can see. Bounds the resolution. */
 const OBSERVE_MS = 100;
 
-/** A block still not visible this long after it arrived is counted as lost. */
+/**
+ * How long the observation window runs past the last block produced. It is one
+ * window for the whole measurement rather than a deadline per block, so the
+ * first block measured gets rather longer than the last — which is why the
+ * failure text below reports the window instead of a per-block figure.
+ */
 const GRACE_MS = 60_000;
 
 export const headLatency: Scenario = {
@@ -121,7 +126,8 @@ export const headLatency: Scenario = {
         status: "fail",
         detail:
           `${lost.length} of ${MEASURED_BLOCKS} head blocks were still not readable ` +
-          `${GRACE_MS / 1_000}s after they were produced` +
+          `within the measurement window, which ran ${GRACE_MS / 1_000}s past the ` +
+          `last block produced` +
           (data.detail ? `; ${data.detail}` : ""),
       };
     }

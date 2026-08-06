@@ -222,7 +222,13 @@ export async function readRows(
   url: string,
   entity: ResolvedEntity
 ): Promise<string[]> {
-  const canonical = `concat_ws('${FIELD_SEP}', ${entity.fieldExprs.join(", ")})`;
+  // Every expression is coalesced, because `concat_ws` skips NULL arguments
+  // without emitting a separator for them. One NULL column would shorten the
+  // row by a field, and every field after it would then be compared against —
+  // and reported as — the wrong column.
+  const canonical = `concat_ws('${FIELD_SEP}', ${entity.fieldExprs
+    .map((expr) => `coalesce(${expr}, '')`)
+    .join(", ")})`;
   const where = entity.predicate ? ` WHERE ${entity.predicate}` : "";
   const raw = await psql(
     url,

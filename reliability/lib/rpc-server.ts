@@ -128,7 +128,14 @@ export class MockRpcServer {
     // socket errors that look like faults the scenario did not inject.
     this.server.keepAliveTimeout = 120_000;
     this.server.headersTimeout = 125_000;
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      // Without this the promise never settles when the bind fails — say
+      // because a previous run left the port held — and Node takes the process
+      // down on the unhandled error rather than the scenario reporting why.
+      this.server!.once("error", (err) => {
+        this.server = null;
+        reject(err);
+      });
       this.server!.listen(port, "0.0.0.0", () => {
         const address = this.server!.address();
         this.port = typeof address === "object" && address ? address.port : port;

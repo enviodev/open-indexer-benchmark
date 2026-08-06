@@ -32,8 +32,12 @@ import {
 } from "./entities.ts";
 import { readRows, resolveEntities, type ResolvedEntity } from "./introspect.ts";
 
-/** Port the mock endpoint binds, so a stuck run is easy to find and curl. */
-const RPC_PORT = 19_890;
+/**
+ * First port of the mock endpoint's range. Tools run concurrently, each with
+ * its own chain, so each takes the next port along — fixed rather than
+ * arbitrary so a stuck run is easy to find and curl.
+ */
+export const BASE_RPC_PORT = 19_900;
 
 export type CheckStatus = "pass" | "degraded" | "fail";
 
@@ -153,18 +157,44 @@ const MAX_RESTARTS = 12;
 const RESTART_BACKOFF_MS = 1_000;
 const MAX_RESTART_BACKOFF_MS = 15_000;
 
+/**
+ * Drivers with a process currently running, so an interrupted run can stop them.
+ *
+ * A driver is constructed inside `runScenario` and never handed back, so
+ * without this the runner's signal handler has nothing to reach: Ctrl-C would
+ * leave an indexer alive, holding its ports and writing to a database the next
+ * run is about to reset.
+ */
+const active = new Set<ReliabilityDriver>();
+
+/** Stop every indexer this process started. Safe to call more than once. */
+export async function stopAllDrivers(): Promise<void> {
+  await Promise.all(
+    [...active].map((driver) => driver.cleanup().catch(() => {}))
+  );
+  active.clear();
+}
+
+export interface RunOptions {
+  /** Port the mock endpoint binds for this run. */
+  rpcPort: number;
+  /** Prefix for this run's log lines, so concurrent tools stay legible. */
+  label?: string;
+}
+
 export async function runScenario(
   tool: string,
   scenario: Scenario,
   db: PostgresServer,
-  root: string
+  root: string,
+  options: RunOptions
 ): Promise<ScenarioResult> {
   const info = TOOL_INFO[tool];
   const chain = new MockChain({ seed: `${scenario.key}:${tool}`, ...scenario.chain });
   scenario.setup?.(chain);
 
   const rpc = new MockRpcServer(chain);
-  await rpc.listen(RPC_PORT);
+  await rpc.listen(options.rpcPort);
 
   const startedAt = performance.now();
   const crashes: Crash[] = [];
@@ -185,7 +215,8 @@ export async function runScenario(
    */
   let handlingExit = false;
 
-  const log = (message: string) => console.log(`  ${message}`);
+  const label = options.label ?? tool;
+  const log = (message: string) => console.log(`  [${label}] ${message}`);
 
   await db.resetDatabase(info.database);
 
@@ -280,6 +311,10 @@ export async function runScenario(
         RESTART_BACKOFF_MS * 2 ** (consecutiveCrashes - 1)
       )
     );
+    // The scenario may have taken the process over during the backoff — its own
+    // halt or restart owns it from that point, and relaunching here would leave
+    // two of them writing to one database.
+    if (!supervising) return;
     await driver.launch();
     pendingRecovery = { crash, from, at: Date.now() };
   }
@@ -373,6 +408,7 @@ export async function runScenario(
   };
 
   let outcome: ScenarioOutcome;
+  active.add(driver);
   try {
     await driver.prepare();
     outcome = await scenario.run(ctx);
@@ -387,6 +423,7 @@ export async function runScenario(
     supervising = false;
     if (watchdog) clearInterval(watchdog);
     await driver.cleanup().catch(() => {});
+    active.delete(driver);
     await rpc.close();
   }
 

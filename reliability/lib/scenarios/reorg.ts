@@ -133,6 +133,7 @@ export const reorg: Scenario = {
     // orphaned rows, which says nothing new about the cases that follow.
     let knownMissing = new Set<string>();
     let knownUnexpected = new Set<string>();
+    let knownDuplicated = new Set<string>();
     let worstConvergeS = 0;
 
     for (const variant of VARIANTS) {
@@ -172,8 +173,10 @@ export const reorg: Scenario = {
       const duplicated = [...transfers.duplicated, ...metadata.duplicated];
       const newMissing = missing.filter((row) => !knownMissing.has(row));
       const newUnexpected = unexpected.filter((row) => !knownUnexpected.has(row));
+      const newDuplicated = duplicated.filter((row) => !knownDuplicated.has(row));
       knownMissing = new Set(missing);
       knownUnexpected = new Set(unexpected);
+      knownDuplicated = new Set(duplicated);
 
       const problems: string[] = [];
       if (!converged) {
@@ -188,7 +191,9 @@ export const reorg: Scenario = {
       if (newMissing.length > 0) {
         problems.push(`${newMissing.length} rows of the new chain missing`);
       }
-      if (duplicated.length > 0) problems.push(`${duplicated.length} duplicated rows`);
+      if (newDuplicated.length > 0) {
+        problems.push(`${newDuplicated.length} duplicated rows`);
+      }
 
       checks.push({
         name: variant.name,

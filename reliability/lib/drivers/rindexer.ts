@@ -26,13 +26,23 @@ export const rindexerDriver: DriverFactory = (ctx) => {
     async prepare() {
       if (!existsSync(CLI)) {
         // install.sh resolves "latest" through an unauthenticated GitHub API
-        // call that is occasionally throttled, so give it a few tries.
+        // call that is occasionally throttled, so give it a few tries — but
+        // exit non-zero when they all fail. Without `pipefail` and the explicit
+        // `exit 1`, the trailing `sleep` returned success, `prepare()` was
+        // taken to have worked, and launching a CLI that was never installed
+        // was published as the indexer crashing.
+        //
+        // CI installs a version resolved through an authenticated API call
+        // before this ever runs; this path is the local one.
         await exec(
           "bash",
           [
             "-c",
-            "for i in 1 2 3; do curl -L https://rindexer.xyz/install.sh | bash && break; " +
-              'echo "rindexer install attempt $i failed; retrying..." >&2; sleep $((i * 5)); done',
+            "set -o pipefail; for i in 1 2 3; do " +
+              "if curl --fail --location --proto '=https' --proto-redir '=https' " +
+              "https://rindexer.xyz/install.sh | bash; then exit 0; fi; " +
+              'echo "rindexer install attempt $i failed; retrying..." >&2; ' +
+              "sleep $((i * 5)); done; exit 1",
           ],
           ctx.dir,
           env
@@ -45,7 +55,7 @@ export const rindexerDriver: DriverFactory = (ctx) => {
         template
           .replaceAll("__START_BLOCK__", String(ctx.startBlock))
           .replaceAll(
-            "__END_BLOCK_LINE__",
+            "# __END_BLOCK__",
             ctx.endBlock === null ? "" : `end_block: "${ctx.endBlock}"`
           )
       );

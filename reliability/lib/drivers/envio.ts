@@ -50,7 +50,7 @@ export const envioDriver: DriverFactory = (ctx) => {
         template
           .replaceAll("__START_BLOCK__", String(ctx.startBlock))
           .replaceAll(
-            "__END_BLOCK_LINE__",
+            "# __END_BLOCK__",
             ctx.endBlock === null ? "" : `end_block: ${ctx.endBlock}`
           )
       );

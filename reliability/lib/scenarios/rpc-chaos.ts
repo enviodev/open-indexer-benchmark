@@ -82,11 +82,15 @@ export const rpcChaos: Scenario = {
     // producing for a while yet — the tool has to work through the backlog the
     // outage left *and* the blocks arriving on top of it. The ticker then stops,
     // giving a fixed finish line to be measured against.
-    const startedAt = Date.now();
     const stopTicker = startTicker(ctx.chain, BLOCK_INTERVAL_MS);
     await sleep(MOVING_HEAD_MS);
     stopTicker();
 
+    // Timed from here rather than from the moment the endpoint healed: the
+    // window above is a fixed sixty seconds for every tool, and including it
+    // would add the same constant to every figure while making each one look
+    // like a minute of catch-up that never happened.
+    const startedAt = Date.now();
     const caughtUp = await ctx.settle(RECOVERY_TIMEOUT_MS);
     ctx.metric("catch-up s", Number(((Date.now() - startedAt) / 1_000).toFixed(1)));
     checks.push({

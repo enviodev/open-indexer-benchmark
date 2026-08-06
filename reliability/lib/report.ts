@@ -24,6 +24,26 @@ const GLYPH: Record<string, string> = {
 
 const NO_VALUE = "—";
 
+/**
+ * Make arbitrary text safe to put in a Markdown table cell.
+ *
+ * `crashDetail` is assembled from whatever the crashed process last wrote, and
+ * a process writes what it likes: a `|` shifts every column after it, a newline
+ * ends the row and truncates the table, and the ANSI colour codes most tools
+ * emit render as line noise. SubQuery's first published row did all three.
+ *
+ * The summary table's notes escape this because they sit outside the table
+ * body; the per-scenario tables do not.
+ */
+function cell(text: string): string {
+  return text
+    // eslint-disable-next-line no-control-regex -- ANSI escapes, by definition.
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\|/g, "\\|")
+    .trim();
+}
+
 const toolCell = (tool: string): string => {
   const info = TOOL_INFO[tool];
   return info ? `[${info.name}](${info.url})` : tool;
@@ -67,15 +87,15 @@ export function buildSummaryTable(
         continue;
       }
       crashes += result.crashes;
-      let cell = GLYPH[result.status] ?? "❓";
+      let marker = GLYPH[result.status] ?? "❓";
       if (result.status !== "pass" && result.detail) {
         notes.push(
           `**(${notes.length + 1})** ${TOOL_INFO[tool]?.name ?? tool}, ` +
-            `${scenario.title.toLowerCase()} — ${result.detail}`
+            `${scenario.title.toLowerCase()} — ${cell(result.detail)}`
         );
-        cell = `${cell} (${notes.length})`;
+        marker = `${marker} (${notes.length})`;
       }
-      cells.push(cell);
+      cells.push(marker);
     }
     cells.push(String(crashes));
     lines.push(`| ${cells.join(" | ")} |`);
@@ -123,7 +143,7 @@ export function buildScenarioTable(
   for (const tool of order) {
     const result = mine.find((r) => r.tool === tool);
     if (!result) continue;
-    const note = [result.detail, result.crashDetail].filter(Boolean).join("; ");
+    const note = cell([result.detail, result.crashDetail].filter(Boolean).join("; "));
     lines.push(
       `| ${[
         toolCell(tool),

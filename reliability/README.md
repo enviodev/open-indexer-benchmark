@@ -2,7 +2,7 @@
 
 The throughput scenarios ask how fast an indexer is when everything works. These
 ask what it does when things do not: the database is restarted under it, the
-chain reorganises eight blocks deep, the endpoint starts returning 500s, the
+chain reorganises twelve blocks deep, the endpoint starts returning 500s, the
 process is killed mid-write, or a contract emits a byte PostgreSQL cannot store.
 
 Every result here comes from a chain this repository generates in-process. That
@@ -16,11 +16,25 @@ answer.
 node reliability/run.ts                                  # every tool, every scenario
 node reliability/run.ts ponder envio                     # two tools
 node reliability/run.ts --scenarios=reorg,db-outage      # two scenarios
+node reliability/run.ts ponder --keep-db                 # leave the rows to look at
+node reliability/run.ts --jobs=1                         # one tool at a time
 node scripts/test-reliability.ts                         # check the harness itself
 ```
 
-Docker is required — the shared PostgreSQL runs in a container, because half
-these scenarios work by taking that container away. Nothing else is needed.
+Docker is required — PostgreSQL runs in a container, because half these
+scenarios work by taking that container away. Nothing else is needed: no API
+token and no network.
+
+Tools run concurrently and each tool's scenarios run one after another. Nothing
+reads a real data source, so there is no shared endpoint to contend for; each
+tool gets its own generated chain, its own endpoint port and its own database
+container. Two scenarios of the *same* tool cannot overlap — they would write
+the same project directory and bind the same ports — which is why the lane is
+per tool. CI goes further and gives every (tool, scenario) pair its own runner.
+
+The timings still depend on what else is on the machine, so `--jobs=1` is the
+local option when a latency or resume figure is the point; CI is the
+measurement of record.
 
 
 ## How a run is put together
@@ -42,11 +56,14 @@ what the reorg scenario measures. It serves batch requests, `finalized` and
 way a public provider does. It also has a fault switch a scenario can turn on
 and off mid-run.
 
-**The database** (`lib/postgres.ts`) is one PostgreSQL container that every tool
-writes to, each in its own database. The throughput benchmark lets each tool
-bring its own; here it has to be the same one, because "what happens when the
-database goes away" only compares across tools if it is the same database going
-away in the same manner.
+**The database** (`lib/postgres.ts`) is a PostgreSQL container defined in one
+place and created identically for every tool — same image, same settings, same
+commands used to break it. The throughput benchmark lets each tool bring its
+own; here what matters is that they are alike, because "what happens when the
+database goes away" only compares across tools if it is the same kind of
+database going away in the same manner. Each tool gets its own instance, so one
+scenario stopping a container cannot stop it under a tool being measured
+alongside.
 
 **The indexers** are ordinary projects, one per tool, in this directory. They
 index the same two events into the same two entities, keyed by `(block number,

@@ -103,7 +103,10 @@ export class Supervised {
       });
     }
     proc.on("exit", (code, signal) => {
-      if (proc.pid) this.spawned.delete(proc.pid);
+      // The pid stays in `spawned` even though this process is gone: it is a
+      // process *group* id, and children of a tool that has exited can outlive
+      // it and keep holding its listening port. Only reap() clears the set,
+      // once it has actually signalled the group.
       if (this.proc === proc) {
         this.lastExit = { code, signal, at: Date.now() };
         this.proc = null;
@@ -131,11 +134,6 @@ export class Supervised {
     return this.tail.slice(-lines);
   }
 
-  /**
-   * Stop the process group. SIGKILL is delivered immediately and is what the
-   * crash scenarios use; anything else is followed by a SIGKILL if the process
-   * is still there five seconds later.
-   */
   /** SIGKILL any process group this instance started that is still around. */
   private reap(): void {
     for (const pid of this.spawned) {
@@ -148,6 +146,11 @@ export class Supervised {
     }
   }
 
+  /**
+   * Stop the process group. SIGKILL is delivered immediately and is what the
+   * crash scenarios use; anything else is followed by a SIGKILL if the process
+   * is still there five seconds later.
+   */
   async stop(signal: NodeJS.Signals = "SIGTERM"): Promise<void> {
     const proc = this.proc;
     if (!proc?.pid) {

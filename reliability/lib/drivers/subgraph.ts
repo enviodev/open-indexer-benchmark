@@ -30,7 +30,7 @@ export const subgraphDriver: DriverFactory = (ctx) => {
         template
           .replaceAll("__START_BLOCK__", String(ctx.startBlock))
           .replaceAll(
-            "__END_BLOCK_LINE__",
+            "# __END_BLOCK__",
             ctx.endBlock === null ? "" : `endBlock: ${ctx.endBlock}`
           )
       );

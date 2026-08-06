@@ -1,16 +1,15 @@
 name: Reliability
 
-# The reliability scenarios, one job per (scenario, tool) pair.
+# The reliability scenarios, one job per (scenario, tool) pair, all at once.
 #
-# Unlike the throughput benchmark these jobs measure nothing that contention can
-# distort — no rate is reported — so they all run at once. What they do need is
-# a machine to themselves for Docker and a fixed set of ports, which is exactly
-# what one GitHub runner per job provides.
+# The throughput benchmark has to stagger its scenarios because they share data
+# endpoints and each one is a rate that contention would distort. Nothing here
+# reads a real source — every job generates its own chain in-process — so there
+# is nothing to contend for. What a job does need is a machine to itself for
+# Docker and a fixed set of ports, which is exactly what one runner per job is.
 #
-# On a pull request only the harness self-check and the cheapest scenario run:
-# the full matrix is thirty jobs, and a pull request that did not touch the
-# suite would be re-running all of it to learn nothing. `main`, the schedule and
-# manual runs are full, because they publish the README table.
+# Pull requests run the full matrix too, and only run at all when the diff
+# touches the suite (see the paths below).
 
 on:
   workflow_dispatch:
@@ -80,40 +79,52 @@ jobs:
       scenarios: ${{ steps.matrix.outputs.scenarios }}
       full: ${{ steps.matrix.outputs.full }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - id: matrix
         env:
           TOOLS: ${{ inputs.tools }}
           SCENARIOS: ${{ inputs.scenarios }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
+          # Read the lists from the registries the runner itself uses, rather
+          # than restating them here. A scenario added to lib/scenarios/index.ts
+          # and forgotten in this file would otherwise still set FULL=true, and
+          # the README step below would replace the published matrix with one
+          # missing a column — the exact outcome the publish gate exists to
+          # prevent.
+          ALL_TOOLS=$(node -e "import('./reliability/lib/drivers/index.ts').then(m => console.log(JSON.stringify(m.TOOLS)))")
+          ALL_SCENARIOS=$(node -e "import('./reliability/lib/scenarios/index.ts').then(m => console.log(JSON.stringify(m.SCENARIO_KEYS)))")
+
           if [ -z "$TOOLS" ]; then
-            TOOLS_JSON='["envio","ponder","rindexer","subgraph","subquery"]'
+            TOOLS_JSON="$ALL_TOOLS"
           else
             TOOLS_JSON=$(echo "$TOOLS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
-
-          if [ -n "$SCENARIOS" ]; then
-            SCENARIOS_JSON=$(echo "$SCENARIOS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
-          elif [ "$EVENT_NAME" = "pull_request" ]; then
-            # Restart recovery exercises the whole loop — start, kill, resume,
-            # verify — in the least time, so it is the one worth paying for on
-            # every pull request.
-            SCENARIOS_JSON='["restart-recovery"]'
+          if [ -z "$SCENARIOS" ]; then
+            SCENARIOS_JSON="$ALL_SCENARIOS"
           else
-            SCENARIOS_JSON='["restart-recovery","db-outage","reorg","hostile-data","head-latency","rpc-chaos"]'
+            SCENARIOS_JSON=$(echo "$SCENARIOS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
 
           # Only a run covering every tool and every scenario may publish the
           # README table: a partial one would replace a complete matrix with a
-          # single column and read as though the rest had been measured and
-          # found missing.
-          ALL_TOOLS='["envio","ponder","rindexer","subgraph","subquery"]'
-          ALL_SCENARIOS='["restart-recovery","db-outage","reorg","hostile-data","head-latency","rpc-chaos"]'
+          # few columns and read as though the rest had been measured and found
+          # missing. Compared sorted, so a dispatch naming the same things in a
+          # different order still counts as full.
           FULL=false
-          if [ "$TOOLS_JSON" = "$ALL_TOOLS" ] && [ "$SCENARIOS_JSON" = "$ALL_SCENARIOS" ]; then
+          if [ "$(echo "$TOOLS_JSON" | jq -cS .)" = "$(echo "$ALL_TOOLS" | jq -cS .)" ] \
+            && [ "$(echo "$SCENARIOS_JSON" | jq -cS .)" = "$(echo "$ALL_SCENARIOS" | jq -cS .)" ]; then
             FULL=true
           fi
 
+          echo "Tools:     $TOOLS_JSON"
+          echo "Scenarios: $SCENARIOS_JSON"
           echo "tools=$TOOLS_JSON" >> "$GITHUB_OUTPUT"
           echo "scenarios=$SCENARIOS_JSON" >> "$GITHUB_OUTPUT"
           echo "full=$FULL" >> "$GITHUB_OUTPUT"
@@ -260,8 +271,6 @@ jobs:
               issue_number: context.issue.number,
               body: [
                 '## Reliability',
-                '',
-                'Pull requests run one scenario; the full suite runs on `main` and weekly.',
                 '',
                 detail,
                 '',

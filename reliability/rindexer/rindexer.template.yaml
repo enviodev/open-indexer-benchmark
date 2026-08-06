@@ -28,7 +28,7 @@ contracts:
       - network: ethereum
         address: "0x5fbdb2315678afecb367f032d93f642f64180aa3"
         start_block: "__START_BLOCK__"
-        __END_BLOCK_LINE__
+        # __END_BLOCK__
     abi: ./abis/MockToken.abi.json
     include_events:
       - Transfer

@@ -75,6 +75,18 @@ if (covered.length === 0) {
   process.exit(1);
 }
 
+// Scenario keys are what the workflow matrix is written in, so a mismatch
+// between the two is worth failing on rather than publishing around. Checked
+// before anything is written: the workflow's README step runs even when a
+// previous step failed, so a non-zero exit here does not stop a file this
+// script had already produced from being committed.
+for (const result of results) {
+  if (!scenarioByKey(result.scenario)) {
+    console.error(`Unknown scenario "${result.scenario}" in the collected results.`);
+    process.exit(1);
+  }
+}
+
 writeFileSync(join(OUT_DIR, "reliability-summary.md"), buildSummaryTable(results, covered));
 writeFileSync(join(OUT_DIR, "reliability-detail.md"), buildReport(results, covered));
 
@@ -85,13 +97,4 @@ console.log(
 if (missing.length > 0) {
   console.log(`No result reported for: ${missing.join(", ")}`);
   writeFileSync(join(OUT_DIR, "reliability-missing.txt"), missing.join("\n"));
-}
-
-// Scenario keys are what the workflow matrix is written in, so a mismatch
-// between the two is worth failing on rather than publishing around.
-for (const result of results) {
-  if (!scenarioByKey(result.scenario)) {
-    console.error(`Unknown scenario "${result.scenario}" in the collected results.`);
-    process.exit(1);
-  }
 }

@@ -61,6 +61,13 @@ export const dbOutage: Scenario = {
     const stopTicker = startTicker(ctx.chain, BLOCK_INTERVAL_MS);
     const checks: Check[] = [];
     let worstRecoveryS = 0;
+    /**
+     * The outage currently applied, so it is undone however this block exits.
+     * A database left stopped or SIGSTOPped would fail every scenario that ran
+     * after it in the same process, and each of those would be reported as an
+     * unmeasurable run rather than as this scenario's failure.
+     */
+    let applied: OutageKind | null = null;
 
     try {
       for (const [index, outage] of OUTAGES.entries()) {
@@ -69,9 +76,11 @@ export const dbOutage: Scenario = {
         const progressBefore = await ctx.progress();
 
         ctx.log(`Outage ${index + 1}/${OUTAGES.length}: ${outage.kind} for ${outage.seconds}s`);
+        applied = outage.kind;
         await ctx.db.outage(outage.kind);
         await sleep(outage.seconds * 1_000);
         await ctx.db.restore(outage.kind);
+        applied = null;
 
         const restoredAt = Date.now();
         // Recovery means catching up with the head, which has moved on during
@@ -103,6 +112,7 @@ export const dbOutage: Scenario = {
       }
     } finally {
       stopTicker();
+      if (applied) await ctx.db.restore(applied).catch(() => {});
     }
 
     // Counted before the data check is appended, so it stays a count of

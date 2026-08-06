@@ -137,7 +137,9 @@ export const hostileData: Scenario = {
 
     const failed = checks.filter((check) => check.status === "fail");
     const soft = checks.filter((check) => check.status === "degraded");
-    ctx.metric("crash loops", ctx.crashes.length);
+    // No crash metric here: the harness publishes that count as a column of its
+    // own for every scenario, and a second one under the same name was
+    // rendering as a duplicate column in the table.
 
     return {
       status: worst(checks),
@@ -151,8 +153,8 @@ export const hostileData: Scenario = {
                 "stored the values"
               }` +
               (ctx.crashes.length > 0
-                ? `, after ${ctx.crashes.length} restarts`
-                : ", without restarting"),
+                ? `, after ${ctx.crashes.length} crashes`
+                : ", without crashing"),
       checks,
     };
   },

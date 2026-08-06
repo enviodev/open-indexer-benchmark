@@ -9,7 +9,11 @@
 # crashed at all, which is the single most important thing these runs measure.
 services:
   subquery-node:
-    image: subquerynetwork/subql-node-ethereum:latest
+    # Pinned rather than `latest`. A reliability result is a claim about a
+    # specific version of a tool, and an image that changes underneath the
+    # scenarios would turn a regression into a mystery. It matches the
+    # `@subql/node-ethereum` version in package.json; bump both together.
+    image: subquerynetwork/subql-node-ethereum:v5.6.2
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
