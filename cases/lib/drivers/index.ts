@@ -15,7 +15,8 @@ export type { Ctx, Driver, DriverFactory, Snapshot } from "./common.ts";
 export const DRIVERS: Record<string, DriverFactory> = {
   envio: envioDriver("hypersync"),
   "envio-rpc": envioDriver("rpc"),
-  "envio-subgraph": envioSubgraphDriver,
+  "envio-subgraph": envioSubgraphDriver("hypersync"),
+  "envio-subgraph-rpc": envioSubgraphDriver("rpc"),
   ponder: ponderDriver,
   rindexer: rindexerDriver,
   subgraph: subgraphDriver,
@@ -66,6 +67,13 @@ export const TOOLS: Record<
     toolUrl: "https://envio.dev",
     source: "HyperSync",
     sourceUrl: HYPERSYNC_URL,
+    storage: "Postgres",
+  },
+  "envio-subgraph-rpc": {
+    name: "Envio Subgraph",
+    toolUrl: "https://envio.dev",
+    source: "RPC",
+    sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
   },
   ponder: {

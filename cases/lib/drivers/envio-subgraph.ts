@@ -17,14 +17,19 @@ const PG_PORT = 5433;
 const CLI_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "envio-subgraph");
 
 /**
- * Runs the case's existing Subgraph project on HyperIndex.
+ * Runs the case's existing Subgraph project on HyperIndex, reading from
+ * HyperSync or from a plain RPC endpoint.
  *
  * There is no envio config anywhere in that directory — `subgraph.yaml` is the
  * config, and envio picks it up because no `config.yaml` sits beside it. The
  * mappings, schema and ABIs are the same files Graph Node reads, and
  * `generated/` is built by the project's own graph-cli.
  */
-export const envioSubgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
+export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
+  config,
+  rpcUrl,
+  endBlock,
+}) => {
   const dir = resolve(config.dir, "subgraph");
   const envio = resolve(CLI_DIR, "node_modules", ".bin", "envio");
   const env = {
@@ -32,9 +37,10 @@ export const envioSubgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock })
     ENVIO_TUI: "false",
     ENVIO_HASURA: "false",
     ENVIO_PG_PORT: String(PG_PORT),
-    // HyperSync is the source in subgraph mode; RPC is there for contract calls
-    // and as the block-timestamp fallback.
-    ENVIO_SUBGRAPH_RPC: rpcUrl,
+    // A bare URL leaves HyperSync as the source and keeps RPC for contract
+    // calls and the block-timestamp fallback; `for: sync` makes it the source.
+    ENVIO_SUBGRAPH_RPC:
+      mode === "rpc" ? JSON.stringify({ url: rpcUrl, for: "sync" }) : rpcUrl,
   };
   let proc: ChildProcess | null = null;
   let done = false;
