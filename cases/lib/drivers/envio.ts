@@ -2,7 +2,11 @@ import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, kill, psql, start } from "../process.ts";
-import { blocksIndexed, type DriverFactory } from "./common.ts";
+import {
+  blocksIndexed,
+  createProgressReader,
+  type DriverFactory,
+} from "./common.ts";
 
 const PG_PORT = 5433;
 export const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${PG_PORT}/envio-dev`;
@@ -24,6 +28,8 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
   };
   let proc: ChildProcess | null = null;
   let done = false;
+
+  const readEvents = createProgressReader(ENVIO_DB_URL, config);
 
   return {
     dbUrl: ENVIO_DB_URL,
@@ -52,13 +58,23 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
       proc.on("exit", () => (done = true));
     },
     async snapshot() {
-      const row = await psql(
-        ENVIO_DB_URL,
-        "SELECT events_processed, progress_block FROM public.envio_chains LIMIT 1"
-      );
+      // Envio's own progress row is the better reading — it advances through
+      // ranges that produced no events — but it is written on a throttle, and
+      // a batch's entity rows land before it. On a short run that gap is the
+      // whole measurement: a range indexed in sixteen seconds has been seen to
+      // finish, commit all 19,125 rows, and exit with the progress row still
+      // reading zero. So the event tables are counted too, and the higher of
+      // the two counts wins. Both are committed work either way.
+      const [row, rows] = await Promise.all([
+        psql(
+          ENVIO_DB_URL,
+          "SELECT events_processed, progress_block FROM public.envio_chains LIMIT 1"
+        ),
+        readEvents().catch(() => ({ events: 0 })),
+      ]);
       const [eventsStr, blockStr] = row.split("|");
       return {
-        events: parseInt(eventsStr, 10) || 0,
+        events: Math.max(parseInt(eventsStr, 10) || 0, rows.events),
         blocks: blocksIndexed(config, parseInt(blockStr, 10) || 0),
       };
     },

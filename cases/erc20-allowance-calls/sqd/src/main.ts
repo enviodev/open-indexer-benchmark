@@ -6,7 +6,7 @@ import { Contract, events } from "./abi/ERC20";
 processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
   // One pass to decode, then every allowance read at once. A batch handler is
   // where a squid can overlap external calls: reading inside the decode loop
-  // would serialise the batch behind one 300ms round trip per approval.
+  // would serialise the batch behind one 200ms round trip per approval.
   const decoded = ctx.blocks.flatMap((block) =>
     block.logs.map((log) => {
       const { owner, spender, value } = events.Approval.decode(log);

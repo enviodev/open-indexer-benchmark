@@ -7,18 +7,18 @@ answer. This scenario is about what happens while it waits.
 Index every `Approval` on the eight busiest ERC-20s on Ethereum Mainnet, and for
 each one that is not a revocation, read the allowance the token now reports for
 that owner and spender, at the block the approval was in. 15,703 of the 19,125
-approvals in the range need a call, and every call takes 300ms.
+approvals in the range need a call, and every call takes 200ms.
 
-The 300ms is not up to the indexer: the benchmark serves the calls itself, at a
+The 200ms is not up to the indexer: the benchmark serves the calls itself, at a
 fixed latency, identically for every tool. How many of them are outstanding at
 any moment *is* up to the indexer, and that is the whole measurement. The
 endpoint neither rate limits nor queues — hand it ten thousand calls at once and
-ten thousand are in flight, all answered 300ms later — so a tool is never
+ten thousand are in flight, all answered 200ms later — so a tool is never
 waiting on anything but its own scheduling.
 
 The difference is not subtle. An indexer that hands the endpoint a whole batch
 at a time gets through the range in seconds. One that waits for each call before
-starting the next pays 15,703 × 300ms — an hour and a quarter — for the same
+starting the next pays 15,703 × 200ms — the better part of an hour — for the same
 work, and the ten-minute cap stops it long before that.
 
 ## Benchmark Specification
@@ -31,7 +31,7 @@ work, and the ten-minute cap stops it long before that.
   checked against `expected.json`
 - **Contract calls**: `allowance(owner, spender)`, at the event's block, for
   every approval with a non-zero value — 15,703 of the range's 19,125 approvals,
-  or 14,114 once identical calls in the same block are collapsed. 300ms each,
+  or 14,114 once identical calls in the same block are collapsed. 200ms each,
   with no limit on how many may be outstanding
 - **Features**: `event decoding`, `external calls`, `storage write`,
   `storage update on conflict`
@@ -75,7 +75,7 @@ rather than the indexer.
 So the benchmark answers the calls itself. Every tool is pointed at a local
 JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
 
-- **holds every intercepted call for 300ms**, so waiting is visible and equal;
+- **holds every intercepted call for 200ms**, so waiting is visible and equal;
 - **imposes nothing else** — no rate limit, no concurrency ceiling, no queue.
   Whatever arrives together is served together, so the peak number of calls in
   flight is a property of the indexer rather than of a wall it ran into. (The
@@ -95,14 +95,14 @@ JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
 
 The run log reports what the endpoint served for each phase, including the peak
 number of calls in flight. For most rows that figure explains the rate on its
-own: the work is 15,703 × 300ms of waiting, and the only variable is how much of
+own: the work is 15,703 × 200ms of waiting, and the only variable is how much of
 it happened concurrently.
 
 One caveat about the top of the table. Past a few thousand calls in flight, what
-bounds a run is no longer the 300ms: a call in flight is a socket, and opening
+bounds a run is no longer the 200ms: a call in flight is a socket, and opening
 them costs the client about a millisecond each. A bare Node script firing 5,000
 concurrent `fetch` calls at this endpoint takes about six seconds to get them
-all out, against the 300ms the endpoint needs to answer them. So an indexer that
+all out, against the 200ms the endpoint needs to answer them. So an indexer that
 already issues its whole batch at once is being measured on its HTTP client as
 much as on its scheduling — which is also true of it in production, but worth
 knowing before reading a small gap between two fast rows as a difference in how
@@ -254,7 +254,7 @@ Solidity types, so the two tables look like the ones it generates.
 
 The processor hands the handler a batch of blocks, so the handler decodes the
 whole batch first and then issues every allowance read at once through
-`Promise.all`. Reading inside the decode loop would put one 300ms round trip
+`Promise.all`. Reading inside the decode loop would put one 200ms round trip
 between each approval and the next.
 
 The RPC client's `capacity` is raised from its default of 10 requests in flight

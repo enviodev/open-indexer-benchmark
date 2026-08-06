@@ -61,7 +61,7 @@ How fast can an indexer write? Every USDC transfer is stored once, with nothing 
 
 ### External Contract Calls
 
-Not everything an indexer needs is in the logs. Here every approval on the eight busiest ERC-20s is followed by a read of the allowance the token reports for that pair, at that block — 15,703 calls over the range, 300ms each, answered by the benchmark itself so every tool waits exactly as long. Nothing caps how many an indexer may have outstanding, so what separates the rows is how many of those waits it manages to take at the same time.
+Not everything an indexer needs is in the logs. Here every approval on the eight busiest ERC-20s is followed by a read of the allowance the token reports for that pair, at that block — 15,703 calls over the range, 200ms each, answered by the benchmark itself so every tool waits exactly as long. Nothing caps how many an indexer may have outstanding, so what separates the rows is how many of those waits it manages to take at the same time.
 
 <!-- BENCHMARK:erc20-allowance-calls:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |

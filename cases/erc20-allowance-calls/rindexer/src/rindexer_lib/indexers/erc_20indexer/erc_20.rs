@@ -14,7 +14,7 @@
 // alloy than this project, so the provider it hands the handler does not
 // implement the `Provider` trait as this crate sees it, and its helper takes
 // the block to read at anyway. What matters is that the calls are issued for
-// the whole batch at once — a rust project gets the batch, so the 300ms round
+// the whole batch at once — a rust project gets the batch, so the 200ms round
 // trips overlap instead of adding up.
 use alloy::{
     primitives::{Address, U256},

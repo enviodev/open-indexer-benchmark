@@ -42,7 +42,7 @@ const START_BLOCK = 25_600_000;
 // 1,200 blocks hold 19,125 approvals, 15,703 of which need a call. An indexer
 // that issues a whole batch of them at once gets through the range in the time
 // its slowest batch takes; one that waits for each call before starting the
-// next needs 15,703 × 300ms, or an hour and a quarter. The range is sized so
+// next needs 15,703 × 200ms, or the better part of an hour. The range is sized so
 // the first finishes comfortably inside the ten-minute cap, which leaves what
 // the table reports for the rest a matter of how far they got.
 const VERIFY_END_BLOCK = 25_601_199;
@@ -118,7 +118,7 @@ export const caseConfig: CaseConfig = {
     // only limit the endpoint imposes: it answers as many calls at once as it
     // is handed, so how many an indexer has outstanding is the indexer's own
     // decision and nothing else's.
-    latencyMs: 300,
+    latencyMs: 200,
     answer: answerCall,
   },
 
