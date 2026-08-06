@@ -2,7 +2,7 @@
 //
 //   CHANGED_FILES="$(git diff --name-only base...head)" node scripts/select-scope.ts
 //
-// A full run is one job per indexer per scenario — twenty-one at the time of
+// A full run is one job per indexer per scenario — twenty-four at the time of
 // writing, each up to 45 minutes against shared data endpoints, most of them
 // re-measuring code the pull request never touched. On a pull request the run
 // is narrowed to what changed:
@@ -35,14 +35,17 @@
 // README table and the table has to hold a full set of results.
 
 /** Indexers whose project directory is not named after them. */
-const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio" };
+const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio", "sqd-rpc": "sqd" };
 
 /**
  * Driver modules under cases/lib/drivers that back more than one indexer.
  * Like INDEXER_DIRS, this duplicates a fact the drivers registry owns;
  * test-scope.ts pins both against the registry so they cannot drift silently.
  */
-const DRIVER_INDEXERS: Record<string, string[]> = { envio: ["envio", "envio-rpc"] };
+const DRIVER_INDEXERS: Record<string, string[]> = {
+  envio: ["envio", "envio-rpc"],
+  sqd: ["sqd", "sqd-rpc"],
+};
 
 /** Driver modules that are shared plumbing rather than one tool's driver. */
 const SHARED_DRIVERS = new Set(["common", "index"]);

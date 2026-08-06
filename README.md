@@ -14,7 +14,7 @@ The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s re
 
 ## Contributing
 
-Contributions are welcome — we already have some from the [SQD](https://www.sqd.ai) team. Open an issue or a pull request to add an indexer, add a scenario, report a result that looks wrong, or improve the methodology. Indexer teams especially: nobody knows your tool better than you do. Or just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
+Contributions are welcome — we already have some from the [SQD](https://sqd.dev) team. Open an issue or a pull request to add an indexer, add a scenario, report a result that looks wrong, or improve the methodology. Indexer teams especially: nobody knows your tool better than you do. Or just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
 
 
 ## Scenarios
@@ -27,7 +27,7 @@ How well does an indexer cope with data it has to read back? Every rETH transfer
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
 | [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 17,107.6 | 125,206.5 | — | ✅ | Postgres 2.2 MB |
-| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 703.4 | 5,357.2 | 24.3x slower | ✅ | Postgres 2.2 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 703.4 | 5,357.2 | 24.3x slower | ✅ | Postgres 2.2 MB |
 | [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 581.2 | 4,166.6 | 29.4x slower | ✅ | Postgres 2.2 MB |
 | [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 493.7 | 3,887.6 | 34.7x slower | ✅ | Postgres 4.4 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 64.6 | 851.1 | 264.7x slower | ✅ | Postgres 3.4 MB |
@@ -46,7 +46,7 @@ How fast can an indexer write? Every USDC transfer is stored once, with nothing 
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
 | [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 73,741.2 | 7,955.8 | — | ✅ | Postgres 1.4 MB |
-| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 13,887.4 | 1,635.3 | 5.3x slower | ✅ | Postgres 1.4 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 13,887.4 | 1,635.3 | 5.3x slower | ✅ | Postgres 1.4 MB |
 | [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 9,662.8 | 1,197.3 | 7.6x slower | ✅ | Postgres 3.4 MB |
 | [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 841.2 | 119.0 | 87.7x slower | ✅ | Postgres 1.4 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 228.9 | 29.2 | 322.2x slower | ✅ | Postgres 2.5 MB |
@@ -65,14 +65,14 @@ What happens when you do not know the contracts up front? The indexer watches th
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
 | [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 11,888.2 | 3,262.4 | — | ✅ | Postgres 35.2 MB |
-| [Sqd](https://www.sqd.ai) | [SQD](https://docs.sqd.ai/subsquid-network/overview/) | 3,710.7 | 1,071.7 | 3.2x slower | ❌ (1) | Postgres 33.4 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 3,710.7 | 1,071.7 | 3.2x slower | ❌ (1) | Postgres 33.4 MB |
 | [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 2,796.0 | 767.3 | 4.3x slower | ✅ | Postgres 35.3 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 483.9 | 132.8 | 24.6x slower | ✅ | Postgres 64.2 MB |
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 97.4 | 19.3 | 122x slower | ❓ (2) | Postgres ~73.0 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (3) | — |
 | [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (4) | — |
 
-> **(1)** Sqd — 10,417 of 10,524 safe setups missing; 8 of 298 module transactions missing; 18 of 23 fallback handler changes missing; 1 of 4 guard changes missing; 443 of 706 module enables missing
+> **(1)** Squid SDK — 10,417 of 10,524 safe setups missing; 8 of 298 module transactions missing; 18 of 23 fallback handler changes missing; 1 of 4 guard changes missing; 443 of 706 module enables missing
 > **(2)** Subgraph — missing 73% of the data: the verification range was not finished within 600s
 > **(3)** SubQuery — indexed nothing in 600s, so there was no data to verify
 > **(4)** Rindexer — its factory filter takes one factory per contract — `Contract using factory filter must use same factory across all networks` — so the children of Safe's four canonical factory deployments cannot be collected into one contract, and its no-code mode names tables after events, which leaves no way to declare the eight events Safe emits under one topic in two layouts
@@ -105,4 +105,4 @@ Want to try it yourself? Each scenario page above has its own setup instructions
 ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node scripts/run-benchmarks.ts
 ```
 
-Arguments are passed straight through, so `node scripts/run-benchmarks.ts envio ponder --duration=100` picks which indexers to run and how long the window is, and `--cases=erc20-transfer-events` narrows it to one scenario. You will need an [Envio](https://envio.dev) API token for the RPC endpoint and the ground truth; the [SQD](https://portal.sqd.dev) key is only needed if you are running the Sqd implementation.
+Arguments are passed straight through, so `node scripts/run-benchmarks.ts envio ponder --duration=100` picks which indexers to run and how long the window is, and `--cases=erc20-transfer-events` narrows it to one scenario. You will need an [Envio](https://envio.dev) API token for the RPC endpoint and the ground truth; the [SQD](https://portal.sqd.dev) key is only needed for the Squid SDK run that reads from SQD Network.

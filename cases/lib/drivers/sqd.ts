@@ -11,17 +11,35 @@ import {
 const PG_PORT = 23_798;
 export const SQD_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/squid`;
 
-export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
+/**
+ * The Squid SDK reads chain data from either of two places, and the benchmark
+ * measures both: the SQD Network gateway, or an RPC endpoint. `SQD_SOURCE`
+ * tells the processor which to configure, and it configures only that one — a
+ * processor holding both falls back to RPC near the head, so the network row
+ * would be measuring a mixture. The RPC endpoint is dropped from the
+ * environment of the network run rather than merely left unread, so a stray
+ * RPC_ENDPOINT in the shell cannot put it back.
+ */
+export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
+  config,
+  rpcUrl,
+  endBlock,
+}) => {
   const dir = resolve(config.dir, "sqd");
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
-    RPC_ENDPOINT: rpcUrl,
     DB_PORT: String(PG_PORT),
     DB_HOST: "localhost",
     DB_NAME: "squid",
     DB_PASS: "postgres",
     SQD_END_BLOCK: String(endBlock),
+    SQD_SOURCE: source,
   };
+  if (source === "rpc") {
+    env.RPC_ENDPOINT = rpcUrl;
+  } else {
+    delete env.RPC_ENDPOINT;
+  }
   let processor: ChildProcess | null = null;
   let done = false;
 

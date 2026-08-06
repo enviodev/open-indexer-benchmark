@@ -116,6 +116,10 @@ check("envio project directory covers both envio variants", [
   "cases/erc20-transfer-events/envio/config.yaml",
 ], { "erc20-transfer-events": ["envio", "envio-rpc"] });
 
+check("sqd project directory covers both sqd variants", [
+  "cases/erc20-transfer-events/sqd/src/processor.ts",
+], { "erc20-transfer-events": ["sqd", "sqd-rpc"] });
+
 check("scenario run logic runs the whole scenario", ["cases/erc20-transfer-events/run.ts"], {
   "erc20-transfer-events": INDEXERS,
 });
@@ -124,9 +128,11 @@ check("expected output runs the whole scenario", [
   "cases/erc20-account-balances/expected.json",
 ], { "erc20-account-balances": INDEXERS });
 
-check("a driver runs its indexer in every scenario", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd"]));
+check("a driver runs its indexer in every scenario", ["cases/lib/drivers/ponder.ts"], inEvery(["ponder"]));
 
 check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.ts"], inEvery(["envio", "envio-rpc"]));
+
+check("the sqd driver covers both sqd variants", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd", "sqd-rpc"]));
 
 // Attributing a driver module to no indexer at all would select nothing and
 // publish the untouched carried-forward rows as if they had been re-measured.
