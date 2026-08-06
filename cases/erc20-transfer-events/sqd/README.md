@@ -4,15 +4,19 @@
 
 ## Data source
 
-The processor reads chain data from whichever source `SQD_SOURCE` names:
+The processor configures exactly one data source, named by `SQD_SOURCE`:
 
-- `network` (the default) keeps the SQD Network gateway configured, and
-  ingests from it. The gateway requires an API key as of 19 May 2026 — create
-  one at [portal.sqd.dev](https://portal.sqd.dev) and set `SQD_API_KEY`, or the
+- `network` (the default) sets the SQD Network gateway and no RPC endpoint.
+  The gateway requires an API key as of 19 May 2026 — create one at
+  [portal.sqd.dev](https://portal.sqd.dev) and set `SQD_API_KEY`, or the
   processor fails with `CREDENTIALS_INVALID` and indexes nothing.
-- `rpc` leaves `setGateway` off entirely, so `RPC_ENDPOINT` serves the whole
-  sync. This is the regime SQD documents for chains its network does not cover,
-  and it needs no API key.
+- `rpc` sets `RPC_ENDPOINT` and no gateway, so RPC serves the whole sync. This
+  is the regime SQD documents for chains its network does not cover, and it
+  needs no API key.
+
+Neither mode configures the other's source. A processor holding both falls back
+to RPC near the head, which would leave the network run measuring a mixture of
+the two.
 
 The benchmark measures both, as the `sqd` and `sqd-rpc` rows.
 

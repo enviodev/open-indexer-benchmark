@@ -28,18 +28,27 @@ const CONTRACT_ADDRESS = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' // USDC
 const rpcEndpoint = process.env.RPC_ENDPOINT
 
 // The benchmark measures the Squid SDK once per source it can read from, so
-// the same project runs twice. `setGateway` is what points the processor at
-// SQD Network; leaving it off is how SQD documents running on RPC alone, for
-// chains its network does not cover. The RPC endpoint is configured either
-// way — the gateway run still needs one for the unfinalised head.
+// the same project runs twice and `SQD_SOURCE` picks the source. Each mode
+// configures that source and nothing else: a processor given both falls back
+// to RPC near the head, which would leave the SQD Network row measuring a
+// mixture of the two rather than the network.
 const GATEWAY = 'https://v2.archive.subsquid.io/network/ethereum-mainnet'
-const base = new EvmBatchProcessor()
 
-export const processor = (process.env.SQD_SOURCE === 'rpc' ? base : base.setGateway(GATEWAY))
-    .setRpcEndpoint({
-        url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
-    })
-    .setFinalityConfirmation(75)
+function withSource(processor: EvmBatchProcessor): EvmBatchProcessor {
+    if (process.env.SQD_SOURCE === 'rpc') {
+        // No gateway at all, so the RPC endpoint serves the whole sync. This is
+        // the regime SQD documents for chains SQD Network does not cover, and
+        // the one case where finality has to be settled from the chain itself.
+        return processor
+            .setRpcEndpoint({
+                url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
+            })
+            .setFinalityConfirmation(75)
+    }
+    return processor.setGateway(GATEWAY)
+}
+
+export const processor = withSource(new EvmBatchProcessor())
     .setFields({
         block: {
             timestamp: true,
