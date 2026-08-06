@@ -11,7 +11,21 @@ import {
 const PG_PORT = 23_798;
 export const SQD_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/squid`;
 
-export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
+/**
+ * The Squid SDK reads chain data from either of two places, and the benchmark
+ * measures both: the SQD Network gateway, or the RPC endpoint on its own. The
+ * processor picks between them from `SQD_SOURCE` — "network" leaves the
+ * gateway configured, "rpc" drops it, which is the regime SQD documents for
+ * chains its network does not cover. Both modes hand the processor an RPC
+ * endpoint either way: the network mode still needs one for the unfinalised
+ * head, and configuring it in only one of the two runs would make the
+ * comparison about more than the source.
+ */
+export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
+  config,
+  rpcUrl,
+  endBlock,
+}) => {
   const dir = resolve(config.dir, "sqd");
   const env = {
     ...process.env,
@@ -21,6 +35,7 @@ export const sqdDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     DB_NAME: "squid",
     DB_PASS: "postgres",
     SQD_END_BLOCK: String(endBlock),
+    SQD_SOURCE: source,
   };
   let processor: ChildProcess | null = null;
   let done = false;

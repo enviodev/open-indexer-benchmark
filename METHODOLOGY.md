@@ -10,7 +10,7 @@ What the result table columns mean:
 
 **storage** — the scenario's own tables and indexes, excluding each tool's internal bookkeeping. A `~` means the tool covered part of the range and the figure is scaled up from what it did index.
 
-**source** — where the tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
+**source** — where the tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool. The Envio Indexer reads [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) or RPC, the [Squid SDK](https://sqd.dev/sdk/) reads [SQD Network](https://docs.sqd.dev/en/network/overview) or RPC; tools without their own pipeline read RPC only. Every RPC row is the same endpoint, [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
 
 The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 

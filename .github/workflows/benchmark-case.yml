@@ -159,7 +159,7 @@ jobs:
               docker compose -f "$CASE_DIR/subquery/docker-compose.yml" pull
               docker compose -f "$CASE_DIR/subquery/docker-compose.yml" build
               ;;
-            sqd)
+            sqd|sqd-rpc)
               docker compose -f "$CASE_DIR/sqd/docker-compose.yml" pull
               ;;
           esac
@@ -173,10 +173,12 @@ jobs:
           INDEXER: ${{ matrix.indexer }}
           DURATION: ${{ inputs.duration }}
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
-          # Sqd's archive (v2.archive.subsquid.io) requires an API key as of
-          # 19 May 2026. The @subsquid archive client reads it from SQD_API_KEY.
-          # Get a key at https://portal.sqd.dev and add it as the SQD_API_KEY
-          # repo secret. Without it, the sqd jobs report 0 (CREDENTIALS_INVALID).
+          # The SQD Network gateway (v2.archive.subsquid.io) requires an API key
+          # as of 19 May 2026. The @subsquid archive client reads it from
+          # SQD_API_KEY. Get a key at https://portal.sqd.dev and add it as the
+          # SQD_API_KEY repo secret. Without it, the sqd job reports 0
+          # (CREDENTIALS_INVALID). The sqd-rpc job never touches the gateway, so
+          # it runs without a key.
           SQD_API_KEY: ${{ secrets.SQD_API_KEY }}
 
       - name: Post results to job summary

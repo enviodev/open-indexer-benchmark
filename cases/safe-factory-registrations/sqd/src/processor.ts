@@ -38,8 +38,15 @@ export const FACTORIES_MODERN = [
 
 const rpcEndpoint = process.env.RPC_ENDPOINT
 
-export const processor = new EvmBatchProcessor()
-    .setGateway('https://v2.archive.subsquid.io/network/ethereum-mainnet')
+// The benchmark measures the Squid SDK once per source it can read from, so
+// the same project runs twice. `setGateway` is what points the processor at
+// SQD Network; leaving it off is how SQD documents running on RPC alone, for
+// chains its network does not cover. The RPC endpoint is configured either
+// way — the gateway run still needs one for the unfinalised head.
+const GATEWAY = 'https://v2.archive.subsquid.io/network/ethereum-mainnet'
+const base = new EvmBatchProcessor()
+
+export const processor = (process.env.SQD_SOURCE === 'rpc' ? base : base.setGateway(GATEWAY))
     .setRpcEndpoint({
         url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
     })
