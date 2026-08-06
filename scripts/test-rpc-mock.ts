@@ -5,9 +5,10 @@
 // The endpoint is the External Contract Calls scenario's measuring instrument:
 // every row in that table is a statement about how well an indexer kept it
 // busy. So the things a row depends on are what is pinned here — that the
-// latency is paid, that the concurrency ceiling holds, that a batch comes back
-// in the order it was asked for, and that a call the case does not define is
-// refused rather than quietly answered.
+// latency is paid, that nothing is ever queued or rate limited however much
+// arrives at once, that a batch comes back in the order it was asked for, and
+// that a call the case does not define is refused rather than quietly
+// answered.
 //
 // It needs no credentials: the upstream half is a local stub standing in for
 // the real endpoint.
@@ -150,8 +151,8 @@ try {
     JSON.stringify(batch)
   );
 
-  // ── Latency and the concurrency ceiling ──
-  const { latencyMs, maxConcurrent } = caseConfig.ethCall!;
+  // ── Latency, and that nothing else is imposed ──
+  const { latencyMs } = caseConfig.ethCall!;
 
   mock.reset();
   const oneStart = performance.now();
@@ -163,40 +164,40 @@ try {
     `took ${oneMs.toFixed(0)}ms`
   );
 
-  // A full slate of calls costs one round trip; one more than fits costs two.
+  // The endpoint neither queues nor rate limits, so a pile of calls arriving
+  // together costs one round trip however big the pile is. This is the property
+  // the whole scenario rests on: what limits an indexer has to be the indexer.
+  const PILE = 50;
   mock.reset();
-  const parallelStart = performance.now();
+  const pileStart = performance.now();
   await Promise.all(
-    Array.from({ length: maxConcurrent }, (_, i) => rpc(call(OWNER, SPENDER, 26_000_000 + i)))
+    Array.from({ length: PILE }, (_, i) => rpc(call(OWNER, SPENDER, 26_000_000 + i)))
   );
-  const parallelMs = performance.now() - parallelStart;
+  const pileMs = performance.now() - pileStart;
   check(
-    `serves ${maxConcurrent} at once in one round trip`,
-    parallelMs < latencyMs * 2,
-    `took ${parallelMs.toFixed(0)}ms`
+    `serves ${PILE} at once in one round trip`,
+    pileMs < latencyMs * 2,
+    `took ${pileMs.toFixed(0)}ms`
   );
   check(
-    "reports what it served",
-    mock.stats().calls === maxConcurrent && mock.stats().peakInFlight === maxConcurrent,
+    "reports every one of them as in flight together",
+    mock.stats().calls === PILE && mock.stats().peakInFlight === PILE,
     JSON.stringify(mock.stats())
   );
 
+  // Ten times as many are still all in flight at once — there is no ceiling for
+  // the rest to queue behind. Only concurrency is asserted here, not elapsed
+  // time: past a few dozen it is the client's own socket setup that decides how
+  // quickly the calls arrive, which is the same thing that will bound a real
+  // indexer long before this endpoint does.
+  const BIG = PILE * 10;
   mock.reset();
-  const overStart = performance.now();
   await Promise.all(
-    Array.from({ length: maxConcurrent + 1 }, (_, i) =>
-      rpc(call(OWNER, SPENDER, 27_000_000 + i))
-    )
-  );
-  const overMs = performance.now() - overStart;
-  check(
-    "queues the call that does not fit",
-    overMs >= latencyMs * 2,
-    `took ${overMs.toFixed(0)}ms for ${maxConcurrent + 1} calls`
+    Array.from({ length: BIG }, (_, i) => rpc(call(OWNER, SPENDER, 27_000_000 + i)))
   );
   check(
-    "never exceeds the ceiling",
-    mock.stats().peakInFlight <= maxConcurrent,
+    `takes ${BIG} at once without queueing any of them`,
+    mock.stats().peakInFlight === BIG,
     JSON.stringify(mock.stats())
   );
 } finally {

@@ -10,9 +10,9 @@ What the result table columns mean:
 
 **storage** — the scenario's own tables and indexes, excluding each tool's internal bookkeeping. A `~` means the tool covered part of the range and the figure is scaled up from what it did index.
 
-**source** — where the tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool. SQD reads the SQD network; tools without their own pipeline read [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
+**source** — where the tool reads chain data. A tool is benchmarked once per source it supports, so a fast tool on a slow source is not mistaken for a slow tool. The Envio Indexer reads [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) or RPC, the [Squid SDK](https://sqd.dev/sdk/) reads [SQD Network](https://docs.sqd.dev/en/network/overview) or RPC; tools without their own pipeline read RPC only. Every RPC row is the same endpoint, [Envio HyperRPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc).
 
-**contract calls** — a scenario whose handlers read contract state does not read it from a real node. The benchmark answers those calls itself, at a fixed latency and a fixed number in flight, from the call's own arguments — so every tool waits exactly as long for exactly the same answers, and what the scenario measures is how much of that ceiling each one keeps in use. Any other call is refused rather than answered, and the answers appear in no log, so a matching checksum is proof the calls were really made.
+**contract calls** — a scenario whose handlers read contract state does not read it from a real node. The benchmark answers those calls itself, at a fixed latency, from the call's own arguments, so every tool waits exactly as long for exactly the same answers. Nothing limits how many it will answer at once, which leaves how many an indexer has outstanding the one thing the scenario measures. Any other call is refused rather than answered, and the answers appear in no log, so a matching checksum is proof the calls were really made.
 
 The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 

@@ -310,8 +310,8 @@ function unsupportedResult(key: string, reason: string): BenchmarkResult {
 
 /**
  * What the case's own endpoint served during the phase that just ended. Peak
- * concurrency is the number that explains a row: the ceiling is the same for
- * every tool, so a rate is mostly the story of how much of it was ever in use.
+ * concurrency is the number that explains a row: the endpoint imposes no limit
+ * of its own, so it is how many calls the tool chose to have outstanding.
  */
 function reportCalls(mock: RpcMock | null) {
   if (!mock) return;
@@ -666,8 +666,7 @@ async function run(config: CaseConfig) {
   if (config.ethCall) {
     console.log(
       `Contract calls are served by the benchmark at ${rpcUrl}: ` +
-        `${config.ethCall.latencyMs}ms each, at most ` +
-        `${config.ethCall.maxConcurrent} at a time`
+        `${config.ethCall.latencyMs}ms each, as many at once as it is given`
     );
   }
   console.log(`Running: ${selected.join(", ")}\n`);

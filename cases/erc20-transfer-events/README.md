@@ -25,13 +25,13 @@ There is no aggregation — accounts, balances, and allowances are intentionally
 - **Envio** — [envio/](./envio/)
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
-- **Sqd** — [sqd/](./sqd/)
+- **Squid SDK** — [sqd/](./sqd/)
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
 
-Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
+Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Squid SDK run that reads from SQD Network.
 
 ```bash
 ENVIO_API_TOKEN=your-token node cases/erc20-transfer-events/run.ts
@@ -81,11 +81,13 @@ Runs natively via `ponder start` — the production command, which builds once a
 
 Runs a native binary (`rindexer start indexer`, so no GraphQL server) with a separate Postgres container. Uses `no-code` mode with declarative YAML config. Only the Transfer event is included, so rindexer creates a single raw `transfer` event table and no aggregation tables.
 
-### Sqd (Subsquid)
+### Squid SDK
 
 Runs the processor as a native Node.js process against a Docker Postgres instance. The handler batches all Transfer events in memory per block range, then inserts them.
 
-Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+The `sqd` variant ingests from the SQD Network gateway (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+
+The `sqd-rpc` variant runs the same project with the gateway left off (`SQD_SOURCE=rpc`), so it ingests from the RPC endpoint alone — the regime SQD documents for chains SQD Network does not cover. It needs no API key. Each variant configures only its own source: the `sqd` run is given no RPC endpoint at all, since a processor holding both falls back to RPC near the head and its row would then be measuring a mixture of the two.
 
 ### Subgraph
 

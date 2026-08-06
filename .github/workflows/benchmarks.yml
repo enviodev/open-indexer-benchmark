@@ -69,7 +69,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ -z "$INDEXERS" ]; then
-            INDEXERS_JSON='["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]'
+            INDEXERS_JSON='["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd","sqd-rpc"]'
           else
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
@@ -100,7 +100,7 @@ jobs:
           fi
 
           # Every scenario measures every indexer, unless a pull request
-          # narrows it: there a full run is twenty-eight long jobs against shared
+          # narrows it: there a full run is thirty-two long jobs against shared
           # data endpoints, nearly all of them re-measuring untouched code.
           # `main` and manual runs stay full — they publish the README table,
           # which has to hold a complete set of results.

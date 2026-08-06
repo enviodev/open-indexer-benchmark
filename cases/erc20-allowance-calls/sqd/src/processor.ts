@@ -38,19 +38,34 @@ const CONTRACT_ADDRESSES = [
 
 const rpcEndpoint = process.env.RPC_ENDPOINT
 
-export const processor = new EvmBatchProcessor()
-    .setGateway('https://v2.archive.subsquid.io/network/ethereum-mainnet')
-    .setRpcEndpoint({
-        url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
-        // The allowance reads are the whole case, and the handler issues a
-        // batch of them at once. The client's default of 10 requests in flight
-        // would cap the run at 10 calls at a time however many the handler
-        // hands it, leaving nine tenths of the endpoint idle; raised to the
-        // endpoint's own ceiling so what limits the run is the endpoint rather
-        // than the client's queue.
-        capacity: 100,
-    })
-    .setFinalityConfirmation(75)
+// The benchmark measures the Squid SDK once per source it can read from, so
+// the same project runs twice and `SQD_SOURCE` picks the source.
+const GATEWAY = 'https://v2.archive.subsquid.io/network/ethereum-mainnet'
+
+function withSource(processor: EvmBatchProcessor): EvmBatchProcessor {
+    // Unlike the other cases, the RPC endpoint is configured in both modes:
+    // this case's handler reads contract state, and those reads have to go
+    // somewhere whichever source the chain data comes from. The allowance reads
+    // are the whole case and the handler issues a batch of them at once, so the
+    // client's default of 10 requests in flight would decide the row; raised so
+    // that what limits the run is the endpoint rather than the client's queue.
+    const withRpc = processor
+        .setRpcEndpoint({
+            url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
+            capacity: 1000,
+        })
+        .setFinalityConfirmation(75)
+
+    if (process.env.SQD_SOURCE === 'rpc') {
+        // No gateway at all, so the RPC endpoint serves the sync as well as the
+        // calls. This is the regime SQD documents for chains SQD Network does
+        // not cover.
+        return withRpc
+    }
+    return withRpc.setGateway(GATEWAY)
+}
+
+export const processor = withSource(new EvmBatchProcessor())
     .setFields({
         block: {
             timestamp: true,

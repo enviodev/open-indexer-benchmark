@@ -9,16 +9,16 @@ each one that is not a revocation, read the allowance the token now reports for
 that owner and spender, at the block the approval was in. 15,703 of the 19,125
 approvals in the range need a call, and every call takes 300ms.
 
-That number is not up to the indexer, and neither is how many calls it may have
-outstanding: the benchmark serves the calls itself, at a fixed latency and a
-fixed concurrency ceiling, identically for every tool. What is left to measure
-is the only thing that differs — how much of that ceiling each indexer manages
-to keep in use.
+The 300ms is not up to the indexer: the benchmark serves the calls itself, at a
+fixed latency, identically for every tool. How many of them are outstanding at
+any moment *is* up to the indexer, and that is the whole measurement. The
+endpoint neither rate limits nor queues — hand it ten thousand calls at once and
+ten thousand are in flight, all answered 300ms later — so a tool is never
+waiting on anything but its own scheduling.
 
-The difference is not subtle. An indexer that keeps the endpoint's hundred call
-slots busy gets through the range in under a minute. One that waits for each
-call before starting the next needs the better part of an hour and a half for
-the same work.
+The difference is not subtle. An indexer that hands the endpoint a whole batch
+at a time pays 300ms per batch. One that waits for each call before starting the
+next pays 15,703 × 300ms — an hour and a quarter — for the same work.
 
 ## Benchmark Specification
 
@@ -30,7 +30,8 @@ the same work.
   checked against `expected.json`
 - **Contract calls**: `allowance(owner, spender)`, at the event's block, for
   every approval with a non-zero value — 15,703 of the range's 19,125 approvals,
-  or 14,114 once identical calls in the same block are collapsed
+  or 14,114 once identical calls in the same block are collapsed. 300ms each,
+  with no limit on how many may be outstanding
 - **Features**: `event decoding`, `external calls`, `storage write`,
   `storage update on conflict`
 
@@ -74,9 +75,11 @@ So the benchmark answers the calls itself. Every tool is pointed at a local
 JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
 
 - **holds every intercepted call for 300ms**, so waiting is visible and equal;
-- **serves at most 100 of them at once**, the way a provider's per-key
-  concurrency limit does — beyond that they queue. Without a ceiling the case
-  would measure how large a batch each tool happens to hand its handlers;
+- **imposes nothing else** — no rate limit, no concurrency ceiling, no queue.
+  Whatever arrives together is served together, so the peak number of calls in
+  flight is a property of the indexer rather than of a wall it ran into. (The
+  practical ceiling is the open-file limit, since a call in flight is a socket;
+  raise `ulimit -n` before concluding a tool stopped scaling on its own.)
 - **answers from the call's own arguments**, `sha256(token, owner, spender,
   block)` truncated to 64 bits, which is what makes the run reproducible. The
   value is in no log, so an indexer's rows can only match the ground truth if it
@@ -90,8 +93,9 @@ JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
   from the real endpoint.
 
 The run log reports what the endpoint served for each phase, including the peak
-number of calls in flight — for most rows that figure explains the rate on its
-own.
+number of calls in flight. For most rows that figure explains the rate on its
+own: the work is 15,703 × 300ms of waiting, and the only variable is how much of
+it happened concurrently.
 
 ## Implementations
 
@@ -198,9 +202,8 @@ with the results already in hand. An ordinary `fetch` in the handler would run
 in both passes, and serially in the second.
 
 Effects deduplicate identical inputs, so a pair that approves twice in one block
-costs one call. `rateLimit` is off: the endpoint's concurrency ceiling is the
-limit this case is about, and against a real provider that option is where its
-rate limit would go.
+costs one call. `rateLimit` is off, since the endpoint imposes none either;
+against a real provider that option is where its limit would go.
 
 ### Ponder
 
@@ -236,10 +239,13 @@ whole batch first and then issues every allowance read at once through
 between each approval and the next.
 
 The RPC client's `capacity` is raised from its default of 10 requests in flight
-to 100, the endpoint's own ceiling. Left at the default it caps the run at ten
-calls at a time however many the handler hands it, so nine tenths of the
-endpoint would sit idle and the client's queue, rather than the endpoint, would
-be what the row measured.
+to 1,000. Left at the default it caps the run at ten calls at a time however
+many the handler hands it, which would make the row a measurement of the
+client's queue rather than of the processor's batching.
+
+The Squid SDK is benchmarked once per source it reads chain data from, and this
+case gives the RPC endpoint to both: the allowance reads have to go somewhere
+even when the events come from SQD Network.
 
 Sqd ingests from the SQD archive, which requires an API key as of 19 May 2026.
 Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the

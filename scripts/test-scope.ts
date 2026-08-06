@@ -108,6 +108,30 @@ for (const indexer of REGISTERED) {
 }
 if (driverFailures === 0) console.log(`ok drivers: all ${REGISTERED.length} indexers driven`);
 
+// And the same pin for the lib modules only some scenarios use. The filter's
+// map of which scenarios use cases/lib/rpc-mock.ts is a copy of which case
+// configs declare `ethCall`; if a second scenario starts reading contract state
+// and the map is not updated, its jobs would sit out a change to the endpoint
+// they depend on. Ask the configs directly.
+const callCases: string[] = [];
+for (const benchCase of CASES) {
+  const mod = await import(resolve(ROOT, "cases", benchCase, "case.config.ts"));
+  if (mod.caseConfig?.ethCall) callCases.push(benchCase);
+}
+const mockScope = selectScope(["cases/lib/rpc-mock.ts"], CASES, INDEXERS);
+if (JSON.stringify(mockScope.cases) !== JSON.stringify(callCases)) {
+  console.error(
+    `FAIL lib modules: cases/lib/rpc-mock.ts selects ${JSON.stringify(mockScope.cases)}, ` +
+      `but ${JSON.stringify(callCases)} declare ethCall — update LIB_MODULE_CASES ` +
+      `in select-scope.ts`
+  );
+  failures++;
+} else {
+  console.log(
+    `ok lib modules: the call endpoint selects exactly the ${callCases.length} scenario(s) using it`
+  );
+}
+
 check("one indexer in one scenario", ["cases/erc20-transfer-events/ponder/src/index.ts"], {
   "erc20-transfer-events": ["ponder"],
 });
@@ -115,6 +139,10 @@ check("one indexer in one scenario", ["cases/erc20-transfer-events/ponder/src/in
 check("envio project directory covers both envio variants", [
   "cases/erc20-transfer-events/envio/config.yaml",
 ], { "erc20-transfer-events": ["envio", "envio-rpc"] });
+
+check("sqd project directory covers both sqd variants", [
+  "cases/erc20-transfer-events/sqd/src/processor.ts",
+], { "erc20-transfer-events": ["sqd", "sqd-rpc"] });
 
 check("scenario run logic runs the whole scenario", ["cases/erc20-transfer-events/run.ts"], {
   "erc20-transfer-events": INDEXERS,
@@ -124,9 +152,11 @@ check("expected output runs the whole scenario", [
   "cases/erc20-account-balances/expected.json",
 ], { "erc20-account-balances": INDEXERS });
 
-check("a driver runs its indexer in every scenario", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd"]));
+check("a driver runs its indexer in every scenario", ["cases/lib/drivers/ponder.ts"], inEvery(["ponder"]));
 
 check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.ts"], inEvery(["envio", "envio-rpc"]));
+
+check("the sqd driver covers both sqd variants", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd", "sqd-rpc"]));
 
 // Attributing a driver module to no indexer at all would select nothing and
 // publish the untouched carried-forward rows as if they had been re-measured.

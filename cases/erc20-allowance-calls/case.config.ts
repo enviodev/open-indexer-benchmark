@@ -39,12 +39,12 @@ const TOKEN_SET = new Set(TOKENS);
 
 const START_BLOCK = 25_600_000;
 
-// 1,200 blocks hold about 19,700 approvals, roughly 16,200 of which need a
-// call. An indexer that keeps the endpoint's 100 call slots full the whole
-// time gets through them in a little under a minute; one that waits for each
-// call before starting the next needs an hour and a half. The range is sized
-// for the first to finish comfortably inside the ten-minute cap, so what the
-// table reports for the rest is how much of it they reached.
+// 1,200 blocks hold 19,125 approvals, 15,703 of which need a call. An indexer
+// that issues a whole batch of them at once gets through the range in the time
+// its slowest batch takes; one that waits for each call before starting the
+// next needs 15,703 × 300ms, or an hour and a quarter. The range is sized so
+// the first finishes comfortably inside the ten-minute cap, which leaves what
+// the table reports for the rest a matter of how far they got.
 const VERIFY_END_BLOCK = 25_601_199;
 
 /** `allowance(address,address)` */
@@ -114,11 +114,11 @@ export const caseConfig: CaseConfig = {
 
   ethCall: {
     // Slow enough that an indexer waiting on one call at a time cannot hide it,
-    // and slow enough to be a plausible archive-node round trip.
+    // and slow enough to be a plausible archive-node round trip. It is also the
+    // only limit the endpoint imposes: it answers as many calls at once as it
+    // is handed, so how many an indexer has outstanding is the indexer's own
+    // decision and nothing else's.
     latencyMs: 300,
-    // What a provider gives one API key. Every tool is up against the same
-    // ceiling, so no implementation can win the case by asking for more.
-    maxConcurrent: 100,
     answer: answerCall,
   },
 

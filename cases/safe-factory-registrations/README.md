@@ -57,7 +57,7 @@ Safe 1.4.x made an argument `indexed` on eight of these events — `ExecutionSuc
 | --- | --- |
 | Envio | two events, the second renamed with `name:` |
 | Ponder | two ABI items; an overloaded event is named by its full signature |
-| Sqd | two decoders, picked in the handler from the log's topic count |
+| Squid SDK | two decoders, picked in the handler from the log's topic count |
 | Subgraph | two handlers; Graph Node runs whichever one's ABI can decode the log |
 | SubQuery | one only — see the note below |
 | Rindexer | neither — the case is skipped |
@@ -86,13 +86,13 @@ Every implementation here is written the way that tool's own documentation recom
 - **Envio** — [envio/](./envio/)
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
-- **Sqd** — [sqd/](./sqd/)
+- **Squid SDK** — [sqd/](./sqd/)
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
 
-Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
+Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Squid SDK run that reads from SQD Network.
 
 ```bash
 ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node cases/safe-factory-registrations/run.ts
@@ -150,7 +150,7 @@ A contract's `factory` filter takes one factory. Giving each canonical Safe depl
 
 `rindexer.yaml` is kept at the closest configuration rindexer can express, with both limits written down beside it.
 
-### Sqd (Subsquid)
+### Squid SDK
 
 Runs the processor and GraphQL server as separate native Node.js processes, with a Docker Postgres for storage.
 
@@ -158,7 +158,9 @@ Both factory generations share a topic0, so one subscription covers all four add
 
 There is no address list to give the processor for the children, so `SafeSetup` is subscribed to by topic chain-wide and the handler drops logs from proxies these factories did not create — the pattern SQD's own factory-contract guide describes. The set of known proxies is built as the batch is walked, in chain order.
 
-Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+The `sqd` variant ingests from the SQD Network gateway (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+
+The `sqd-rpc` variant runs the same project with the gateway left off (`SQD_SOURCE=rpc`), so it ingests from the RPC endpoint alone — the regime SQD documents for chains SQD Network does not cover. It needs no API key. Each variant configures only its own source: the `sqd` run is given no RPC endpoint at all, since a processor holding both falls back to RPC near the head and its row would then be measuring a mixture of the two.
 
 ### Subgraph (Graph Node)
 

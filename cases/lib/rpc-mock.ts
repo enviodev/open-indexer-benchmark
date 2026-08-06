@@ -11,13 +11,20 @@
 // So the benchmark serves them. Every intercepted call is held for a fixed
 // delay and answered from the call's own arguments, which makes the external
 // dependency the one thing in the case that is identical for every tool: same
-// latency, same concurrency ceiling, same answers, run after run. What is left
-// to measure is the only thing that differs — how well an indexer overlaps
-// calls it cannot avoid making.
+// latency, same answers, no limit on how many it will take at once, run after
+// run. What is left to measure is the only thing that differs — how well an
+// indexer overlaps calls it cannot avoid making.
 //
 // The answers are derived from the arguments rather than fetched, which also
 // means they cannot be guessed: a checksum only matches if the indexer really
 // made the call, at the right block, and stored what came back.
+//
+// Nothing here rate limits or queues. Ten thousand calls arriving at once are
+// ten thousand calls in flight, all answered `latencyMs` later, so the only
+// thing deciding how many an indexer has outstanding is the indexer. The
+// practical ceiling is the process's open-file limit, since a call in flight is
+// a socket: on a machine with the usual 1024, raise it (`ulimit -n`) before
+// concluding that a tool stopped scaling on its own.
 
 import { createServer, request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -39,18 +46,13 @@ export interface EthCallInterceptor {
    * How long every intercepted call is held before it is answered. The point
    * of the case is what an indexer does while it waits, so this is the one
    * number the whole scenario is calibrated around.
+   *
+   * It is also the only limit. The endpoint answers as many calls at once as
+   * it is given — no rate limit, no concurrency ceiling — so nothing outside
+   * the indexer decides how many it may have outstanding, and the peak in
+   * flight is a measurement of the tool rather than of a cap it ran into.
    */
   latencyMs: number;
-  /**
-   * How many intercepted calls are served at once. Beyond this they queue, the
-   * way a provider's per-key concurrency limit makes them queue.
-   *
-   * Without a ceiling the case would measure how large a batch each tool
-   * happens to hand its handlers — fire ten thousand calls at once and they all
-   * come back in `latencyMs`. With one, every tool is up against the same wall
-   * and the measurement is how close it gets to it.
-   */
-  maxConcurrent: number;
   /**
    * The 32-byte hex answer for a call the case defines, or null for one it
    * does not. A null is returned to the indexer as a JSON-RPC error rather
@@ -67,7 +69,11 @@ export interface RpcMockStats {
   calls: number;
   /** Intercepted calls rejected because the case does not define them. */
   rejected: number;
-  /** Highest number of intercepted calls in flight at once. */
+  /**
+   * Highest number of intercepted calls in flight at once. Since nothing here
+   * limits that, it is how many the indexer chose to have outstanding — the
+   * number that explains its rate.
+   */
   peakInFlight: number;
   /** Requests forwarded upstream, contract calls aside. */
   upstream: number;
@@ -160,28 +166,6 @@ export async function startRpcMock(
   let inFlight = 0;
   let peakInFlight = 0;
 
-  // The concurrency ceiling. Waiters are resolved in arrival order, so a tool
-  // that queues a thousand calls is not starved by one that keeps adding more.
-  const waiting: (() => void)[] = [];
-  function acquire(): Promise<void> {
-    if (inFlight < interceptor.maxConcurrent) {
-      inFlight++;
-      peakInFlight = Math.max(peakInFlight, inFlight);
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => waiting.push(resolve));
-  }
-  function release() {
-    const next = waiting.shift();
-    if (next) {
-      // The slot is handed straight to the next waiter; `inFlight` never drops.
-      peakInFlight = Math.max(peakInFlight, inFlight);
-      next();
-    } else {
-      inFlight--;
-    }
-  }
-
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   /** Answer one intercepted call, after its wait. */
@@ -191,7 +175,8 @@ export async function startRpcMock(
       rejected++;
       return rpcError(req.id, -32_602, call);
     }
-    await acquire();
+    inFlight++;
+    peakInFlight = Math.max(peakInFlight, inFlight);
     try {
       await sleep(interceptor.latencyMs);
       const result = interceptor.answer(call);
@@ -206,7 +191,7 @@ export async function startRpcMock(
       calls++;
       return { jsonrpc: "2.0", id: req.id ?? null, result };
     } finally {
-      release();
+      inFlight--;
     }
   }
 
