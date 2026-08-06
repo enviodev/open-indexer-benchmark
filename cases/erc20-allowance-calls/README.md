@@ -97,12 +97,22 @@ number of calls in flight. For most rows that figure explains the rate on its
 own: the work is 15,703 × 300ms of waiting, and the only variable is how much of
 it happened concurrently.
 
+One caveat about the top of the table. Past a few thousand calls in flight, what
+bounds a run is no longer the 300ms: a call in flight is a socket, and opening
+them costs the client about a millisecond each. A bare Node script firing 5,000
+concurrent `fetch` calls at this endpoint takes about six seconds to get them
+all out, against the 300ms the endpoint needs to answer them. So an indexer that
+already issues its whole batch at once is being measured on its HTTP client as
+much as on its scheduling — which is also true of it in production, but worth
+knowing before reading a small gap between two fast rows as a difference in how
+they schedule.
+
 ## Implementations
 
 - **Envio** — [envio/](./envio/)
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
-- **Sqd** — [sqd/](./sqd/)
+- **Squid SDK** — [sqd/](./sqd/), benchmarked once per source it reads from
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
@@ -110,8 +120,8 @@ it happened concurrently.
 
 Requires Node 23.6+, Docker, a Rust toolchain (for the rindexer implementation),
 an [Envio](https://envio.dev) API token for the log data and ground truth, and
-an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd
-implementation.
+an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Squid SDK's
+SQD Network run.
 
 ```bash
 ENVIO_API_TOKEN=your-token node cases/erc20-allowance-calls/run.ts
@@ -202,8 +212,16 @@ with the results already in hand. An ordinary `fetch` in the handler would run
 in both passes, and serially in the second.
 
 Effects deduplicate identical inputs, so a pair that approves twice in one block
-costs one call. `rateLimit` is off, since the endpoint imposes none either;
-against a real provider that option is where its limit would go.
+costs one call — 14,114 of the range's 15,703. `rateLimit` is off, since the
+endpoint imposes none either; against a real provider that option is where its
+limit would go.
+
+Handlers see at most 5,000 events per batch
+(`envio_processing_max_batch_size`), so the range's calls go out in four
+batchfuls rather than all at once. Envio's own metrics, on port 9898, are the
+quickest way to see where a run's time went: `envio_preload_seconds` is the
+phase the calls happen in, against `envio_processing_seconds` for the handlers'
+second pass and `envio_storage_write_seconds` for the writes.
 
 ### Ponder
 
@@ -231,7 +249,7 @@ than kept alongside them, which would have made rindexer the only implementation
 writing every event twice. Column types match what rindexer picks for the same
 Solidity types, so the two tables look like the ones it generates.
 
-### Sqd (Subsquid)
+### Squid SDK
 
 The processor hands the handler a batch of blocks, so the handler decodes the
 whole batch first and then issues every allowance read at once through
@@ -247,9 +265,10 @@ The Squid SDK is benchmarked once per source it reads chain data from, and this
 case gives the RPC endpoint to both: the allowance reads have to go somewhere
 even when the events come from SQD Network.
 
-Sqd ingests from the SQD archive, which requires an API key as of 19 May 2026.
-Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the
-processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+Reading from SQD Network requires an API key as of 19 May 2026. Set
+`SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it that
+run fails with `CREDENTIALS_INVALID` and indexes nothing. The RPC-source run
+needs no key.
 
 ### Subgraph
 
