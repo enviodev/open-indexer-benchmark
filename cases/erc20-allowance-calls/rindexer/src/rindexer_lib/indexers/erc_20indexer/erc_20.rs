@@ -9,10 +9,13 @@
 // kept alongside them: leaving it in would make rindexer the only
 // implementation writing every event twice.
 //
-// The calls themselves are ordinary alloy calls against the provider rindexer
-// already maintains. What matters is that they are issued for the whole batch
-// at once: a rust project gets the batch, so the 300ms round trips overlap
-// instead of adding up.
+// The calls go through the provider rindexer already maintains, using its own
+// `eth_call` helper: the crate is built against a different major version of
+// alloy than this project, so the provider it hands the handler does not
+// implement the `Provider` trait as this crate sees it, and its helper takes
+// the block to read at anyway. What matters is that the calls are issued for
+// the whole batch at once — a rust project gets the batch, so the 300ms round
+// trips overlap instead of adding up.
 use alloy::{
     primitives::{Address, U256},
     sol,
