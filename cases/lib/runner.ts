@@ -177,9 +177,29 @@ async function runPhase(
 
   // Take the final reading and stamp the elapsed time from the same moment, so
   // the reported rate is internally consistent.
-  try {
-    last = (await driver.snapshot()) ?? last;
-  } catch {}
+  //
+  // Retried, unlike the readings during the run. A failure mid-run costs one
+  // sample of many; a failure here is the whole measurement, and it decides
+  // whether the phase counts as completed at all. It happens: the reading
+  // spawns a psql process, and a run that ended with thousands of sockets open
+  // has been seen to fail that spawn once and publish a finished range as
+  // "indexed nothing".
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      last = (await driver.snapshot()) ?? last;
+      break;
+    } catch (err) {
+      if (attempt === 3) {
+        console.log(
+          `  Warning: could not read final progress for ${opts.name} ` +
+            `(${String((err as Error)?.message ?? err).split("\n")[0]}) — ` +
+            `reporting the last reading taken during the run.`
+        );
+        break;
+      }
+      await sleep(500);
+    }
+  }
   const elapsedS = (performance.now() - startedAt) / 1_000;
   const completed = last.blocks >= targetBlocks || last.events >= targetEvents;
 

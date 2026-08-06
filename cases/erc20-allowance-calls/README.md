@@ -17,8 +17,9 @@ ten thousand are in flight, all answered 300ms later — so a tool is never
 waiting on anything but its own scheduling.
 
 The difference is not subtle. An indexer that hands the endpoint a whole batch
-at a time pays 300ms per batch. One that waits for each call before starting the
-next pays 15,703 × 300ms — an hour and a quarter — for the same work.
+at a time gets through the range in seconds. One that waits for each call before
+starting the next pays 15,703 × 300ms — an hour and a quarter — for the same
+work, and the ten-minute cap stops it long before that.
 
 ## Benchmark Specification
 
