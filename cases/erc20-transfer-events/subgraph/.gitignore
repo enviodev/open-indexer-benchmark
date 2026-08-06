@@ -5,3 +5,7 @@ build/
 # the block range for the phase being run.
 subgraph.yaml
 bin/
+
+# Written by envio when it runs the project.
+.envio/
+envio-env.d.ts
