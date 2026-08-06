@@ -2,6 +2,7 @@
 
 import type { DriverFactory } from "./common.ts";
 import { envioDriver } from "./envio.ts";
+import { envioSubgraphDriver } from "./envio-subgraph.ts";
 import { ponderDriver } from "./ponder.ts";
 import { rindexerDriver } from "./rindexer.ts";
 import { sqdDriver } from "./sqd.ts";
@@ -14,6 +15,7 @@ export type { Ctx, Driver, DriverFactory, Snapshot } from "./common.ts";
 export const DRIVERS: Record<string, DriverFactory> = {
   envio: envioDriver("hypersync"),
   "envio-rpc": envioDriver("rpc"),
+  "envio-subgraph": envioSubgraphDriver,
   ponder: ponderDriver,
   rindexer: rindexerDriver,
   subgraph: subgraphDriver,
@@ -54,6 +56,16 @@ export const TOOLS: Record<
     toolUrl: "https://envio.dev",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
+    storage: "Postgres",
+  },
+  // The Subgraph case's own project, indexed by HyperIndex instead of Graph
+  // Node. Nothing in that directory changes, so the row is a like-for-like
+  // reading of the same subgraph.
+  "envio-subgraph": {
+    name: "Envio Subgraph",
+    toolUrl: "https://envio.dev",
+    source: "HyperSync",
+    sourceUrl: HYPERSYNC_URL,
     storage: "Postgres",
   },
   ponder: {
