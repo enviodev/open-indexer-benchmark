@@ -241,7 +241,8 @@ limit would go.
 
 Handlers see at most 5,000 events per batch
 (`envio_processing_max_batch_size`), so the range's calls go out in four
-batchfuls rather than all at once. Envio's own metrics, on port 9898, are the
+batchfuls rather than all at once — which is why the peak in flight the endpoint
+reports for it is a few thousand rather than all 14,114. Envio's own metrics, on port 9898, are the
 quickest way to see where a run's time went: `envio_preload_seconds` is the
 phase the calls happen in, against `envio_processing_seconds` for the handlers'
 second pass and `envio_storage_write_seconds` for the writes.
@@ -282,14 +283,14 @@ Solidity types, so the two tables look like the ones it generates.
 ### Squid SDK
 
 The processor hands the handler a batch of blocks, so the handler decodes the
-whole batch first and then issues every allowance read at once through
-`Promise.all`. Reading inside the decode loop would put one 200ms round trip
-between each approval and the next.
+whole batch first and then issues every allowance read together. Reading inside
+the decode loop would put one 200ms round trip between each approval and the
+next.
 
-The generated contract binding sends one HTTP request per read, so the handler
-goes through `RpcClient.batchCall` instead, which merges the batch's calls into
-JSON-RPC batches of up to a thousand. Same calls at the same blocks, a couple of
-dozen requests instead of thousands.
+They go through `RpcClient.batchCall`, which merges them into JSON-RPC batches
+of up to a thousand, rather than the generated contract binding, which sends one
+HTTP request per read. Same calls at the same blocks, a couple of dozen requests
+instead of thousands.
 
 The Squid SDK is benchmarked once per source it reads chain data from, and this
 case gives the RPC endpoint to both: the allowance reads have to go somewhere
