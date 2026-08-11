@@ -11,5 +11,6 @@ directory. There is no `config.yaml` there, and that is what puts envio into
 subgraph mode: it reads `subgraph.yaml`, translates it, and builds `generated/`
 with the project's own graph-cli.
 
-`envio` is pinned here. Subgraph support is not in a released version yet; bump
-the pin to the first release that carries it.
+`envio` is pinned here, and `pnpm-workspace.yaml` acknowledges the one build
+script the install skips — pnpm 11 treats a skipped one as fatal, and esbuild's
+only picks a platform binary pnpm already installs as an optional dependency.

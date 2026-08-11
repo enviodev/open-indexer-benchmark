@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       envio:
-        specifier: 3.6.0
-        version: 3.6.0(react-dom@19.2.8(react@19.2.5))
+        specifier: 3.6.1-subgraph
+        version: 3.6.1-subgraph(react-dom@19.2.8(react@19.2.5))(supports-color@8.1.1)
 
 packages:
 
@@ -461,36 +461,36 @@ packages:
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
-  envio-darwin-arm64@3.6.0:
-    resolution: {integrity: sha512-RFrUvHy1dnTklUWEwlwUoHblo37XTcQ8Qs7xk5MN7q1dPplT+YfAeHhCoY/wFbP8Cu9wQ/ishxJ/w0hais70KA==}
+  envio-darwin-arm64@3.6.1-subgraph:
+    resolution: {integrity: sha512-wH9BUS4ggstHaCQu7GRksg7xUHlgtsH1oNsIM0DrtHZyQbP+n1LC25ozPJK3wgP5R5TkpHXWfmjHMiJR770d9w==}
     cpu: [arm64]
     os: [darwin]
 
-  envio-darwin-x64@3.6.0:
-    resolution: {integrity: sha512-Vy5tZkzO9b++Cou2XrVpzZln3PhctmOEISV6ENhVrGyL9KhDC/nabKeSHVl59QjN2bVSFLFVtdVLQ2T5lGsseg==}
+  envio-darwin-x64@3.6.1-subgraph:
+    resolution: {integrity: sha512-cVFzH+ufuh4HDE1qovcEI4/gGePSe0x0DAqubGa5z8q1Tb0/bgBmPZf2grRCmGYTi7LsvRm73HjVMvAl80doBg==}
     cpu: [x64]
     os: [darwin]
 
-  envio-linux-arm64@3.6.0:
-    resolution: {integrity: sha512-XBa+LqsmSxgSuy35v/ysjLmSYrcefOBaLdBtDRdQWDe3bD1zj7nBNWNshTqKmmnXT3isUKlfnpWIQ6iPue03iA==}
+  envio-linux-arm64@3.6.1-subgraph:
+    resolution: {integrity: sha512-7v3tyB7S+gr9KLViPwljEMo+JQBW10AKBBbmmm+1LsV0KVTW9DB6ba+yBZqTtAKf3AvzLeS9ksENkUjyLvn6tQ==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  envio-linux-x64-musl@3.6.0:
-    resolution: {integrity: sha512-Ipv9LMzsmw0UaJW0xggvsMTEjCVe+bhiA9lBExFaG0sL29sLouITreORv44QSWzDd855wqxuforriIfdtT3dag==}
+  envio-linux-x64-musl@3.6.1-subgraph:
+    resolution: {integrity: sha512-Z8D0+/qwo1weADBzRBirupVFlz+EmL/cS4+DCim+y1vMFuvIEzHjJftUP4HLhNLbBl3L76BnI/DX3q1FR1FZlg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  envio-linux-x64@3.6.0:
-    resolution: {integrity: sha512-Xx5js41IvsKHM+1Z5/2Fjp103GYLf20s7rSjkV5j2RgPtRJzjxWCysddkFvBx0A8fj2jgorePcuEvHusLFwx6w==}
+  envio-linux-x64@3.6.1-subgraph:
+    resolution: {integrity: sha512-5rHyDtUScL2y+2/8Is+U95LBB9BH+eOkE+Fgx2/dFTzxLRtKRLP0haSATEwh5DjpVvKmjcBL2Xm9/ylPwBA9AQ==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  envio@3.6.0:
-    resolution: {integrity: sha512-p0gZH9K1GRGmj4urPpxttmK8RuoXZuRGG0DdaHOplz0rxKAM4t7UGHkAWBecgfd5LYuZtZn4T4KhebFmg+nAqw==}
+  envio@3.6.1-subgraph:
+    resolution: {integrity: sha512-nTtGwLo0uFwIyBKEan1V+UtpXJyi9I4MSjNaLOGFD8TzGiDe0WPe9tPw35ga5Rzw4+l2yHkCtEZcPjjQWs1Zug==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -1345,11 +1345,11 @@ snapshots:
 
   bn.js@5.2.5: {}
 
-  body-parser@1.20.2:
+  body-parser@1.20.2(supports-color@8.1.1):
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       depd: 2.0.0
       destroy: 1.2.0
       http-errors: 2.0.0
@@ -1439,9 +1439,11 @@ snapshots:
 
   dateformat@4.6.3: {}
 
-  debug@2.6.9:
+  debug@2.6.9(supports-color@8.1.1):
     dependencies:
       ms: 2.0.0
+    optionalDependencies:
+      supports-color: 8.1.1
 
   deepmerge@4.3.1: {}
 
@@ -1473,22 +1475,22 @@ snapshots:
     dependencies:
       once: 1.4.0
 
-  envio-darwin-arm64@3.6.0:
+  envio-darwin-arm64@3.6.1-subgraph:
     optional: true
 
-  envio-darwin-x64@3.6.0:
+  envio-darwin-x64@3.6.1-subgraph:
     optional: true
 
-  envio-linux-arm64@3.6.0:
+  envio-linux-arm64@3.6.1-subgraph:
     optional: true
 
-  envio-linux-x64-musl@3.6.0:
+  envio-linux-x64-musl@3.6.1-subgraph:
     optional: true
 
-  envio-linux-x64@3.6.0:
+  envio-linux-x64@3.6.1-subgraph:
     optional: true
 
-  envio@3.6.0(react-dom@19.2.8(react@19.2.5)):
+  envio@3.6.1-subgraph(react-dom@19.2.8(react@19.2.5))(supports-color@8.1.1):
     dependencies:
       '@clickhouse/client': 1.17.0
       '@elastic/ecs-pino-format': 1.4.0
@@ -1503,7 +1505,7 @@ snapshots:
       date-fns: 3.3.1
       dotenv: 16.4.5
       eventsource: 4.1.0
-      express: 4.19.2
+      express: 4.19.2(supports-color@8.1.1)
       ink: 6.8.0(react@19.2.5)
       ink-big-text: 2.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5)
       ink-spinner: 5.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5)
@@ -1517,11 +1519,11 @@ snapshots:
       viem: 2.54.0
       yargs: 17.7.2
     optionalDependencies:
-      envio-darwin-arm64: 3.6.0
-      envio-darwin-x64: 3.6.0
-      envio-linux-arm64: 3.6.0
-      envio-linux-x64: 3.6.0
-      envio-linux-x64-musl: 3.6.0
+      envio-darwin-arm64: 3.6.1-subgraph
+      envio-darwin-x64: 3.6.1-subgraph
+      envio-linux-arm64: 3.6.1-subgraph
+      envio-linux-x64: 3.6.1-subgraph
+      envio-linux-x64-musl: 3.6.1-subgraph
     transitivePeerDependencies:
       - '@types/react'
       - bufferutil
@@ -1590,21 +1592,21 @@ snapshots:
     dependencies:
       eventsource-parser: 3.1.0
 
-  express@4.19.2:
+  express@4.19.2(supports-color@8.1.1):
     dependencies:
       accepts: 1.3.8
       array-flatten: 1.1.1
-      body-parser: 1.20.2
+      body-parser: 1.20.2(supports-color@8.1.1)
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 0.6.0
       cookie-signature: 1.0.6
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       depd: 2.0.0
       encodeurl: 1.0.2
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 1.2.0
+      finalhandler: 1.2.0(supports-color@8.1.1)
       fresh: 0.5.2
       http-errors: 2.0.0
       merge-descriptors: 1.0.1
@@ -1616,8 +1618,8 @@ snapshots:
       qs: 6.11.0
       range-parser: 1.2.1
       safe-buffer: 5.2.1
-      send: 0.18.0
-      serve-static: 1.15.0
+      send: 0.18.0(supports-color@8.1.1)
+      serve-static: 1.15.0(supports-color@8.1.1)
       setprototypeof: 1.2.0
       statuses: 2.0.1
       type-is: 1.6.18
@@ -1643,9 +1645,9 @@ snapshots:
 
   fflate@0.8.3: {}
 
-  finalhandler@1.2.0:
+  finalhandler@1.2.0(supports-color@8.1.1):
     dependencies:
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       encodeurl: 1.0.2
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -1989,9 +1991,9 @@ snapshots:
 
   secure-json-parse@4.1.0: {}
 
-  send@0.18.0:
+  send@0.18.0(supports-color@8.1.1):
     dependencies:
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       depd: 2.0.0
       destroy: 1.2.0
       encodeurl: 1.0.2
@@ -2007,12 +2009,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  serve-static@1.15.0:
+  serve-static@1.15.0(supports-color@8.1.1):
     dependencies:
       encodeurl: 1.0.2
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 0.18.0
+      send: 0.18.0(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 

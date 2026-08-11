@@ -1,0 +1,8 @@
+allowBuilds:
+  esbuild: set this to true or false
+# envio pulls esbuild, whose postinstall only selects a platform binary that
+# pnpm already installs as an optional dependency. pnpm 11 treats any skipped
+# build script as a fatal error, so the skip is acknowledged explicitly.
+ignoredBuiltDependencies:
+  - esbuild
+strictDepBuilds: false
