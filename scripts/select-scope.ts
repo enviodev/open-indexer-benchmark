@@ -34,8 +34,17 @@
 // Note that `main` and workflow_dispatch runs never call this: they publish the
 // README table and the table has to hold a full set of results.
 
-/** Indexers whose project directory is not named after them. */
-const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio", "sqd-rpc": "sqd" };
+/**
+ * Indexers whose project directory is not named after them. The Envio Subgraph
+ * variants have no directory of their own at all — they run the Subgraph tool's
+ * `subgraph/` project unchanged, so a change to it re-runs them too.
+ */
+const INDEXER_DIRS: Record<string, string> = {
+  "envio-rpc": "envio",
+  "sqd-rpc": "sqd",
+  "envio-subgraph": "subgraph",
+  "envio-subgraph-rpc": "subgraph",
+};
 
 /**
  * Driver modules under cases/lib/drivers that back more than one indexer.
@@ -45,6 +54,7 @@ const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio", "sqd-rpc": 
 const DRIVER_INDEXERS: Record<string, string[]> = {
   envio: ["envio", "envio-rpc"],
   sqd: ["sqd", "sqd-rpc"],
+  "envio-subgraph": ["envio-subgraph", "envio-subgraph-rpc"],
 };
 
 /** Driver modules that are shared plumbing rather than one tool's driver. */
