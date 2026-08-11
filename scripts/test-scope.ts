@@ -7,7 +7,7 @@
 // indexer nobody re-ran — so the cases that widen the scope (case run logic,
 // shared driver plumbing, the workflows themselves) are the ones worth pinning.
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { INDEXERS as REGISTERED } from "../cases/lib/drivers/index.ts";
@@ -27,6 +27,35 @@ const inEvery = (indexers: string[]) =>
 const EVERYTHING = inEvery(INDEXERS);
 
 let failures = 0;
+
+// The workflow spells its default indexer list out in shell, because the matrix
+// is built before any of this code runs. That makes it the one copy the drivers
+// registry cannot reach — and an indexer missing from it is not selected away,
+// it simply never gets a job, which reads as a scenario that has no such row.
+{
+  const workflow = readFileSync(
+    resolve(ROOT, ".github", "workflows", "benchmarks.yml"),
+    "utf8"
+  );
+  const line = workflow.match(/INDEXERS_JSON='(\[[^']*\])'/);
+  if (!line) {
+    console.error("FAIL workflow: no default INDEXERS_JSON found in benchmarks.yml");
+    failures++;
+  } else {
+    const listed: string[] = JSON.parse(line[1]);
+    const missing = REGISTERED.filter((i) => !listed.includes(i));
+    const extra = listed.filter((i) => !REGISTERED.includes(i));
+    if (missing.length > 0 || extra.length > 0) {
+      console.error(
+        `FAIL workflow: benchmarks.yml's default indexer list disagrees with the ` +
+          `drivers registry — missing [${missing.join(", ")}], unknown [${extra.join(", ")}]`
+      );
+      failures++;
+    } else {
+      console.log(`ok workflow: all ${REGISTERED.length} indexers get a job`);
+    }
+  }
+}
 
 function check(name: string, changed: string[], expected: Record<string, string[]>) {
   const scope = selectScope(changed, CASES, INDEXERS);
