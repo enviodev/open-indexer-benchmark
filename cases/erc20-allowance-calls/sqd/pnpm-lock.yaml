@@ -20,6 +20,9 @@ importers:
       '@subsquid/graphql-server':
         specifier: ^4.12.0
         version: 4.12.1(@subsquid/big-decimal@1.0.0)(bufferutil@4.1.0)(typeorm@0.3.31(ioredis@5.11.1)(pg@8.22.0))(utf-8-validate@5.0.10)
+      '@subsquid/rpc-client':
+        specifier: ^4.16.0
+        version: 4.16.0
       '@subsquid/typeorm-migration':
         specifier: ^1.3.1
         version: 1.4.0(typeorm@0.3.31(ioredis@5.11.1)(pg@8.22.0))

@@ -1,9 +1,10 @@
 # Squid SDK — External Contract Calls
 
 The processor hands [`src/main.ts`](./src/main.ts) a batch of blocks, so the
-handler decodes the batch first and then issues every allowance read at once
-through `Promise.all`. The RPC client's concurrency is raised above its default
-so the endpoint, rather than the client's own queue, is what limits the run.
+handler decodes the batch first and then issues every allowance read at once.
+They go through `RpcClient.batchCall`, which merges them into JSON-RPC batches:
+the generated contract binding sends one HTTP request per read, and at this
+volume that costs more in sockets than the round trips it is waiting on.
 
 See the [case README](../README.md) for the scenario and the shared rules.
 

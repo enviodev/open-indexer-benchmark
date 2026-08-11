@@ -1,7 +1,7 @@
 import { TypeormDatabase } from "@subsquid/typeorm-store";
-import { processor } from "./processor";
+import { processor, rpcClient } from "./processor";
 import { ApprovalEvent, TokenAllowance } from "./model";
-import { Contract, events } from "./abi/ERC20";
+import { events, functions } from "./abi/ERC20";
 
 processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
   // One pass to decode, then every allowance read at once. A batch handler is
@@ -17,23 +17,36 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
         spender,
         approved: value,
         timestamp: Math.floor(block.header.timestamp / 1000),
-        header: block.header,
+        height: block.header.height,
       };
     })
   );
 
-  const allowances = await Promise.all(
-    decoded.map((entry) =>
-      // An approval of zero revokes it, and a revoked allowance is zero
-      // whatever the token reports — no call needed.
-      entry.approved === 0n
-        ? Promise.resolve(0n)
-        : new Contract(ctx, entry.header, entry.token).allowance(
-            entry.owner,
-            entry.spender
-          )
-    )
-  );
+  // An approval of zero revokes it, and a revoked allowance is zero whatever
+  // the token reports — no call needed.
+  const needCall = decoded.filter((entry) => entry.approved !== 0n);
+
+  // The generated `Contract` binding sends one HTTP request per read, which for
+  // a batch of thousands costs more in sockets than the round trips it is
+  // waiting on. The client's own `batchCall` merges them into JSON-RPC batches
+  // instead — the same calls, at the same blocks, carried by a couple of dozen
+  // requests rather than thousands.
+  const answers = needCall.length
+    ? await rpcClient.batchCall(
+        needCall.map((entry) => ({
+          method: "eth_call",
+          params: [
+            { to: entry.token, data: functions.allowance.encode({ owner: entry.owner, spender: entry.spender }) },
+            "0x" + entry.height.toString(16),
+          ],
+        }))
+      )
+    : [];
+
+  const allowances = new Map<string, bigint>();
+  needCall.forEach((entry, i) => {
+    allowances.set(entry.id, functions.allowance.decodeResult(answers[i]));
+  });
 
   const approvalEvents: ApprovalEvent[] = [];
   // Collapsed to one row per (token, owner, spender): the batch is in order, so
@@ -41,8 +54,8 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
   // rejects an upsert that touches the same row twice.
   const latest = new Map<string, TokenAllowance>();
 
-  decoded.forEach((entry, i) => {
-    const allowance = allowances[i];
+  for (const entry of decoded) {
+    const allowance = allowances.get(entry.id) ?? 0n;
     approvalEvents.push(
       new ApprovalEvent({
         id: entry.id,
@@ -65,7 +78,7 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
         allowance,
       })
     );
-  });
+  }
 
   await Promise.all([
     approvalEvents.length > 0 ? ctx.store.insert(approvalEvents) : Promise.resolve(),

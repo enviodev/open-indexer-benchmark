@@ -1,4 +1,5 @@
 import { createConfig } from "ponder";
+import { http } from "viem";
 
 import { ERC20Abi } from "./abis/ERC20";
 
@@ -18,7 +19,19 @@ export default createConfig({
   chains: {
     mainnet: {
       id: 1,
-      rpc: process.env.PONDER_RPC_URL_1!,
+      // A transport rather than a bare URL, so the calls this case makes can be
+      // batched: viem collects the JSON-RPC requests issued in the same tick
+      // into one HTTP request. Ponder prefetches the reads for upcoming events,
+      // so there are several in flight at a time for batching to collect, and
+      // sending each as its own request would put the client's socket handling
+      // in front of the round trip it is waiting on.
+      //
+      // Batching is not aggregation: each allowance read is still its own
+      // `eth_call` at its own block, which is what the endpoint holds for
+      // 200ms and counts.
+      rpc: http(process.env.PONDER_RPC_URL_1!, {
+        batch: { batchSize: 1_000, wait: 0 },
+      }),
     },
   },
   contracts: {

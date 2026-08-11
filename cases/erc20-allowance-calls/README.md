@@ -90,6 +90,10 @@ JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
   making different calls than everyone else. In particular, `multicall`
   aggregates are refused: this case is about scheduling calls, not about
   collapsing them;
+- **accepts JSON-RPC batches**, and serves every call in one concurrently, each
+  held for its own 200ms and counted separately. Batching is a transport
+  decision, not an aggregation: it changes how many HTTP requests carry the
+  calls, not how many calls there are or what each one costs;
 - **relays every other JSON-RPC method upstream**, so logs and blocks still come
   from the real endpoint.
 
@@ -104,15 +108,27 @@ number of calls in flight. For most rows that figure explains the rate on its
 own: the work is 15,703 × 200ms of waiting, and the only variable is how much of
 it happened concurrently.
 
-One caveat about the top of the table. Past a few thousand calls in flight, what
-bounds a run is no longer the 200ms: a call in flight is a socket, and opening
-them costs the client about a millisecond each. A bare Node script firing 5,000
-concurrent `fetch` calls at this endpoint takes about six seconds to get them
-all out, against the 200ms the endpoint needs to answer them. So an indexer that
-already issues its whole batch at once is being measured on its HTTP client as
-much as on its scheduling — which is also true of it in production, but worth
-knowing before reading a small gap between two fast rows as a difference in how
-they schedule.
+### The client matters as much as the scheduling
+
+An indexer that issues its whole batch at once still has to get those calls onto
+the wire, and past a few thousand at a time that is where its run goes. A call
+in flight is a socket, and opening one costs about a millisecond — against a
+round trip of two hundred. Measured against this endpoint, one Node process
+asking for the range's 14,114 calls:
+
+| how the calls are sent | time |
+| --- | --- |
+| one HTTP request each, all at once (node's `fetch` default) | 17.6s |
+| one each, over a pool of 250 kept-alive connections | 12.6s |
+| one each, over a pool of 1,000 | 4.5s |
+| merged into JSON-RPC batches of 1,000 | 1.6s |
+
+The floor set by the latency alone is under a second, so the top of that table
+is almost entirely the client. Every implementation here that can be told to
+batch is told to batch, and the three that cannot are noted below — which is
+part of what the scenario reports: a tool's contract-call throughput is its
+transport's as much as its scheduler's, in this benchmark and in production
+alike.
 
 ## Implementations
 
@@ -211,8 +227,8 @@ collapse this way for tools that memoize.
 ### Envio
 
 Uses the [Effect API](https://docs.envio.dev/docs/HyperIndex/effect-api):
-`createEffect` wraps the `eth_call`, and the handler awaits it through
-`context.effect`. That is what makes the case work under HyperIndex V3's preload
+`createEffect` wraps the `eth_call` — made through a viem client with request
+batching on — and the handler awaits it through `context.effect`. That is what makes the case work under HyperIndex V3's preload
 optimization — handlers run once across the whole batch with writes suppressed,
 where every effect in the batch is in flight at once, then again in block order
 with the results already in hand. An ordinary `fetch` in the handler would run
@@ -233,9 +249,11 @@ second pass and `envio_storage_write_seconds` for the writes.
 ### Ponder
 
 Uses `context.client.readContract`, which reads at the event's block by default.
-Ponder profiles what each indexing function asks for and prefetches those reads
-for upcoming events, so the calls overlap even though indexing functions run one
-event at a time; results are also cached in the database, though nothing carries
+The chain is configured with a viem transport rather than a bare URL so that
+those reads are batched into JSON-RPC requests the same way. Ponder profiles
+what each indexing function asks for and prefetches those reads for upcoming
+events, so the calls overlap even though indexing functions run one event at a
+time; results are also cached in the database, though nothing carries
 over between phases here, since the driver recreates the database each time.
 
 ### Rindexer
@@ -246,7 +264,9 @@ all.
 
 The handler gets the whole batch, so the allowance reads are issued together
 against the provider rindexer already maintains, rather than one after another —
-but through a bounded window (2,000 in flight) rather than all at once. The
+but through a bounded window (2,000 in flight) rather than all at once. Its
+provider helper sends one request per call and takes no batching option, so
+unlike the JS implementations this one pays a connection per call. The
 distinction matters in the throughput phase: there the batch is not a few
 thousand events but a hundred thousand blocks' worth, and a batch that only
 finishes when its very last call does writes nothing for minutes.
@@ -266,10 +286,10 @@ whole batch first and then issues every allowance read at once through
 `Promise.all`. Reading inside the decode loop would put one 200ms round trip
 between each approval and the next.
 
-The RPC client's `capacity` is raised from its default of 10 requests in flight
-to 1,000. Left at the default it caps the run at ten calls at a time however
-many the handler hands it, which would make the row a measurement of the
-client's queue rather than of the processor's batching.
+The generated contract binding sends one HTTP request per read, so the handler
+goes through `RpcClient.batchCall` instead, which merges the batch's calls into
+JSON-RPC batches of up to a thousand. Same calls at the same blocks, a couple of
+dozen requests instead of thousands.
 
 The Squid SDK is benchmarked once per source it reads chain data from, and this
 case gives the RPC endpoint to both: the allowance reads have to go somewhere

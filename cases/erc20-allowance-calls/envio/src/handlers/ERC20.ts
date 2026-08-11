@@ -1,4 +1,5 @@
 import { createEffect, indexer, S } from "envio";
+import { createPublicClient, http, parseAbi } from "viem";
 
 /**
  * The endpoint the benchmark points every indexer at. It answers
@@ -7,25 +8,47 @@ import { createEffect, indexer, S } from "envio";
 const RPC_URL = process.env.ENVIO_RPC_URL;
 if (!RPC_URL) throw new Error("ENVIO_RPC_URL must be set");
 
-/** `allowance(address,address)` */
-const SELECTOR = "0xdd62ed3e";
+const erc20Abi = parseAbi([
+  "function allowance(address owner, address spender) view returns (uint256)",
+]);
 
-const word = (address: string) => address.slice(2).toLowerCase().padStart(64, "0");
+/**
+ * The client the effect makes its calls through.
+ *
+ * `batch` is what matters here. The Effect API hands the whole batch's calls
+ * over at once — several thousand of them — and a client that sends each as its
+ * own HTTP request opens a socket per call, which costs about a millisecond
+ * each and swamps the round trip the calls are actually waiting on: 14,114
+ * calls that way take 17.6s against an endpoint that answers each in 200ms.
+ * With batching, viem collects the calls made in the same tick into one
+ * JSON-RPC request, and the same work is a couple of dozen requests instead of
+ * fourteen thousand.
+ *
+ * This is not the same thing as a `multicall` aggregate, which the endpoint
+ * refuses: every allowance read is still its own `eth_call`, made at its own
+ * block, and the endpoint holds and counts each one separately. All that
+ * changes is how many HTTP requests carry them.
+ */
+const client = createPublicClient({
+  transport: http(RPC_URL, {
+    batch: { batchSize: 1_000, wait: 0 },
+  }),
+});
 
 /**
  * Reading the allowance is an external call, so it goes through the Effect API
- * rather than being an ordinary `fetch` in the handler.
+ * rather than being an ordinary call in the handler.
  *
  * That is what makes the case survivable. Handlers run twice — once across the
  * whole batch in preload, where nothing is written and every effect in the
  * batch is in flight at the same time, and once in block order, where the
- * results are already in hand. A `fetch` written inline would run in both
- * passes and, in the second, one call at a time.
+ * results are already in hand. A call written inline would run in both passes
+ * and, in the second, one at a time.
  *
  * Identical inputs are deduplicated, so an owner who approves the same spender
  * twice in one block is one call rather than two. `rateLimit: false` because
- * the endpoint's own concurrency ceiling is the limit the case is about;
- * against a real provider this is where its rate limit would go.
+ * the endpoint imposes none either; against a real provider that option is
+ * where its limit would go.
  */
 const getAllowance = createEffect(
   {
@@ -39,29 +62,16 @@ const getAllowance = createEffect(
     output: S.bigint,
     rateLimit: false,
   },
-  async ({ input }) => {
-    const response = await fetch(RPC_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_call",
-        params: [
-          {
-            to: input.token,
-            data: `${SELECTOR}${word(input.owner)}${word(input.spender)}`,
-          },
-          // Read at the block the approval was in, not at the head: the
-          // allowance is a value at a point in the chain's history.
-          `0x${input.blockNumber.toString(16)}`,
-        ],
-      }),
-    });
-    const body = (await response.json()) as { result?: string; error?: { message: string } };
-    if (body.error) throw new Error(`allowance call failed: ${body.error.message}`);
-    return BigInt(body.result!);
-  }
+  ({ input }) =>
+    client.readContract({
+      abi: erc20Abi,
+      address: input.token,
+      functionName: "allowance",
+      args: [input.owner, input.spender],
+      // Read at the block the approval was in, not at the head: the allowance
+      // is a value at a point in the chain's history.
+      blockNumber: BigInt(input.blockNumber),
+    })
 );
 
 indexer.onEvent(

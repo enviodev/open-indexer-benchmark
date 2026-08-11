@@ -7,6 +7,7 @@ import {
     Log as _Log,
     Transaction as _Transaction,
 } from '@subsquid/evm-processor'
+import {RpcClient} from '@subsquid/rpc-client'
 import * as erc20Abi from './abi/ERC20'
 import * as dotenv from 'dotenv'
 
@@ -45,14 +46,11 @@ const GATEWAY = 'https://v2.archive.subsquid.io/network/ethereum-mainnet'
 function withSource(processor: EvmBatchProcessor): EvmBatchProcessor {
     // Unlike the other cases, the RPC endpoint is configured in both modes:
     // this case's handler reads contract state, and those reads have to go
-    // somewhere whichever source the chain data comes from. The allowance reads
-    // are the whole case and the handler issues a batch of them at once, so the
-    // client's default of 10 requests in flight would decide the row; raised so
-    // that what limits the run is the endpoint rather than the client's queue.
+    // somewhere whichever source the chain data comes from.
+    //
     const withRpc = processor
         .setRpcEndpoint({
             url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
-            capacity: 1000,
         })
         .setFinalityConfirmation(75)
 
@@ -79,6 +77,25 @@ export const processor = withSource(new EvmBatchProcessor())
         address: CONTRACT_ADDRESSES,
         topic0: [erc20Abi.events.Approval.topic],
     })
+
+/**
+ * The client the handler makes its allowance reads through.
+ *
+ * The generated contract binding sends one HTTP request per read, which for a
+ * batch of thousands costs more in sockets than the round trips it is waiting
+ * on. This client's `batchCall` merges them into JSON-RPC batches of up to a
+ * thousand instead, `capacity` requests of them in flight at a time — the same
+ * calls, at the same blocks, carried by a couple of dozen requests rather than
+ * thousands.
+ *
+ * Batching is not aggregation: each read is still its own `eth_call` at its own
+ * block, which is what the endpoint holds for 200ms and counts.
+ */
+export const rpcClient = new RpcClient({
+    url: assertNotNull(rpcEndpoint, 'No RPC endpoint supplied - set RPC_ENDPOINT environment variable'),
+    capacity: 20,
+    maxBatchCallSize: 1000,
+})
 
 export type Fields = EvmBatchProcessorFields<typeof processor>
 export type Block = BlockHeader<Fields>
