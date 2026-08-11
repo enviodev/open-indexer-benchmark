@@ -13,15 +13,15 @@
 // `eth_call` helper: the crate is built against a different major version of
 // alloy than this project, so the provider it hands the handler does not
 // implement the `Provider` trait as this crate sees it, and its helper takes
-// the block to read at anyway. What matters is that the calls are issued for
-// the whole batch at once — a rust project gets the batch, so the 200ms round
-// trips overlap instead of adding up.
+// the block to read at anyway. What matters is that the calls for a batch are
+// issued together — a rust project gets the batch, so the 200ms round trips
+// overlap instead of adding up.
 use alloy::{
     primitives::{Address, U256},
     sol,
     sol_types::SolCall,
 };
-use futures::future::join_all;
+use futures::stream::{self, StreamExt};
 use rindexer::{
     event::callback_registry::EventCallbackRegistry, rindexer_error, EthereumSqlTypeWrapper,
     PostgresClient,
@@ -41,6 +41,12 @@ sol! {
         function allowance(address owner, address spender) external view returns (uint256);
     }
 }
+
+/// How many allowance reads this handler keeps in flight at once. High enough
+/// that the endpoint, rather than this window, is what bounds a batch; low
+/// enough that a batch spanning a hundred thousand blocks streams its results
+/// instead of finishing all at once, minutes later.
+const MAX_IN_FLIGHT: usize = 2_000;
 
 /// The schema rindexer derives from the project and contract names, and owns
 /// the generated event table inside. The case's tables are created alongside it.
@@ -108,32 +114,58 @@ async fn approval_handler(manifest_path: &PathBuf, registry: &mut EventCallbackR
 
             let provider = get_ethereum_provider_cache().await;
 
-            // Every allowance read in the batch is issued at once. An approval
-            // of zero revokes it — a revoked allowance is zero whatever the
-            // token reports — so those need no call at all.
-            let allowances: Vec<Result<U256, String>> = join_all(results.iter().map(|result| {
-                let provider = provider.clone();
-                let token = result.tx_information.address;
-                let owner = result.event_data.owner;
-                let spender = result.event_data.spender;
-                let block = result.tx_information.block_number;
-                let approved = result.event_data.value;
-                async move {
-                    if approved.is_zero() {
-                        return Ok(U256::ZERO);
+            // The batch's allowance reads are issued together, up to
+            // MAX_IN_FLIGHT of them at a time. An approval of zero revokes it —
+            // a revoked allowance is zero whatever the token reports — so those
+            // need no call at all.
+            //
+            // The window matters because rindexer hands the handler however
+            // much of the range it has fetched, which over a throughput run is
+            // not a few thousand events but a hundred thousand blocks' worth.
+            // Firing all of those at once means the batch finishes only when
+            // its very last call does, so nothing at all is written for
+            // minutes; streaming them keeps rows landing continuously while
+            // still keeping the endpoint saturated.
+            //
+            // Each call's arguments are copied out of the batch first, so the
+            // futures own what they need. A stream of futures that borrow from
+            // `results` cannot be generalised over lifetimes, and the compiler
+            // rejects the handler outright.
+            let jobs: Vec<(Address, Address, Address, u64, U256)> = results
+                .iter()
+                .map(|result| {
+                    (
+                        result.tx_information.address,
+                        result.event_data.owner,
+                        result.event_data.spender,
+                        result.tx_information.block_number,
+                        result.event_data.value,
+                    )
+                })
+                .collect();
+
+            let allowances: Vec<Result<U256, String>> = stream::iter(jobs.into_iter().map(
+                |(token, owner, spender, block, approved)| {
+                    let provider = provider.clone();
+                    async move {
+                        if approved.is_zero() {
+                            return Ok(U256::ZERO);
+                        }
+                        let input = IERC20::allowanceCall { owner, spender }.abi_encode();
+                        // rindexer's own provider call, which takes the block to
+                        // read at: the allowance is a value at a point in the
+                        // chain's history, not at the head.
+                        let returned = provider
+                            .eth_call(token, input.into(), block)
+                            .await
+                            .map_err(|e| format!("allowance call failed: {e:?}"))?;
+                        U256::from_str_radix(returned.trim_start_matches("0x"), 16)
+                            .map_err(|e| format!("allowance call returned {returned}: {e:?}"))
                     }
-                    let input = IERC20::allowanceCall { owner, spender }.abi_encode();
-                    // rindexer's own provider call, which takes the block to
-                    // read at: the allowance is a value at a point in the
-                    // chain's history, not at the head.
-                    let returned = provider
-                        .eth_call(token, input.into(), block)
-                        .await
-                        .map_err(|e| format!("allowance call failed: {e:?}"))?;
-                    U256::from_str_radix(returned.trim_start_matches("0x"), 16)
-                        .map_err(|e| format!("allowance call returned {returned}: {e:?}"))
-                }
-            }))
+                },
+            ))
+            .buffered(MAX_IN_FLIGHT)
+            .collect()
             .await;
 
             let mut postgres_bulk_data: Vec<Vec<EthereumSqlTypeWrapper>> = vec![];

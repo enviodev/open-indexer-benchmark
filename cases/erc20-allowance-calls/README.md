@@ -93,6 +93,12 @@ JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
 - **relays every other JSON-RPC method upstream**, so logs and blocks still come
   from the real endpoint.
 
+A call may name its block as a hex number or in either EIP-1898 form
+(`{blockNumber}`, `{blockHash}`). Graph Node uses the hash form, so the endpoint
+resolves a hash to its number upstream — once per block, cached, and alongside
+the wait rather than after it, so the latency a tool sees is the same either
+way.
+
 The run log reports what the endpoint served for each phase, including the peak
 number of calls in flight. For most rows that figure explains the rate on its
 own: the work is 15,703 × 200ms of waiting, and the only variable is how much of
@@ -239,8 +245,11 @@ operations declaratively and has no way to call a contract from a handler at
 all.
 
 The handler gets the whole batch, so the allowance reads are issued together
-with `join_all` against the provider rindexer already maintains, rather than one
-after another.
+against the provider rindexer already maintains, rather than one after another —
+but through a bounded window (2,000 in flight) rather than all at once. The
+distinction matters in the throughput phase: there the batch is not a few
+thousand events but a hundred thousand blocks' worth, and a batch that only
+finishes when its very last call does writes nothing for minutes.
 
 `rindexer codegen` generates an insert into the event table it derives from the
 ABI, which has columns for the event's arguments and nothing else — no column
@@ -296,6 +305,13 @@ Calls through `api`, the provider SubQuery hands the mapping, with the block tag
 pinned to the event's block. Handlers run one event at a time within a worker,
 so the parallelism available to it is the worker count (`--workers=4`, matching
 the CI runner's cores) rather than anything the mapping can do.
+
+The node runs with `--unsafe`. SubQuery's sandbox allows mappings to import only
+`assert`, `buffer`, `crypto`, `util` and `path`, and the contract read reaches
+ethers' HTTP transport, which wants node's `http`: without the flag every event
+fails with `Cannot find module 'http'` and the indexer records nothing at all.
+It is SubQuery's own documented escape hatch for projects that need more than
+the whitelist, and it is what this case needs to run at all.
 
 It is also the only indexer here that runs inside a container, so it reaches the
 benchmark's endpoint through `host.docker.internal`, which its compose file maps

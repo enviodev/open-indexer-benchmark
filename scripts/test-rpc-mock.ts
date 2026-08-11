@@ -40,7 +40,10 @@ async function startUpstream() {
       const answer = (entry: any) => ({
         jsonrpc: "2.0",
         id: entry.id,
-        result: `upstream:${entry.method}`,
+        result:
+          entry.method === "eth_getBlockByHash"
+            ? { number: "0x186a00a" } // 25,600,010
+            : `upstream:${entry.method}`,
       });
       const body = Array.isArray(payload) ? payload.map(answer) : answer(payload);
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(body));
@@ -118,6 +121,39 @@ try {
     params: [{ to: TOKEN, data: "0x70a08231" }, "0x1"],
   });
   check("refuses a function the case does not define", !!wrongFunction.error);
+
+  // Graph Node names the block by hash (EIP-1898) rather than by number, and
+  // Ponder's client has been seen to send `{blockNumber}`. Both have to reach
+  // the same answer as a plain hex number, or a tool's every call is refused.
+  const byNumberObject = await rpc({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [
+      { to: TOKEN, data: allowanceData(OWNER, SPENDER) },
+      { blockNumber: `0x${(25_600_010).toString(16)}` },
+    ],
+  });
+  check(
+    "accepts an EIP-1898 block number",
+    BigInt(byNumberObject.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_010),
+    JSON.stringify(byNumberObject)
+  );
+
+  const byHash = await rpc({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [
+      { to: TOKEN, data: allowanceData(OWNER, SPENDER) },
+      { blockHash: `0x${"ab".repeat(32)}` },
+    ],
+  });
+  check(
+    "accepts an EIP-1898 block hash, resolved upstream",
+    BigInt(byHash.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_010),
+    JSON.stringify(byHash)
+  );
 
   const atHead = await rpc({
     jsonrpc: "2.0",

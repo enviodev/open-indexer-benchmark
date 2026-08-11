@@ -43,6 +43,14 @@ services:
       - --db-schema=app
       - --workers=4
       - --batch-size=30
+      # SubQuery runs mappings in a sandbox that only allows
+      # ["assert","buffer","crypto","util","path"] to be imported. The contract
+      # read in this case's handler goes through ethers, which reaches for
+      # node's `http` when it makes the request, so without this the mapping
+      # fails on every event with "Cannot find module 'http'" and the indexer
+      # records nothing at all. This is SubQuery's own documented escape hatch
+      # for projects that need more than the whitelist.
+      - --unsafe
     healthcheck:
       test:
         ["CMD", "wget", "--spider", "-q", "http://subquery-node:3000/ready"]

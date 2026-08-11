@@ -74,7 +74,7 @@ jobs:
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-allowance-calls","erc20-transfer-events","safe-factory-registrations"]'
+            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi

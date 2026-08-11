@@ -122,27 +122,58 @@ interface RpcRequest {
   params?: unknown[];
 }
 
+/** How a call named its block, before the block number is known. */
+type BlockRef = { number: number } | { hash: string };
+
 /**
- * The call an `eth_call` describes, or null when it is not one this endpoint
- * can serve deterministically.
+ * The block an `eth_call` is made against.
  *
- * A block tag of "latest" is refused rather than resolved. The answers are a
- * function of the block, so a tool reading at the head instead of at the
- * event's block would record different values for the same events every run;
- * failing the call says so immediately, where quietly answering it would
- * surface hours later as an unexplained checksum mismatch.
+ * Three spellings are in use among the tools here: a hex block number, and
+ * both EIP-1898 forms — `{blockNumber}` and `{blockHash}`. Graph Node uses the
+ * hash form, so refusing it would refuse every call a subgraph makes.
+ *
+ * A tag of "latest" is refused rather than resolved. The answers are a function
+ * of the block, so a tool reading at the head instead of at the event's block
+ * would record different values for the same events every run; failing the call
+ * says so immediately, where quietly answering it would surface hours later as
+ * an unexplained checksum mismatch.
  */
-function decodeCall(params: unknown[] | undefined): EthCall | string {
+function decodeBlockRef(blockTag: unknown): BlockRef | string {
+  if (typeof blockTag === "string") {
+    if (!blockTag.startsWith("0x")) {
+      return `eth_call at block tag "${blockTag}" — this case's calls must name the block they read at`;
+    }
+    return { number: Number(BigInt(blockTag)) };
+  }
+  if (blockTag && typeof blockTag === "object") {
+    const ref = blockTag as { blockNumber?: string; blockHash?: string };
+    if (typeof ref.blockNumber === "string" && ref.blockNumber.startsWith("0x")) {
+      return { number: Number(BigInt(ref.blockNumber)) };
+    }
+    if (typeof ref.blockHash === "string" && ref.blockHash.startsWith("0x")) {
+      return { hash: ref.blockHash.toLowerCase() };
+    }
+  }
+  return (
+    `eth_call at block tag "${JSON.stringify(blockTag)}" — this case's calls ` +
+    `must name the block they read at`
+  );
+}
+
+/**
+ * The call an `eth_call` describes, or the reason it cannot be served.
+ */
+function decodeCall(
+  params: unknown[] | undefined
+): { to: string; data: string; block: BlockRef } | string {
   const [tx, blockTag] = (params ?? []) as [
     { to?: string; data?: string; input?: string } | undefined,
-    string | undefined,
+    unknown,
   ];
   if (!tx?.to) return "eth_call without a `to` address";
   const data = (tx.data ?? tx.input ?? "0x").toLowerCase();
-  if (typeof blockTag !== "string" || !blockTag.startsWith("0x")) {
-    return `eth_call at block tag "${blockTag}" — this case's calls must name the block they read at`;
-  }
-  const block = Number(BigInt(blockTag));
+  const block = decodeBlockRef(blockTag);
+  if (typeof block === "string") return block;
   return { to: tx.to.toLowerCase(), data, block };
 }
 
@@ -178,8 +209,27 @@ export async function startRpcMock(
     inFlight++;
     peakInFlight = Math.max(peakInFlight, inFlight);
     try {
-      await sleep(interceptor.latencyMs);
-      const result = interceptor.answer(call);
+      // A call that named its block by hash needs the number before it can be
+      // answered, since the answers are a function of the block. That lookup
+      // runs alongside the wait rather than after it — cached, so it is one
+      // upstream request per block whatever the tool's call volume — which
+      // keeps the latency every tool sees identical to the tools that name the
+      // number outright.
+      const [, block] = await Promise.all([
+        sleep(interceptor.latencyMs),
+        "number" in call.block
+          ? call.block.number
+          : blockNumberOf(call.block.hash),
+      ]);
+      if (block === null) {
+        rejected++;
+        return rpcError(
+          req.id,
+          -32_602,
+          `eth_call at an unknown block hash ${(call.block as { hash: string }).hash}`
+        );
+      }
+      const result = interceptor.answer({ to: call.to, data: call.data, block });
       if (result === null) {
         rejected++;
         return rpcError(
@@ -193,6 +243,37 @@ export async function startRpcMock(
     } finally {
       inFlight--;
     }
+  }
+
+  /**
+   * The number of the block with this hash, asked of the real endpoint once
+   * and remembered. Null when it does not know it either.
+   */
+  const blockNumbers = new Map<string, Promise<number | null>>();
+  function blockNumberOf(hash: string): Promise<number | null> {
+    let pending = blockNumbers.get(hash);
+    if (!pending) {
+      pending = proxy(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_getBlockByHash",
+          params: [hash, false],
+        })
+      )
+        .then(({ body }) => {
+          const number = JSON.parse(body)?.result?.number;
+          return typeof number === "string" ? Number(BigInt(number)) : null;
+        })
+        .catch(() => null);
+      // A failed lookup is not remembered as a failure: the next call for that
+      // block asks again rather than inheriting one bad round trip.
+      pending.then((value) => {
+        if (value === null) blockNumbers.delete(hash);
+      });
+      blockNumbers.set(hash, pending);
+    }
+    return pending;
   }
 
   /** Send a body upstream and hand back the raw response. */

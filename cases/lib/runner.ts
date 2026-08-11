@@ -522,6 +522,20 @@ async function benchmarkIndexer(
       continue;
     }
 
+    // A window that recorded nothing is not a measurement of zero. An indexer
+    // whose first batch is still in flight when the window closes has written
+    // no rows yet, and phase A — which this tool finished, or it would not be
+    // here — is a real measurement of the same work. Publishing the zero would
+    // put a tool that indexed the range correctly at the bottom of the table
+    // with a rate no run actually produced.
+    if (windowRun.events === 0) {
+      console.log(
+        `\nRun ${attempt}: nothing had been written when the ${windowS}s window ` +
+          `closed — discarding this sample.\n`
+      );
+      continue;
+    }
+
     if (windowRun.completed) {
       console.log(
         `\nReached the end block after ${windowRun.elapsedS.toFixed(
