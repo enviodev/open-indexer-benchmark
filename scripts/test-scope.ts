@@ -45,10 +45,14 @@ let failures = 0;
     const listed: string[] = JSON.parse(line[1]);
     const missing = REGISTERED.filter((i) => !listed.includes(i));
     const extra = listed.filter((i) => !REGISTERED.includes(i));
-    if (missing.length > 0 || extra.length > 0) {
+    // A name listed twice is neither missing nor unknown, and it would run the
+    // indexer twice and publish its row twice.
+    const duplicated = listed.filter((i, at) => listed.indexOf(i) !== at);
+    if (missing.length > 0 || extra.length > 0 || duplicated.length > 0) {
       console.error(
         `FAIL workflow: benchmarks.yml's default indexer list disagrees with the ` +
-          `drivers registry — missing [${missing.join(", ")}], unknown [${extra.join(", ")}]`
+          `drivers registry — missing [${missing.join(", ")}], unknown [${extra.join(", ")}], ` +
+          `duplicated [${duplicated.join(", ")}]`
       );
       failures++;
     } else {
