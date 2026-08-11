@@ -250,12 +250,16 @@ second pass and `envio_storage_write_seconds` for the writes.
 ### Ponder
 
 Uses `context.client.readContract`, which reads at the event's block by default.
-The chain is configured with a viem transport rather than a bare URL so that
-those reads are batched into JSON-RPC requests the same way. Ponder profiles
-what each indexing function asks for and prefetches those reads for upcoming
-events, so the calls overlap even though indexing functions run one event at a
-time; results are also cached in the database, though nothing carries
+Ponder profiles what each indexing function asks for and prefetches those reads
+for upcoming events, so the calls overlap even though indexing functions run one
+event at a time; results are also cached in the database, though nothing carries
 over between phases here, since the driver recreates the database each time.
+
+The chain is configured with a viem transport rather than a bare URL so those
+reads are batched like the others', but unlike the others it changes little:
+what Ponder prefetches is about twenty calls at a time, and twenty calls cost
+about the same in one request as in twenty. Its rate here is set by how deep the
+prefetching goes, not by how the calls travel.
 
 ### Rindexer
 
