@@ -120,6 +120,13 @@ check("sqd project directory covers both sqd variants", [
   "cases/erc20-transfer-events/sqd/src/processor.ts",
 ], { "erc20-transfer-events": ["sqd", "sqd-rpc"] });
 
+// Envio Subgraph has no project directory: it runs the Subgraph tool's own
+// project, so a change to it has to re-measure all three rows together or the
+// comparison stops being like-for-like.
+check("the subgraph project covers Graph Node and both Envio Subgraph variants", [
+  "cases/erc20-transfer-events/subgraph/src/mapping.ts",
+], { "erc20-transfer-events": ["envio-subgraph", "envio-subgraph-rpc", "subgraph"] });
+
 check("scenario run logic runs the whole scenario", ["cases/erc20-transfer-events/run.ts"], {
   "erc20-transfer-events": INDEXERS,
 });
@@ -133,6 +140,12 @@ check("a driver runs its indexer in every scenario", ["cases/lib/drivers/ponder.
 check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.ts"], inEvery(["envio", "envio-rpc"]));
 
 check("the sqd driver covers both sqd variants", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd", "sqd-rpc"]));
+
+check(
+  "the envio-subgraph driver covers both of its variants",
+  ["cases/lib/drivers/envio-subgraph.ts"],
+  inEvery(["envio-subgraph", "envio-subgraph-rpc"])
+);
 
 // Attributing a driver module to no indexer at all would select nothing and
 // publish the untouched carried-forward rows as if they had been re-measured.
