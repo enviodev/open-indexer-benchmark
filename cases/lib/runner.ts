@@ -58,12 +58,12 @@ const HEAD_OFFSET = 500;
 
 /**
  * Stop the verification run after this long, whatever it has reached. Every
- * case gets the same ten minutes: a range an indexer cannot finish inside it is
+ * case gets the same five minutes: a range an indexer cannot finish inside it is
  * itself the finding, and the run is verified and rated from where it got to
  * rather than discarded — so a slow tool reports how much of the data it holds
  * instead of reporting nothing at all.
  */
-const PHASE_A_TIMEOUT_S = 600;
+const PHASE_A_TIMEOUT_S = 300;
 
 /**
  * How many throughput windows to run for indexers fast enough to get one.

@@ -27,7 +27,7 @@ jobs:
     name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
     runs-on: ubuntu-latest
     # One job is one indexer on one scenario, and they all run concurrently, so
-    # this bounds a single benchmark rather than the suite: phase A's ten-minute
+    # this bounds a single benchmark rather than the suite: phase A's five-minute
     # cap, two throughput windows, and the install and build each of the three
     # runs pays for. It is a backstop for a hung runner — a job that reaches it
     # produces no row at all, which is why it sits above what a real run costs.

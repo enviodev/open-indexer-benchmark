@@ -43,7 +43,7 @@ const START_BLOCK = 25_600_000;
 // that issues a whole batch of them at once gets through the range in the time
 // its slowest batch takes; one that waits for each call before starting the
 // next needs 15,703 × 200ms, or the better part of an hour. The range is sized so
-// the first finishes comfortably inside the ten-minute cap, which leaves what
+// the first finishes comfortably inside the five-minute cap, which leaves what
 // the table reports for the rest a matter of how far they got.
 const VERIFY_END_BLOCK = 25_601_199;
 

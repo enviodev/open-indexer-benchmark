@@ -14,6 +14,6 @@ What the result table columns mean:
 
 **contract calls** — a scenario whose handlers read contract state does not read it from a real node. The benchmark answers those calls itself, at a fixed latency, from the call's own arguments, so every tool waits exactly as long for exactly the same answers. Nothing limits how many it will answer at once, which leaves how many an indexer has outstanding the one thing the scenario measures. Any other call is refused rather than answered, and the answers appear in no log, so a matching checksum is proof the calls were really made.
 
-The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
+The verification run is capped at five minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 
 Each scenario's own page documents its block range, contracts, entities and per-tool implementation notes.
