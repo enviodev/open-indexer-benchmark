@@ -73,7 +73,7 @@ Not everything an indexer needs is in the logs. Here every approval on the eight
 
 ### Factory Contract Registration
 
-What happens when you do not know the contracts up front? The indexer watches the Safe proxy factories, and every one of the 199,977 proxies they create becomes another contract it has to follow from that moment on.
+What happens when you do not know the contracts up front? The indexer watches the Safe proxy factories, and every one of the 82,268 proxies they create becomes another contract it has to follow from that moment on.
 
 <!-- BENCHMARK:safe-factory-registrations:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
