@@ -1,8 +1,9 @@
 {
   "startBlock": 25600000,
   "endBlock": 25601199,
-  "generatedAt": "2026-08-05T18:23:03.817Z",
+  "generatedAt": "2026-08-12T11:16:56.358Z",
   "totalEvents": 19125,
+  "lastEventBlock": 25601199,
   "entities": {
     "approvalEvent": {
       "rowCount": 19125,

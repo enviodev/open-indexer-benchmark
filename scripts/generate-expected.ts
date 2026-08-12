@@ -69,11 +69,19 @@ async function generate(name: string, token: string) {
     );
   }
 
+  // The last block that carries an event, which is as far as an indexer whose
+  // progress is read from its own rows can ever appear to get.
+  const lastEventBlock = logs.reduce(
+    (highest, log) => (log.blockNumber > highest ? log.blockNumber : highest),
+    config.startBlock
+  );
+
   const expected: Expected = {
     startBlock: config.startBlock,
     endBlock: config.verifyEndBlock,
     generatedAt: new Date().toISOString(),
     totalEvents,
+    lastEventBlock,
     entities,
   };
 

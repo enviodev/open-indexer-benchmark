@@ -365,7 +365,17 @@ async function benchmarkIndexer(
   // final block yields one less than that. Comparing progress against the
   // inclusive count would mean block-based completion could never fire, leaving
   // completion to hinge entirely on the event count matching exactly.
-  const rangeTargetBlocks = config.verifyEndBlock - config.startBlock;
+  //
+  // The target is the last block that carries an event rather than the end
+  // block itself, because half the drivers read progress from the rows the
+  // indexer wrote — the highest block that produced one — and a range whose
+  // final blocks hold nothing leaves them permanently short. Safe's factory
+  // range ends seven blocks after its last ProxyCreation, which was enough to
+  // publish a completed run as "exited without finishing the verification
+  // range" and to downgrade what verification found to a note about the run
+  // stopping short.
+  const rangeTargetBlocks =
+    (expected.lastEventBlock ?? config.verifyEndBlock) - config.startBlock;
 
   // ── Phase A: bounded verification run ──
   const phaseA = factory({ config, rpcUrl, endBlock: config.verifyEndBlock });
@@ -498,7 +508,15 @@ async function benchmarkIndexer(
     mock?.reset();
     const windowRun = await runPhase(phaseB, {
       name,
-      targetBlocks: headEndBlock - config.startBlock,
+      // Same allowance as phase A, and it matters for the same reason: a case
+      // that pins its window to the verification range is one an indexer can
+      // reach the end of, and then whether the run counts turns on whether the
+      // range's last blocks happened to hold an event. A window that runs to
+      // the chain head is nowhere near its target either way.
+      targetBlocks:
+        (headEndBlock === expected.endBlock
+          ? (expected.lastEventBlock ?? headEndBlock)
+          : headEndBlock) - config.startBlock,
       targetEvents: Number.POSITIVE_INFINITY,
       maxSeconds: windowS,
     });
