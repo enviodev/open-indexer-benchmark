@@ -1,6 +1,19 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
 name: erc20-allowance-indexer
 description: ERC-20 approvals, with the resulting allowance read back from the chain
+# A batch is the unit of concurrency for the Effect API: the preload pass puts
+# the whole batch's calls in flight at once, so how many an indexer has
+# outstanding is set by how many events it processes at a time. At the default
+# 5,000 that is about 4,100 calls — the ~82% of approvals that are not
+# revocations — and the run spends its time at a concurrency the endpoint could
+# answer several times over.
+#
+# Measured on the verification range and two 60s windows, holding everything
+# else fixed: 5,000 → 8,188 events/s at 3,921 calls in flight; 20,000 → 10,890
+# at 15,473; 50,000 → 9,503 at 38,000. It turns over past 20,000, where the
+# batch costs more in storage writes and memory than the extra concurrency is
+# worth, so 20,000 is where this sits.
+full_batch_size: 20000
 contracts:
   - name: ERC20
     events:

@@ -239,10 +239,13 @@ costs one call — 14,114 of the range's 15,703. `rateLimit` is off, since the
 endpoint imposes none either; against a real provider that option is where its
 limit would go.
 
-Handlers see at most 5,000 events per batch
-(`envio_processing_max_batch_size`), so the range's calls go out in four
-batchfuls rather than all at once — which is why the peak in flight the endpoint
-reports for it is a few thousand rather than all 14,114. Envio's own metrics, on port 9898, are the
+A batch is therefore the unit of concurrency, and its size is the setting that
+decides this row. `full_batch_size` is 20,000 here rather than the default
+5,000: a batch's non-revoking approvals are what go out together, so 5,000
+events is about 4,100 calls in flight and 20,000 is about four times that.
+Measured over two windows with everything else fixed, 5,000 gives 8,188
+events/s, 20,000 gives 10,890, and 50,000 gives 9,503 — past 20,000 the batch
+costs more in storage writes and memory than the concurrency returns. Envio's own metrics, on port 9898, are the
 quickest way to see where a run's time went: `envio_preload_seconds` is the
 phase the calls happen in, against `envio_processing_seconds` for the handlers'
 second pass and `envio_storage_write_seconds` for the writes.
