@@ -29,6 +29,9 @@ export const INDEXERS = Object.keys(DRIVERS);
 
 const HYPERSYNC_URL = "https://docs.envio.dev/docs/HyperSync/overview";
 const HYPERRPC_URL = "https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc";
+/** The release the pinned envio comes from, so the row names its own version. */
+const ENVIO_SUBGRAPH_URL =
+  "https://github.com/enviodev/hyperindex/releases/tag/v3.6.1-subgraph";
 const SQD_SDK_URL = "https://sqd.dev/sdk/";
 const SQD_NETWORK_URL = "https://docs.sqd.dev/en/network/overview";
 
@@ -64,14 +67,14 @@ export const TOOLS: Record<
   // reading of the same subgraph.
   "envio-subgraph": {
     name: "Envio Subgraph",
-    toolUrl: "https://envio.dev",
+    toolUrl: ENVIO_SUBGRAPH_URL,
     source: "HyperSync",
     sourceUrl: HYPERSYNC_URL,
     storage: "Postgres",
   },
   "envio-subgraph-rpc": {
     name: "Envio Subgraph",
-    toolUrl: "https://envio.dev",
+    toolUrl: ENVIO_SUBGRAPH_URL,
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
