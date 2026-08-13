@@ -1,0 +1,59 @@
+version: "3"
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: ./docker/pg-Dockerfile
+    ports:
+      - 5432:5432
+    volumes:
+      - .data/postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  subquery-node:
+    image: subquerynetwork/subql-node-ethereum:latest
+    # The benchmark serves this case's contract calls from the host, and this
+    # is the only indexer that runs inside a container: without the mapping,
+    # the endpoint's host is this container rather than the machine.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_DATABASE: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL}
+    volumes:
+      - ./:/app
+    command:
+      - ${SUB_COMMAND:-}
+      - -f=/app
+      - --db-schema=app
+      - --workers=4
+      - --batch-size=30
+      # SubQuery runs mappings in a sandbox that only allows
+      # ["assert","buffer","crypto","util","path"] to be imported. The contract
+      # read in this case's handler goes through ethers, which reaches for
+      # node's `http` when it makes the request, so without this the mapping
+      # fails on every event with "Cannot find module 'http'" and the indexer
+      # records nothing at all. This is SubQuery's own documented escape hatch
+      # for projects that need more than the whitelist.
+      - --unsafe
+    healthcheck:
+      test:
+        ["CMD", "wget", "--spider", "-q", "http://subquery-node:3000/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 10

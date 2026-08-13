@@ -1,0 +1,29 @@
+{
+  /* For details: https://www.totaltypescript.com/tsconfig-cheat-sheet */
+  "compilerOptions": {
+    /* Base Options: */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "es2022",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    /* For running Envio: */
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+
+    /* Code doesn't run in the DOM, but the effect handler uses node's fetch
+       and process.env, whose types come with @types/node: */
+    "lib": ["es2022"],
+    "types": ["node"]
+  }
+}

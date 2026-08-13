@@ -14,6 +14,8 @@ What the result table columns mean:
 
 **Envio Subgraph** is not a separate implementation. It runs the scenario's existing `subgraph/` directory — the same manifest, schema, ABIs and AssemblyScript mappings Graph Node indexes — on [HyperIndex](https://envio.dev), with nothing added to that directory. The two rows are therefore a like-for-like reading of one subgraph on two indexers, rather than two ports of the same idea. Like the Envio Indexer it is benchmarked once per source it supports, HyperSync and RPC. It runs a released envio from npm, pinned in `cases/lib/envio-subgraph`, the same way Graph Node runs a released binary.
 
-The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
+**contract calls** — a scenario whose handlers read contract state does not read it from a real node. The benchmark answers those calls itself, at a fixed latency, from the call's own arguments, so every tool waits exactly as long for exactly the same answers. Nothing limits how many it will answer at once, which leaves how many an indexer has outstanding the one thing the scenario measures. Any other call is refused rather than answered, and the answers appear in no log, so a matching checksum is proof the calls were really made.
+
+The verification run is capped at five minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 
 Each scenario's own page documents its block range, contracts, entities and per-tool implementation notes.
