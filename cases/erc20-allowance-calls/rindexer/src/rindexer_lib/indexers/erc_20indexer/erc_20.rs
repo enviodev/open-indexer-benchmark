@@ -56,10 +56,13 @@ const SCHEMA: &str = "erc_20indexer_erc_20";
 /// tables are created on the first batch rather than at startup.
 static CASE_TABLES: OnceCell<()> = OnceCell::const_new();
 
+/// `get_or_try_init` rather than `get_or_init`: the latter stores its `()`
+/// whatever happened inside, so a failed CREATE TABLE would be remembered as
+/// done and every later batch would sail past this and fail at the insert
+/// instead, reporting a missing relation rather than why it is missing.
 async fn ensure_case_tables(database: &Arc<PostgresClient>) -> Result<(), String> {
-    let mut outcome: Result<(), String> = Ok(());
     CASE_TABLES
-        .get_or_init(|| async {
+        .get_or_try_init(|| async {
             let statements = [
                 // Column types match the ones rindexer picks for the same
                 // values in the tables it generates: an address is CHAR(42), a
@@ -90,13 +93,13 @@ async fn ensure_case_tables(database: &Arc<PostgresClient>) -> Result<(), String
             ];
             for statement in statements {
                 if let Err(e) = database.execute(&statement, &[]).await {
-                    outcome = Err(format!("creating the case's tables: {e:?}"));
-                    return;
+                    return Err(format!("creating the case's tables: {e:?}"));
                 }
             }
+            Ok(())
         })
-        .await;
-    outcome
+        .await
+        .map(|_| ())
 }
 
 /// Lowercase hex, matching how every other implementation stores an address.

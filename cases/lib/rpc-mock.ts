@@ -91,28 +91,29 @@ export interface RpcMock {
 /** Port the intercepting endpoint listens on. */
 const MOCK_PORT = 19_878;
 
-/**
- * The same endpoint, as seen from inside a container.
- *
- * Most drivers run the indexer natively and can use the URL as it is. The one
- * that runs it in Docker cannot: loopback there is the container's own. Docker
- * maps `host.docker.internal` to the host when the service declares
- * `host-gateway`, which this case's compose file does.
- *
- * A URL that is not local is returned untouched, so this is safe to apply
- * unconditionally: every case but this one hands the drivers a public endpoint.
- */
-export function containerUrl(url: string): string {
-  const parsed = new URL(url);
-  if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") return url;
-  parsed.hostname = "host.docker.internal";
-  return parsed.toString();
-}
-
 const JSON_HEADERS = { "content-type": "application/json" };
 
 function rpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
+}
+
+/** Whether a relayed response is one whose body is worth reading. */
+function ok(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
+function parseOrNull(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+}
+
+/** Enough of an upstream failure to diagnose it, short enough to log. */
+function summarise(body: string): string {
+  const text = body.trim().replace(/\s+/g, " ");
+  return text.length > 200 ? `${text.slice(0, 200)}…` : text || "(empty body)";
 }
 
 /** A single JSON-RPC call, as it arrives. */
@@ -351,11 +352,28 @@ export async function startRpcMock(
 
         const relayed = passthrough.length
           ? proxy(JSON.stringify(passthrough)).then((response) => {
-              const parsed = JSON.parse(response.body);
-              const list: object[] = Array.isArray(parsed) ? parsed : [parsed];
+              // Upstream owes one response per request it was given. A rate
+              // limit or a 500 answers the batch with a single error object
+              // instead, and mapping that back by position would leave the
+              // other slots holding `undefined` — which serialises to `null`,
+              // under a 200, and reads to an indexer as a block range that
+              // genuinely held nothing. Whatever upstream said becomes a
+              // JSON-RPC error on each slot it failed to answer, so the client
+              // sees a failed request and can retry it.
+              const parsed = ok(response.status) ? parseOrNull(response.body) : null;
+              const list = Array.isArray(parsed) ? parsed : [];
+              const usable = list.length === passthrough.length;
               let next = 0;
               for (let i = 0; i < batch.length; i++) {
-                if (!isCall[i]) answers[i] = list[next++];
+                if (isCall[i]) continue;
+                answers[i] = usable
+                  ? list[next++]
+                  : rpcError(
+                      batch[i]?.id,
+                      -32_603,
+                      `upstream returned HTTP ${response.status} for a batch of ` +
+                        `${passthrough.length}: ${summarise(response.body)}`
+                    );
               }
             })
           : Promise.resolve();

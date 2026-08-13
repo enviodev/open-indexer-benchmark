@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, kill, psql, start, waitPg } from "../process.ts";
-import { containerUrl } from "../rpc-mock.ts";
+import { containerUrl } from "../container.ts";
 import {
   blocksIndexed,
   createProgressReader,

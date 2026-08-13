@@ -8,7 +8,7 @@
 //     when every indexer holds exactly the same data, which is what a bounded
 //     range guarantees and a fixed time window cannot.
 //
-//     The range is not guaranteed to be reachable: the run is capped at ten
+//     The range is not guaranteed to be reachable: the run is capped at five
 //     minutes, and an indexer that has not finished by then is verified on what
 //     it did index. That row reports a real check of real data over a known
 //     fraction of the range, with the fraction named and its storage scaled to
@@ -75,6 +75,15 @@ const PHASE_A_TIMEOUT_S = 300;
 const THROUGHPUT_RUNS = 2;
 
 const DEFAULT_WINDOW_S = 100;
+
+/**
+ * How long to wait for progress to stop moving before a phase that reached its
+ * target is called finished, and how many times to look. Long enough to cover a
+ * batch commit that lands out of order, short enough that a finished run pays
+ * about a second for the check.
+ */
+const SETTLE_MS = 500;
+const SETTLE_READS = 6;
 
 // ── Cleanup on unexpected exit ─────────────────────────────────────────
 
@@ -173,6 +182,30 @@ async function runPhase(
     } catch {
       // Not queryable yet, or briefly unavailable — keep the previous reading.
     }
+  }
+
+  // A target being met is not by itself proof that everything before it has
+  // landed. Two drivers read position from the rows the indexer wrote — the
+  // highest block that produced one — and an indexer that works on several
+  // block ranges at once can commit a later range before an earlier one, so
+  // the position can arrive before the rows behind it do. Wait for the row
+  // count to stop moving before calling the phase finished: on a run that is
+  // genuinely done this costs one extra reading, and on one that is not it is
+  // the difference between verifying complete data and reporting a hole in it
+  // as a data mismatch.
+  const metTarget = last.blocks >= targetBlocks || last.events >= targetEvents;
+  for (let settle = 0; metTarget && settle < SETTLE_READS; settle++) {
+    if (performance.now() >= deadline) break;
+    await sleep(SETTLE_MS);
+    let next: Snapshot;
+    try {
+      next = (await driver.snapshot()) ?? last;
+    } catch {
+      break;
+    }
+    const moved = next.events > last.events || next.blocks > last.blocks;
+    last = next;
+    if (!moved) break;
   }
 
   // Take the final reading and stamp the elapsed time from the same moment, so
@@ -550,6 +583,20 @@ async function benchmarkIndexer(
       console.log(
         `\nRun ${attempt}: nothing had been written when the ${windowS}s window ` +
           `closed — discarding this sample.\n`
+      );
+      continue;
+    }
+
+    // Rows but no position. Every driver reads the two from different places,
+    // and a window that recorded events cannot have covered no blocks — so
+    // this is a progress reading that failed or had not been written yet, not
+    // a measurement. Publishing it would put a real events/s next to a
+    // blocks/s of zero.
+    if (windowRun.blocks === 0) {
+      console.log(
+        `\nRun ${attempt}: ${windowRun.events.toLocaleString("en-US")} events were ` +
+          `written but the indexer's block position still read zero — discarding ` +
+          `this sample.\n`
       );
       continue;
     }

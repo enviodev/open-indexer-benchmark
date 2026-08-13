@@ -31,11 +31,20 @@ function check(name: string, condition: boolean, detail = "") {
 /** Stands in for the real RPC endpoint, and counts what reaches it. */
 async function startUpstream() {
   let requests = 0;
+  // Set to make the next request fail the way a rate-limited endpoint does:
+  // one error object for the whole batch, under a non-2xx status.
+  let failNext: { status: number; body: string } | null = null;
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
       requests++;
+      if (failNext) {
+        const { status, body } = failNext;
+        failNext = null;
+        res.writeHead(status, { "content-type": "application/json" }).end(body);
+        return;
+      }
       const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       const answer = (entry: any) => ({
         jsonrpc: "2.0",
@@ -54,6 +63,9 @@ async function startUpstream() {
   return {
     url: `http://127.0.0.1:${port}`,
     requests: () => requests,
+    failNextWith: (status: number, body: string) => {
+      failNext = { status, body };
+    },
     close: () => new Promise<void>((r) => server.close(() => r())),
   };
 }
@@ -238,6 +250,43 @@ try {
     `takes ${BIG} at once without queueing any of them`,
     mock.stats().calls === BIG && mock.stats().peakInFlight > PILE * 5,
     JSON.stringify(mock.stats())
+  );
+
+  // ── An upstream failure in a mixed batch stays a failure ──
+  //
+  // A batch holding both kinds is split, and the half that goes upstream comes
+  // back matched up by position. A rate limit answers that half with one error
+  // object rather than one response each, and filling the unanswered slots
+  // from it by position would leave them null under a 200 — which an indexer
+  // reads as a block range that held no logs, silently losing data. Every slot
+  // upstream did not answer has to carry an error the client can retry.
+  upstream.failNextWith(429, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32_005, message: "rate limited" } }));
+  const mixed = await rpc([
+    call(OWNER, SPENDER, 25_600_050),
+    { jsonrpc: "2.0", id: 2, method: "eth_getLogs", params: [{}] },
+    call(OWNER, SPENDER, 25_600_051),
+    { jsonrpc: "2.0", id: 4, method: "eth_getLogs", params: [{}] },
+  ]);
+  check(
+    "a refused upstream batch leaves no null in the response",
+    Array.isArray(mixed) && mixed.length === 4 && mixed.every((entry) => entry != null),
+    JSON.stringify(mixed)
+  );
+  check(
+    "the requests upstream refused come back as errors, by id",
+    Array.isArray(mixed) &&
+      !!mixed[1]?.error &&
+      !!mixed[3]?.error &&
+      mixed[1].id === 2 &&
+      mixed[3].id === 4,
+    JSON.stringify(mixed)
+  );
+  check(
+    "the contract calls in that batch are still answered",
+    Array.isArray(mixed) &&
+      BigInt(mixed[0]?.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_050) &&
+      BigInt(mixed[2]?.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_051),
+    JSON.stringify(mixed)
   );
 } finally {
   await mock.close();

@@ -167,6 +167,13 @@ jobs:
       - name: Run benchmark
         run: |
           set -o pipefail
+          # A contract call in flight is an open socket at both ends, and the
+          # External Contract Calls scenario is a measurement of how many a tool
+          # keeps in flight — tens of thousands of them. The open-file limit
+          # would cap that silently and read as a tool that stopped scaling, so
+          # it goes as high as the runner allows before anything starts.
+          ulimit -n "$(ulimit -Hn)" || true
+          echo "open files: $(ulimit -n)"
           node "cases/$CASE/run.ts" "$INDEXER" --duration="$DURATION" 2>&1 | tee /tmp/benchmark-output.txt
         env:
           CASE: ${{ inputs.case }}

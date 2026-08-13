@@ -61,7 +61,7 @@ How fast can an indexer write? Every USDC transfer is stored once, with nothing 
 
 ### External Contract Calls
 
-Not everything an indexer needs is in the logs. Here every approval on the eight busiest ERC-20s is followed by a read of the allowance the token reports for that pair, at that block — 15,703 calls over the range, 200ms each, answered by the benchmark itself so every tool waits exactly as long. Nothing caps how many an indexer may have outstanding, so what separates the rows is how many of those waits it manages to take at the same time.
+Not everything an indexer needs is in the logs. Every approval on the eight busiest ERC-20s is followed by a read of the allowance at that block: 15,703 calls, 200ms each, answered by the benchmark so every tool waits the same. Nothing limits how many a tool may have outstanding, so the rows differ by how many of those waits it takes at once.
 
 <!-- BENCHMARK:erc20-allowance-calls:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -78,20 +78,9 @@ What happens when you do not know the contracts up front? The indexer watches th
 <!-- BENCHMARK:safe-factory-registrations:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 11,775.7 | 3,231.5 | — | ✅ | Postgres 35.2 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 4,951.4 | 1,430.0 | 2.4x slower | ❌ (1) | Postgres 33.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4,094.8 | 1,123.7 | 2.9x slower | ✅ | Postgres 35.2 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 523.1 | 143.6 | 22.5x slower | ❌ (2) | Postgres 33.4 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 475.8 | 130.6 | 24.8x slower | ✅ | Postgres 64.2 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 130.6 | 26.1 | 90.2x slower | ❓ (3) | Postgres ~70.8 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (4) | — |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (5) | — |
 
-> **(1)** Squid SDK — 10,417 of 10,524 safe setups missing; 8 of 298 module transactions missing; 18 of 23 fallback handler changes missing; 1 of 4 guard changes missing; 443 of 706 module enables missing
-> **(2)** Squid SDK — 10,417 of 10,524 safe setups missing; 8 of 298 module transactions missing; 18 of 23 fallback handler changes missing; 1 of 4 guard changes missing; 443 of 706 module enables missing
-> **(3)** Subgraph — missing 64% of the data: the verification range was not finished within 600s
-> **(4)** SubQuery — indexed nothing in 600s, so there was no data to verify
-> **(5)** Rindexer — its factory filter takes one factory per contract — `Contract using factory filter must use same factory across all networks` — so the children of Safe's four canonical factory deployments cannot be collected into one contract, and its no-code mode names tables after events, which leaves no way to declare the eight events Safe emits under one topic in two layouts
+> These numbers are pending. The range this scenario runs was halved (60,000 blocks to 30,000) when the verification cap dropped from ten minutes to five, so every previously published row measured a different amount of work against a contract set twice as deep. The next run on `main` fills the table back in.
+
 <!-- BENCHMARK:safe-factory-registrations:END -->
 
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)

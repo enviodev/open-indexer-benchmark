@@ -28,6 +28,9 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
   };
   let proc: ChildProcess | null = null;
   let done = false;
+  // Furthest this phase has been seen to get. A driver is built per phase, so
+  // this starts empty for each one and never carries a previous phase's work.
+  let highWater = { events: 0, blocks: 0 };
 
   const readEvents = createProgressReader(ENVIO_DB_URL, config);
 
@@ -73,10 +76,20 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
         readEvents().catch(() => ({ events: 0 })),
       ]);
       const [eventsStr, blockStr] = row.split("|");
-      return {
-        events: Math.max(parseInt(eventsStr, 10) || 0, rows.events),
-        blocks: blocksIndexed(config, parseInt(blockStr, 10) || 0),
+      // Both readings only ever move forwards, so a later one that comes back
+      // lower is the read racing the writer rather than work being undone —
+      // and the final reading is the one that decides the rate. Without this a
+      // run could publish a real events/s beside a blocks/s of zero, since the
+      // event count has a second source to fall back on and the block position
+      // does not.
+      highWater = {
+        events: Math.max(highWater.events, parseInt(eventsStr, 10) || 0, rows.events),
+        blocks: Math.max(
+          highWater.blocks,
+          blocksIndexed(config, parseInt(blockStr, 10) || 0)
+        ),
       };
+      return highWater;
     },
     async stop() {
       await kill(proc);

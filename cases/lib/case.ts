@@ -56,9 +56,10 @@ export interface CaseConfig {
   };
   /**
    * Set for a case whose handlers read contract state. Every tool is then
-   * pointed at an endpoint that answers those calls itself — same latency,
-   * same concurrency ceiling, same answers for everyone — instead of at a real
-   * node, whose response times no two runs would share. See ./rpc-mock.ts.
+   * pointed at an endpoint that answers those calls itself — same latency and
+   * the same answers for everyone, and no limit on how many it will answer at
+   * once — instead of at a real node, whose response times no two runs would
+   * share. See ./rpc-mock.ts.
    */
   ethCall?: EthCallInterceptor;
   /**
