@@ -1,0 +1,17 @@
+{
+  "startBlock": 25600000,
+  "endBlock": 25601199,
+  "generatedAt": "2026-08-12T11:16:56.358Z",
+  "totalEvents": 19125,
+  "lastEventBlock": 25601199,
+  "entities": {
+    "approvalEvent": {
+      "rowCount": 19125,
+      "checksum": "11048750873872177708103"
+    },
+    "tokenAllowance": {
+      "rowCount": 7342,
+      "checksum": "4226739699564428837600"
+    }
+  }
+}

@@ -35,7 +35,13 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
     SQD_END_BLOCK: String(endBlock),
     SQD_SOURCE: source,
   };
-  if (source === "rpc") {
+  // A case whose handlers read contract state needs an RPC endpoint for those
+  // reads whichever source the sync comes from, so the network run gets one
+  // too. That is not the fallback this guards against: the mixture it prevents
+  // is chain *data* arriving from two places, and a bounded run that stops well
+  // short of the head never reaches the point where the processor would go to
+  // RPC for it.
+  if (source === "rpc" || config.ethCall) {
     env.RPC_ENDPOINT = rpcUrl;
   } else {
     delete env.RPC_ENDPOINT;

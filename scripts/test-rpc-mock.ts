@@ -1,0 +1,297 @@
+// Tests the endpoint that serves a case's contract calls.
+//
+//   node scripts/test-rpc-mock.ts
+//
+// The endpoint is the External Contract Calls scenario's measuring instrument:
+// every row in that table is a statement about how well an indexer kept it
+// busy. So the things a row depends on are what is pinned here — that the
+// latency is paid, that nothing is ever queued or rate limited however much
+// arrives at once, that a batch comes back in the order it was asked for, and
+// that a call the case does not define is refused rather than quietly
+// answered.
+//
+// It needs no credentials: the upstream half is a local stub standing in for
+// the real endpoint.
+
+import { createServer } from "node:http";
+import { caseConfig, allowanceOf } from "../cases/erc20-allowance-calls/case.config.ts";
+import { startRpcMock } from "../cases/lib/rpc-mock.ts";
+
+let failures = 0;
+
+function check(name: string, condition: boolean, detail = "") {
+  if (condition) {
+    console.log(`ok ${name}`);
+    return;
+  }
+  console.error(`FAIL ${name}${detail ? `\n  ${detail}` : ""}`);
+  failures++;
+}
+
+/** Stands in for the real RPC endpoint, and counts what reaches it. */
+async function startUpstream() {
+  let requests = 0;
+  // Set to make the next request fail the way a rate-limited endpoint does:
+  // one error object for the whole batch, under a non-2xx status.
+  let failNext: { status: number; body: string } | null = null;
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => {
+      requests++;
+      if (failNext) {
+        const { status, body } = failNext;
+        failNext = null;
+        res.writeHead(status, { "content-type": "application/json" }).end(body);
+        return;
+      }
+      const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      const answer = (entry: any) => ({
+        jsonrpc: "2.0",
+        id: entry.id,
+        result:
+          entry.method === "eth_getBlockByHash"
+            ? { number: "0x186a00a" } // 25,600,010
+            : `upstream:${entry.method}`,
+      });
+      const body = Array.isArray(payload) ? payload.map(answer) : answer(payload);
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(body));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as { port: number };
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests: () => requests,
+    failNextWith: (status: number, body: string) => {
+      failNext = { status, body };
+    },
+    close: () => new Promise<void>((r) => server.close(() => r())),
+  };
+}
+
+const TOKEN = "0xdac17f958d2ee523a2206206994597c13d831ec7";
+const OWNER = "0x1111111111111111111111111111111111111111";
+const SPENDER = "0x2222222222222222222222222222222222222222";
+
+const pad = (address: string) => address.slice(2).padStart(64, "0");
+const allowanceData = (owner: string, spender: string) =>
+  `0xdd62ed3e${pad(owner)}${pad(spender)}`;
+
+const upstream = await startUpstream();
+const mock = await startRpcMock(upstream.url, caseConfig.ethCall!);
+
+async function rpc(body: unknown): Promise<any> {
+  const res = await fetch(mock.url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+const call = (owner: string, spender: string, block: number, to = TOKEN) => ({
+  jsonrpc: "2.0",
+  id: 1,
+  method: "eth_call",
+  params: [{ to, data: allowanceData(owner, spender) }, `0x${block.toString(16)}`],
+});
+
+try {
+  // ── The answer is the one the ground truth expects ──
+  const answered = await rpc(call(OWNER, SPENDER, 25_600_042));
+  const expected = allowanceOf(TOKEN, OWNER, SPENDER, 25_600_042);
+  check(
+    "answers with the value the ground truth computes",
+    BigInt(answered.result) === expected,
+    `got ${answered.result}, expected 0x${expected.toString(16)}`
+  );
+  check(
+    "answers a uint256-wide word",
+    typeof answered.result === "string" && answered.result.length === 66,
+    `got ${answered.result}`
+  );
+
+  // Same call, different block: a tool reading at the wrong block cannot match
+  // the ground truth by accident.
+  const otherBlock = await rpc(call(OWNER, SPENDER, 25_600_043));
+  check(
+    "the block is part of the answer",
+    otherBlock.result !== answered.result
+  );
+
+  // ── Calls outside the case are refused ──
+  const wrongToken = await rpc(
+    call(OWNER, SPENDER, 25_600_042, "0x000000000000000000000000000000000000dead")
+  );
+  check("refuses a call to a contract outside the case", !!wrongToken.error);
+
+  const wrongFunction = await rpc({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [{ to: TOKEN, data: "0x70a08231" }, "0x1"],
+  });
+  check("refuses a function the case does not define", !!wrongFunction.error);
+
+  // Graph Node names the block by hash (EIP-1898) rather than by number, and
+  // Ponder's client has been seen to send `{blockNumber}`. Both have to reach
+  // the same answer as a plain hex number, or a tool's every call is refused.
+  const byNumberObject = await rpc({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [
+      { to: TOKEN, data: allowanceData(OWNER, SPENDER) },
+      { blockNumber: `0x${(25_600_010).toString(16)}` },
+    ],
+  });
+  check(
+    "accepts an EIP-1898 block number",
+    BigInt(byNumberObject.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_010),
+    JSON.stringify(byNumberObject)
+  );
+
+  const byHash = await rpc({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [
+      { to: TOKEN, data: allowanceData(OWNER, SPENDER) },
+      { blockHash: `0x${"ab".repeat(32)}` },
+    ],
+  });
+  check(
+    "accepts an EIP-1898 block hash, resolved upstream",
+    BigInt(byHash.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_010),
+    JSON.stringify(byHash)
+  );
+
+  const atHead = await rpc({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [{ to: TOKEN, data: allowanceData(OWNER, SPENDER) }, "latest"],
+  });
+  check("refuses a call at the chain head", !!atHead.error);
+
+  // ── Everything else reaches the real endpoint ──
+  const before = upstream.requests();
+  const relayed = await rpc({ jsonrpc: "2.0", id: 7, method: "eth_blockNumber", params: [] });
+  check(
+    "relays other methods upstream",
+    relayed.result === "upstream:eth_blockNumber" && upstream.requests() === before + 1
+  );
+
+  // ── A mixed batch keeps its order ──
+  const batch = await rpc([
+    call(OWNER, SPENDER, 25_600_001),
+    { jsonrpc: "2.0", id: 2, method: "eth_getBlockByNumber", params: [] },
+    call(OWNER, SPENDER, 25_600_002),
+  ]);
+  check(
+    "answers a mixed batch in order",
+    Array.isArray(batch) &&
+      batch.length === 3 &&
+      BigInt(batch[0].result) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_001) &&
+      batch[1].result === "upstream:eth_getBlockByNumber" &&
+      BigInt(batch[2].result) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_002),
+    JSON.stringify(batch)
+  );
+
+  // ── Latency, and that nothing else is imposed ──
+  const { latencyMs } = caseConfig.ethCall!;
+
+  mock.reset();
+  const oneStart = performance.now();
+  await rpc(call(OWNER, SPENDER, 25_600_010));
+  const oneMs = performance.now() - oneStart;
+  check(
+    `holds a call for ${latencyMs}ms`,
+    oneMs >= latencyMs && oneMs < latencyMs * 3,
+    `took ${oneMs.toFixed(0)}ms`
+  );
+
+  // The endpoint neither queues nor rate limits, so a pile of calls arriving
+  // together costs one round trip however big the pile is. This is the property
+  // the whole scenario rests on: what limits an indexer has to be the indexer.
+  const PILE = 50;
+  mock.reset();
+  const pileStart = performance.now();
+  await Promise.all(
+    Array.from({ length: PILE }, (_, i) => rpc(call(OWNER, SPENDER, 26_000_000 + i)))
+  );
+  const pileMs = performance.now() - pileStart;
+  check(
+    `serves ${PILE} at once in one round trip`,
+    pileMs < latencyMs * 2,
+    `took ${pileMs.toFixed(0)}ms`
+  );
+  check(
+    "reports every one of them as in flight together",
+    mock.stats().calls === PILE && mock.stats().peakInFlight === PILE,
+    JSON.stringify(mock.stats())
+  );
+
+  // Ten times as many still meet no ceiling. The assertion is a floor rather
+  // than an equality, and says nothing about elapsed time, because past a few
+  // dozen calls it is the client's own socket setup that decides how quickly
+  // they arrive: the first of them can be answered and gone before the last is
+  // sent, so the peak is however many the client managed to have in the air at
+  // once. That is the same thing that will bound a real indexer long before
+  // this endpoint does — what is being pinned here is only that the endpoint
+  // itself never holds any of them back.
+  const BIG = PILE * 10;
+  mock.reset();
+  await Promise.all(
+    Array.from({ length: BIG }, (_, i) => rpc(call(OWNER, SPENDER, 27_000_000 + i)))
+  );
+  check(
+    `takes ${BIG} at once without queueing any of them`,
+    mock.stats().calls === BIG && mock.stats().peakInFlight > PILE * 5,
+    JSON.stringify(mock.stats())
+  );
+
+  // ── An upstream failure in a mixed batch stays a failure ──
+  //
+  // A batch holding both kinds is split, and the half that goes upstream comes
+  // back matched up by position. A rate limit answers that half with one error
+  // object rather than one response each, and filling the unanswered slots
+  // from it by position would leave them null under a 200 — which an indexer
+  // reads as a block range that held no logs, silently losing data. Every slot
+  // upstream did not answer has to carry an error the client can retry.
+  upstream.failNextWith(429, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32_005, message: "rate limited" } }));
+  const mixed = await rpc([
+    call(OWNER, SPENDER, 25_600_050),
+    { jsonrpc: "2.0", id: 2, method: "eth_getLogs", params: [{}] },
+    call(OWNER, SPENDER, 25_600_051),
+    { jsonrpc: "2.0", id: 4, method: "eth_getLogs", params: [{}] },
+  ]);
+  check(
+    "a refused upstream batch leaves no null in the response",
+    Array.isArray(mixed) && mixed.length === 4 && mixed.every((entry) => entry != null),
+    JSON.stringify(mixed)
+  );
+  check(
+    "the requests upstream refused come back as errors, by id",
+    Array.isArray(mixed) &&
+      !!mixed[1]?.error &&
+      !!mixed[3]?.error &&
+      mixed[1].id === 2 &&
+      mixed[3].id === 4,
+    JSON.stringify(mixed)
+  );
+  check(
+    "the contract calls in that batch are still answered",
+    Array.isArray(mixed) &&
+      BigInt(mixed[0]?.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_050) &&
+      BigInt(mixed[2]?.result ?? 0) === allowanceOf(TOKEN, OWNER, SPENDER, 25_600_051),
+    JSON.stringify(mixed)
+  );
+} finally {
+  await mock.close();
+  await upstream.close();
+}
+
+console.log(failures === 0 ? "\nAll RPC endpoint tests passed." : `\n${failures} failure(s).`);
+process.exit(failures === 0 ? 0 : 1);

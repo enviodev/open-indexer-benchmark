@@ -1,0 +1,207 @@
+# A data source takes one address, so the case's eight tokens are eight data
+# sources over the same mapping, ABI and entities.
+#
+# The `calls:` block under the handler is what makes this case survivable on
+# Graph Node: a declared `eth_call` is fetched before the handler runs, and all
+# of a block's declared calls are fetched at once, so the mapping's own
+# `allowance` call is answered from what was already prefetched instead of
+# blocking the single-threaded handler for a round trip. It is declared
+# unconditionally, so the roughly one approval in five that revokes — and needs
+# no call — is prefetched anyway; the manifest has no way to say "only when the
+# value is non-zero".
+specVersion: 1.3.0
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: USDT
+    network: mainnet
+    source:
+      address: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: USDC
+    network: mainnet
+    source:
+      address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: XAUt
+    network: mainnet
+    source:
+      address: "0x68749665ff8d2d112fa859aa293f07a622782f38"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: WETH
+    network: mainnet
+    source:
+      address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: USDe
+    network: mainnet
+    source:
+      address: "0x4c9edd5852cd905f086c759e8383e09bff1e68b3"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: WBTC
+    network: mainnet
+    source:
+      address: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: DAI
+    network: mainnet
+    source:
+      address: "0x6b175474e89094c44da98b954eedeac495271d0f"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts
+  - kind: ethereum
+    name: crvUSD
+    network: mainnet
+    source:
+      address: "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e"
+      abi: ERC20
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ApprovalEvent
+        - TokenAllowance
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+          calls:
+            allowance: ERC20[event.address].allowance(event.params.owner, event.params.spender)
+      file: ./src/mapping.ts

@@ -1,72 +1,73 @@
 {
   "startBlock": 24600000,
-  "endBlock": 24660000,
-  "generatedAt": "2026-08-04T11:45:50.110Z",
-  "totalEvents": 218640,
+  "endBlock": 24630000,
+  "generatedAt": "2026-08-12T11:16:41.418Z",
+  "totalEvents": 84981,
+  "lastEventBlock": 24629995,
   "entities": {
     "safe": {
-      "rowCount": 199977,
-      "checksum": "115316202915964041086199"
+      "rowCount": 82268,
+      "checksum": "47504205730974804727964"
     },
     "safeSetup": {
-      "rowCount": 10524,
-      "checksum": "6060934299804624992430"
+      "rowCount": 927,
+      "checksum": "538310598227980329352"
     },
     "safeReceived": {
-      "rowCount": 413,
-      "checksum": "241784947454142190277"
+      "rowCount": 216,
+      "checksum": "124842361717201302514"
     },
     "safeModuleTransaction": {
-      "rowCount": 298,
-      "checksum": "178041243591344912443"
+      "rowCount": 112,
+      "checksum": "64312575728101052717"
     },
     "safeMultiSigTransaction": {
-      "rowCount": 48,
-      "checksum": "29785680689597989481"
+      "rowCount": 19,
+      "checksum": "10925585681773470917"
     },
     "executionSuccess": {
-      "rowCount": 6304,
-      "checksum": "3670542582920001169477"
+      "rowCount": 1016,
+      "checksum": "604898582362406489136"
     },
     "executionFailure": {
       "rowCount": 0,
       "checksum": "0"
     },
     "changedThreshold": {
-      "rowCount": 82,
-      "checksum": "50944550485877535314"
+      "rowCount": 23,
+      "checksum": "14361301443423018346"
     },
     "changedMasterCopy": {
       "rowCount": 1,
       "checksum": "824955883404576163"
     },
     "changedFallbackHandler": {
-      "rowCount": 23,
-      "checksum": "13306045034805021980"
+      "rowCount": 11,
+      "checksum": "5804928771703177753"
     },
     "changedGuard": {
-      "rowCount": 4,
-      "checksum": "2947510148404831906"
+      "rowCount": 2,
+      "checksum": "1892072639855032036"
     },
     "changedModuleGuard": {
       "rowCount": 0,
       "checksum": "0"
     },
     "enabledModule": {
-      "rowCount": 706,
-      "checksum": "418347785458478926681"
+      "rowCount": 293,
+      "checksum": "159516528080763639488"
     },
     "disabledModule": {
-      "rowCount": 35,
-      "checksum": "19716100200623763158"
+      "rowCount": 16,
+      "checksum": "9055643872651556918"
     },
     "addedOwner": {
-      "rowCount": 143,
-      "checksum": "72265218803430570550"
+      "rowCount": 50,
+      "checksum": "23167051968003584899"
     },
     "removedOwner": {
-      "rowCount": 82,
-      "checksum": "47853560176752639097"
+      "rowCount": 27,
+      "checksum": "15813107297161825074"
     }
   }
 }
