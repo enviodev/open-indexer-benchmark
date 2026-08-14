@@ -100,6 +100,20 @@ jobs:
           key: cargo-${{ inputs.case }}-${{ hashFiles(format('cases/{0}/rindexer/Cargo.toml', inputs.case)) }}
           restore-keys: cargo-${{ inputs.case }}-
 
+      # The HyperSync row compiles the rindexer CLI from the branch pinned in
+      # the driver — several minutes from cold, and likewise outside the timer.
+      # The key tracks the driver file, which is where the revision is pinned,
+      # so a re-pin rebuilds and nothing else does.
+      - name: Cache rindexer HyperSync CLI
+        if: matrix.indexer == 'rindexer-hypersync'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.config/.rindexer
+          key: rindexer-hypersync-cli-${{ hashFiles('cases/lib/drivers/rindexer.ts') }}
+
       - name: Prepare services
         # Inputs and matrix values are read from the environment rather than
         # expanded into the script text: they reach the shell as data, and
@@ -150,6 +164,27 @@ jobs:
                 fi
                 echo "Installing rindexer v$RINDEXER_VERSION"
                 curl -L https://rindexer.xyz/install.sh | bash -s -- --version "$RINDEXER_VERSION"
+              fi
+              ;;
+            rindexer-hypersync)
+              docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
+              # No release carries HyperSync support yet, so the CLI is
+              # compiled from the branch pinned in the driver. Done here so the
+              # build cost lands in this step under the cache above rather than
+              # in the benchmark job's driver prepare (which skips it when the
+              # binary is already present). The revision is read from the
+              # driver file so it is pinned in exactly one place.
+              GIT=$(sed -n 's/^export const HYPERSYNC_CLI_GIT = "\(.*\)";$/\1/p' cases/lib/drivers/rindexer.ts)
+              REV=$(sed -n 's/^export const HYPERSYNC_CLI_REV = "\(.*\)";$/\1/p' cases/lib/drivers/rindexer.ts)
+              if [ -z "$GIT" ] || [ -z "$REV" ]; then
+                echo "Failed to read the pinned HyperSync CLI revision from the driver" >&2
+                exit 1
+              fi
+              BIN_ROOT="$HOME/.config/.rindexer/hypersync-$(echo "$REV" | cut -c1-8)"
+              if [ ! -x "$BIN_ROOT/bin/rindexer_cli" ]; then
+                rustup update stable
+                rustup default stable
+                cargo install --locked --git "$GIT" --rev "$REV" rindexer_cli --root "$BIN_ROOT"
               fi
               ;;
             subgraph)

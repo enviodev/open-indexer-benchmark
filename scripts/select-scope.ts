@@ -37,7 +37,11 @@
 // README table and the table has to hold a full set of results.
 
 /** Indexers whose project directory is not named after them. */
-const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio", "sqd-rpc": "sqd" };
+const INDEXER_DIRS: Record<string, string> = {
+  "envio-rpc": "envio",
+  "sqd-rpc": "sqd",
+  "rindexer-hypersync": "rindexer",
+};
 
 /**
  * Driver modules under cases/lib/drivers that back more than one indexer.
@@ -47,6 +51,7 @@ const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio", "sqd-rpc": 
 const DRIVER_INDEXERS: Record<string, string[]> = {
   envio: ["envio", "envio-rpc"],
   sqd: ["sqd", "sqd-rpc"],
+  rindexer: ["rindexer", "rindexer-hypersync"],
 };
 
 /** Driver modules that are shared plumbing rather than one tool's driver. */

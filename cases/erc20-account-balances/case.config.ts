@@ -131,5 +131,16 @@ export const caseConfig: CaseConfig = {
     };
   },
 
+  unsupported: {
+    // The rust project's generated bindings are pinned to rindexer v0.41.0,
+    // which predates HyperSync support (joshstevens19/rindexer#457). Once a
+    // release ships it, regenerate the bindings against that release and drop
+    // this entry.
+    "rindexer-hypersync":
+      "its rust project's generated bindings are pinned to rindexer v0.41.0, " +
+      "which predates HyperSync support (joshstevens19/rindexer#457); the row " +
+      "arrives when a release ships it and the bindings are regenerated",
+  },
+
   eventEntities: ["transferEvent", "approvalEvent"],
 };
