@@ -193,16 +193,5 @@ export const caseConfig: CaseConfig = {
     };
   },
 
-  unsupported: {
-    // The rust project's generated bindings are pinned to rindexer v0.41.0,
-    // which predates HyperSync support. Regenerating them against v0.43.0+
-    // (which ships it) turns this row on — a follow-up, since re-pinning the
-    // crate also changes what the existing RPC row measures.
-    "rindexer-hypersync":
-      "its rust project's generated bindings are pinned to rindexer v0.41.0, " +
-      "which predates HyperSync support; regenerating them against v0.43.0+ " +
-      "turns this row on",
-  },
-
   eventEntities: ["approvalEvent"],
 };

@@ -19,12 +19,15 @@ export const RINDEXER_DB_URL = `postgresql://postgres:rindexer@localhost:${PG_PO
 const HYPERSYNC_MIN_VERSION = [0, 43, 0] as const;
 
 function versionAtLeast(version: string, min: readonly number[]): boolean {
-  const parts = version.split(".").map((p) => parseInt(p, 10));
+  // Strict parse: an unparseable version or a prerelease of the minimum (e.g.
+  // 0.43.0-rc.1) must not pass a guard that exists to prevent mislabeling.
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/.exec(version);
+  if (!match) return false;
+  const parts = match.slice(1, 4).map(Number);
   for (let i = 0; i < min.length; i++) {
-    const have = parts[i] ?? 0;
-    if (have !== min[i]) return have > min[i];
+    if (parts[i] !== min[i]) return parts[i] > min[i];
   }
-  return true;
+  return match[4] === undefined;
 }
 
 export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
