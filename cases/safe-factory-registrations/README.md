@@ -146,11 +146,7 @@ A `factory()` reads one event layout, so there are two child declarations — `S
 
 Skipped, and published as a row of dashes with the reason. Two parts of the case are out of reach:
 
-A contract's `factory` filter takes one factory. Giving each canonical Safe deployment its own `details` block panics on startup with `Contract using factory filter must use same factory across all networks`, and giving each its own contract produces a second set of identically named tables in another schema, which table resolution rejects as ambiguous rather than guessing between. Only the v1.3.0 pair is reachable that way, leaving the children of v1.4.1 and v1.5.0 unindexed.
-
-`include_events` also names an event once, so there is nowhere to put the second decode for the eight events that arrive under one topic0 in two layouts.
-
-`rindexer.yaml` is kept at the closest configuration rindexer can express, with both limits written down beside it.
+Long marked unsupported — a verdict written for a **no-code** project, where it is real: no-code names tables after events (so the dual-layout events cannot get two decodes), and multiple contracts produce identically named tables that table resolution rejects as ambiguous. The case now runs as a **rust** project, whose handlers own their tables: the protocol is expressed as eight contracts — one factory definition per factory generation, one contract per event layout for the ten dual-layout events — all writing one hand-owned table set. The [project README](./rindexer/README.md) walks through the structure and the documented hand-edits it needs on top of `rindexer codegen` output.
 
 ### Squid SDK
 

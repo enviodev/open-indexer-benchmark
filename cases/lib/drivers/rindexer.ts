@@ -1,8 +1,8 @@
 import { execFile, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { exec, kill, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -64,14 +64,48 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
   // code, so it is compiled ahead of the timer and the resulting binary is what
   // gets launched.
   const isRustProject = existsSync(resolve(dir, "Cargo.toml"));
-  const rustBin = resolve(dir, "target", "release", "erc20indexer");
+  // The binary carries the crate's name.
+  const crateName = isRustProject
+    ? /name\s*=\s*"([^"]+)"/.exec(readFileSync(resolve(dir, "Cargo.toml"), "utf8"))?.[1]
+    : undefined;
+  const rustBin = resolve(dir, "target", "release", crateName ?? "erc20indexer");
   let proc: ChildProcess | null = null;
   let done = false;
 
   // rindexer keeps its sync position in an internal schema whose layout is not
   // part of its public interface, but every event row carries the block it came
-  // from, so progress is read from the event tables themselves.
+  // from, so events are counted from the event tables themselves.
   const readProgress = createProgressReader(RINDEXER_DB_URL, config, "block_number");
+
+  // The block figure needs more care: rindexer indexes every registered event
+  // as its own parallel stream, so the highest block among the event tables is
+  // only the *fastest* stream's position. Reporting it lets a range run look
+  // finished — and get stopped — while slower streams still have batches in
+  // flight, which truncates their tail. rindexer does persist each stream's
+  // own watermark (rindexer_internal.*.last_synced_block), and the minimum of
+  // those is the block every stream has truly reached.
+  async function minSyncedBlock(): Promise<number | null> {
+    try {
+      const tables = await psql(
+        RINDEXER_DB_URL,
+        "SELECT table_name FROM information_schema.columns " +
+          "WHERE table_schema='rindexer_internal' AND column_name='last_synced_block'"
+      );
+      const names = tables.split("\n").filter(Boolean);
+      if (names.length === 0) return null;
+      const union = names
+        .map((t) => `SELECT MIN(last_synced_block) AS b FROM rindexer_internal."${t}"`)
+        .join(" UNION ALL ");
+      const min = await psql(
+        RINDEXER_DB_URL,
+        `SELECT (COALESCE(MIN(b), 0))::bigint::text FROM (${union}) u`
+      );
+      const value = parseInt(min, 10);
+      return Number.isFinite(value) ? value : null;
+    } catch {
+      return null;
+    }
+  }
 
   return {
     dbUrl: RINDEXER_DB_URL,
@@ -128,7 +162,8 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
     },
     async snapshot() {
       const { events, block } = await readProgress();
-      return { events, blocks: blocksIndexed(config, block) };
+      const synced = await minSyncedBlock();
+      return { events, blocks: blocksIndexed(config, synced ?? block) };
     },
     async stop() {
       await kill(proc);
