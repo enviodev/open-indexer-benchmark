@@ -1,61 +1,210 @@
-name: safe-factory-indexer
-description: Safe proxy factory registrations and the setup events of the proxies it creates
-project_type: no-code
+name: safe-indexer
+description: Safe proxy registrations from the four canonical factories, and the events their proxies emit
+project_type: rust
 timestamps: true
+
+# Why eight contracts for one protocol:
+#
+# * The two factory generations decode `ProxyCreation` differently (the proxy
+#   moved into a topic in 1.4.1), so child extraction needs one factory
+#   definition per generation — the addresses within a generation share one.
+# * Ten of the child events exist under one topic0 in two layouts (1.4.x made
+#   the first argument indexed without changing the signature), and a proxy can
+#   emit either at any time. Each layout is registered as its own contract; a
+#   log decodes under exactly one of them, so together they capture everything
+#   with no duplicates. The five events whose layout never changed live in a
+#   single Common registration per generation.
+#
+# The handlers write one hand-owned table set (see src/), which is why
+# `disable_create_tables` is on: the generated per-contract event tables would
+# otherwise shadow the case's tables under the same names, empty.
 
 networks:
   - name: ethereum
     chain_id: 1
     rpc: ${ETHEREUM_RPC}
-    # The factory burst indexed here creates proxies faster than an unbounded
-    # eth_getLogs range will serve, so pin an explicit per-request range and
-    # fan the historic backfill across several concurrent workers.
-    max_block_range: 1000
-    fetch_concurrency: 10
+    # The children number in the tens of thousands while their events are
+    # rare, which is the workload the in-memory strategy exists for: fetch by
+    # topic, filter by address on the client.
+    get_logs_settings:
+      address_filtering: in-memory
 
 storage:
   postgres:
     enabled: true
     drop_each_run: true
+    disable_create_tables: true
 
 contracts:
-  # Kept as the closest configuration rindexer can express, but the case skips
-  # it — see `unsupported` in ../case.config.ts. Two things are out of reach:
-  #
-  #   * A contract's `factory` filter takes one factory. Giving each canonical
-  #     Safe deployment its own `details` block panics with "Contract using
-  #     factory filter must use same factory across all networks", and giving
-  #     each its own contract would produce a second set of identically named
-  #     tables in another schema, which table resolution rejects as ambiguous.
-  #     So only the v1.3.0 pair is reachable, and the children of v1.4.1 and
-  #     v1.5.0 are not indexed at all.
-  #
-  #   * Eight of the child events arrive under one topic0 in two layouts, and
-  #     `include_events` names an event once — there is nowhere to put the
-  #     second decode.
-  #
-  # Only the child contract is declared. Resolving a factory already makes
-  # rindexer index the factory's own ProxyCreation logs into a table of their
-  # own, so declaring the factory again as a standalone contract yields two
-  # `proxy_creation` tables in separate schemas holding identical rows.
-  - name: Safe
+  - name: FactoryV13
+    details:
+      - network: ethereum
+        address:
+          - "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2" # 1.3.0 canonical
+          - "0xc22834581ebc8527d974f8a1c97e1bea4ef910bc" # 1.3.0 eip155
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeProxyFactory.abi.json
+    include_events:
+      - ProxyCreation
+
+  - name: FactoryV14
+    details:
+      - network: ethereum
+        address:
+          - "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67" # 1.4.1 canonical
+          - "0x14f2982d601c9458f93bd70b218933a6f8165e7b" # 1.5.0 canonical
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeProxyFactoryModern.abi.json
+    include_events:
+      - ProxyCreation
+
+  - name: ChildCommonV13
     details:
       - network: ethereum
         factory:
-          name: SafeProxyFactory
+          name: FactoryV13Common
           address:
-            - "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2" # v1.3.0 canonical
-            - "0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC" # v1.3.0 eip155
+            - "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2"
+            - "0xc22834581ebc8527d974f8a1c97e1bea4ef910bc"
           abi: ./abis/SafeProxyFactory.abi.json
           event_name: ProxyCreation
           input_name: "proxy"
         start_block: "24600000"
         end_block: "${RINDEXER_END_BLOCK}"
-    abi: ./abis/Safe.abi.json
+    abi: ./abis/SafeCommon.abi.json
     include_events:
       - SafeSetup
       - SafeReceived
       - SafeModuleTransaction
+      - SafeMultiSigTransaction
+      - ChangedThreshold
+
+  - name: ChildCommonV14
+    details:
+      - network: ethereum
+        factory:
+          name: FactoryV14Common
+          address:
+            - "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67"
+            - "0x14f2982d601c9458f93bd70b218933a6f8165e7b"
+          abi: ./abis/SafeProxyFactoryModern.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeCommon.abi.json
+    include_events:
+      - SafeSetup
+      - SafeReceived
+      - SafeModuleTransaction
+      - SafeMultiSigTransaction
+      - ChangedThreshold
+
+  - name: ChildLegacyLayoutV13
+    details:
+      - network: ethereum
+        factory:
+          name: FactoryV13LegacyLayout
+          address:
+            - "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2"
+            - "0xc22834581ebc8527d974f8a1c97e1bea4ef910bc"
+          abi: ./abis/SafeProxyFactory.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeDualLegacy.abi.json
+    include_events:
+      - ExecutionSuccess
+      - ExecutionFailure
+      - ChangedMasterCopy
+      - ChangedFallbackHandler
+      - ChangedGuard
+      - ChangedModuleGuard
+      - EnabledModule
+      - DisabledModule
+      - AddedOwner
+      - RemovedOwner
+
+  - name: ChildLegacyLayoutV14
+    details:
+      - network: ethereum
+        factory:
+          name: FactoryV14LegacyLayout
+          address:
+            - "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67"
+            - "0x14f2982d601c9458f93bd70b218933a6f8165e7b"
+          abi: ./abis/SafeProxyFactoryModern.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeDualLegacy.abi.json
+    include_events:
+      - ExecutionSuccess
+      - ExecutionFailure
+      - ChangedMasterCopy
+      - ChangedFallbackHandler
+      - ChangedGuard
+      - ChangedModuleGuard
+      - EnabledModule
+      - DisabledModule
+      - AddedOwner
+      - RemovedOwner
+
+  - name: ChildModernLayoutV13
+    details:
+      - network: ethereum
+        factory:
+          name: FactoryV13ModernLayout
+          address:
+            - "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2"
+            - "0xc22834581ebc8527d974f8a1c97e1bea4ef910bc"
+          abi: ./abis/SafeProxyFactory.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeDualModern.abi.json
+    include_events:
+      - ExecutionSuccess
+      - ExecutionFailure
+      - ChangedMasterCopy
+      - ChangedFallbackHandler
+      - ChangedGuard
+      - ChangedModuleGuard
+      - EnabledModule
+      - DisabledModule
+      - AddedOwner
+      - RemovedOwner
+
+  - name: ChildModernLayoutV14
+    details:
+      - network: ethereum
+        factory:
+          name: FactoryV14ModernLayout
+          address:
+            - "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67"
+            - "0x14f2982d601c9458f93bd70b218933a6f8165e7b"
+          abi: ./abis/SafeProxyFactoryModern.abi.json
+          event_name: ProxyCreation
+          input_name: "proxy"
+        start_block: "24600000"
+        end_block: "${RINDEXER_END_BLOCK}"
+    abi: ./abis/SafeDualModern.abi.json
+    include_events:
+      - ExecutionSuccess
+      - ExecutionFailure
+      - ChangedMasterCopy
+      - ChangedFallbackHandler
+      - ChangedGuard
+      - ChangedModuleGuard
+      - EnabledModule
+      - DisabledModule
+      - AddedOwner
+      - RemovedOwner
 
 global:
   health_port: 8082

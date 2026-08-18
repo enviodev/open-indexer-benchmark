@@ -225,14 +225,6 @@ function paymentEvent(key: string, label: string, table: string): EntitySpec {
   };
 }
 
-const RINDEXER_FACTORY_LIMITS =
-  "its factory filter takes one factory per contract — `Contract using " +
-  "factory filter must use same factory across all networks` — so the " +
-  "children of Safe's four canonical factory deployments cannot be " +
-  "collected into one contract, and its no-code mode names tables after " +
-  "events, which leaves no way to declare the eight events Safe emits " +
-  "under one topic in two layouts";
-
 export const caseConfig: CaseConfig = {
   name: "safe-factory-registrations",
   title: "Factory Contract Registration",
@@ -246,13 +238,6 @@ export const caseConfig: CaseConfig = {
   child: {
     topics: Object.values(CHILD_TOPICS),
     childOf: proxyOf,
-  },
-
-  unsupported: {
-    // The same limitation whichever source serves the logs, so both rindexer
-    // rows carry it.
-    rindexer: RINDEXER_FACTORY_LIMITS,
-    "rindexer-hypersync": RINDEXER_FACTORY_LIMITS,
   },
 
   entities: [
