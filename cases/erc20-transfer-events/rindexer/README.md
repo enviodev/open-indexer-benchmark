@@ -21,17 +21,10 @@ RPC, and `rindexer-hypersync` reads them from
 curl -L https://rindexer.xyz/install.sh | bash
 ```
 
-For the HyperSync row: released binaries do not carry HyperSync support yet
-(it is under review in
-[joshstevens19/rindexer#457](https://github.com/joshstevens19/rindexer/pull/457)),
-so build the CLI from the branch pinned in `cases/lib/drivers/rindexer.ts` and
-set `ENVIO_API_TOKEN` (create one at
-[envio.dev/app/api-tokens](https://envio.dev/app/api-tokens)):
-
-```bash
-cargo install --locked --git https://github.com/moose-code/rindexer \
-  --rev <HYPERSYNC_CLI_REV from the driver> rindexer_cli
-```
+The HyperSync row needs rindexer v0.43.0 or newer (the release that shipped
+`networks[].hypersync`) and an `ENVIO_API_TOKEN` (create one at
+[envio.dev/app/api-tokens](https://envio.dev/app/api-tokens)); the driver
+refuses to run it on an older CLI rather than silently measure RPC.
 
 ## Setup
 

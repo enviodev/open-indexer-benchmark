@@ -1,6 +1,7 @@
-import { type ChildProcess } from "node:child_process";
+import { execFile, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { promisify } from "node:util";
 import { exec, kill, start, waitPg } from "../process.ts";
 import {
   blocksIndexed,
@@ -11,14 +12,20 @@ import {
 const PG_PORT = 5440;
 export const RINDEXER_DB_URL = `postgresql://postgres:rindexer@localhost:${PG_PORT}/postgres`;
 
-// HyperSync support is under review in joshstevens19/rindexer#457; until a
-// release ships it, the hypersync row compiles the CLI from that pull
-// request's branch, pinned to a revision so a run is reproducible. When the
-// release lands, drop these and let the install.sh path serve both rows.
-// benchmark-case.yml reads both constants out of this file, so this is the
-// only place the revision is written down.
-export const HYPERSYNC_CLI_GIT = "https://github.com/moose-code/rindexer";
-export const HYPERSYNC_CLI_REV = "79230029063d7ac466aa548b1703d17d3b22c32f";
+// The first release with `networks[].hypersync` support. An older CLI ignores
+// the unknown yaml key and quietly serves the run over plain RPC, which would
+// publish an RPC measurement labeled HyperSync — so the hypersync row refuses
+// to run on anything older rather than mislabel a result.
+const HYPERSYNC_MIN_VERSION = [0, 43, 0] as const;
+
+function versionAtLeast(version: string, min: readonly number[]): boolean {
+  const parts = version.split(".").map((p) => parseInt(p, 10));
+  for (let i = 0; i < min.length; i++) {
+    const have = parts[i] ?? 0;
+    if (have !== min[i]) return have > min[i];
+  }
+  return true;
+}
 
 export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
   config,
@@ -42,20 +49,13 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
     RINDEXER_MAX_BLOCK_RANGE: mode === "hypersync" ? "50000" : "1000",
     RINDEXER_FETCH_CONCURRENCY: mode === "hypersync" ? "1" : "10",
   };
-  // The released CLI has no HyperSync support yet, so the hypersync row runs
-  // its own build, kept apart from the released binary and keyed by revision
-  // so a re-pin cannot reuse a stale compile.
-  const bin =
-    mode === "hypersync"
-      ? resolve(
-          process.env.HOME ?? "~",
-          ".config",
-          ".rindexer",
-          `hypersync-${HYPERSYNC_CLI_REV.slice(0, 8)}`,
-          "bin",
-          "rindexer_cli"
-        )
-      : resolve(process.env.HOME ?? "~", ".config", ".rindexer", "bin", "rindexer");
+  const bin = resolve(
+    process.env.HOME ?? "~",
+    ".config",
+    ".rindexer",
+    "bin",
+    "rindexer"
+  );
   // A no-code project is driven entirely by rindexer.yaml and run through the
   // CLI. A rust project is a crate of its own: the aggregation lives in handler
   // code, so it is compiled ahead of the timer and the resulting binary is what
@@ -76,42 +76,30 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
       // A rust project runs its own binary, so the CLI is only needed to drive
       // a no-code one.
       if (!isRustProject && !existsSync(bin)) {
-        if (mode === "hypersync") {
-          // Compiled rather than downloaded: no release carries HyperSync
-          // support yet. This runs before the timer starts, and the CI
-          // workflow's prepare step builds it ahead of time under a cache, so
-          // most runs never pay for it here.
-          console.log("Building the rindexer CLI with HyperSync support...\n");
-          await exec(
-            "cargo",
-            [
-              "install",
-              "--locked",
-              "--git",
-              HYPERSYNC_CLI_GIT,
-              "--rev",
-              HYPERSYNC_CLI_REV,
-              "rindexer_cli",
-              "--root",
-              resolve(bin, "..", ".."),
-            ],
-            dir,
-            env
-          );
-        } else {
-          console.log("Installing rindexer CLI...\n");
-          // install.sh resolves "latest" via an unauthenticated GitHub API call
-          // that is occasionally throttled (empty version -> 404 download).
-          // Retry so a transient hiccup doesn't fail the whole benchmark.
-          await exec(
-            "bash",
-            [
-              "-c",
-              "for i in 1 2 3; do curl -L https://rindexer.xyz/install.sh | bash && break; " +
-                'echo "rindexer install attempt $i failed; retrying..." >&2; sleep $((i * 5)); done',
-            ],
-            dir,
-            env
+        console.log("Installing rindexer CLI...\n");
+        // install.sh resolves "latest" via an unauthenticated GitHub API call
+        // that is occasionally throttled (empty version -> 404 download).
+        // Retry so a transient hiccup doesn't fail the whole benchmark.
+        await exec(
+          "bash",
+          [
+            "-c",
+            "for i in 1 2 3; do curl -L https://rindexer.xyz/install.sh | bash && break; " +
+              'echo "rindexer install attempt $i failed; retrying..." >&2; sleep $((i * 5)); done',
+          ],
+          dir,
+          env
+        );
+      }
+
+      if (mode === "hypersync" && !isRustProject) {
+        const { stdout } = await promisify(execFile)(bin, ["--version"]);
+        const version = stdout.trim().split(/\s+/).pop() ?? "";
+        if (!versionAtLeast(version, HYPERSYNC_MIN_VERSION)) {
+          throw new Error(
+            `rindexer ${version} predates HyperSync support and would silently run ` +
+              `over RPC; update to ${HYPERSYNC_MIN_VERSION.join(".")}+ ` +
+              `(curl -L https://rindexer.xyz/install.sh | bash)`
           );
         }
       }
