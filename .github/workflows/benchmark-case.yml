@@ -90,7 +90,7 @@ jobs:
       # timer starts, so it costs CI wall clock rather than benchmark
       # accuracy — the cache keeps that cost off most runs.
       - name: Cache cargo build
-        if: matrix.indexer == 'rindexer'
+        if: matrix.indexer == 'rindexer' || matrix.indexer == 'rindexer-hypersync'
         uses: actions/cache@v4
         with:
           path: |
@@ -116,7 +116,7 @@ jobs:
             ponder)
               docker pull postgres:17-alpine
               ;;
-            rindexer)
+            rindexer|rindexer-hypersync)
               docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
               # A rust project is a crate of its own and runs its own binary,
               # so it is compiled here rather than installing the CLI. The

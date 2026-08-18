@@ -7,7 +7,7 @@ edition = "2021"
 # rindexer's scaffold points this at the master branch; pinned to the tag
 # matching the CLI that generated the typings so a benchmark run is
 # reproducible.
-rindexer = { git = "https://github.com/joshstevens19/rindexer", tag = "v0.41.0" }
+rindexer = { git = "https://github.com/joshstevens19/rindexer", tag = "v0.43.0" }
 tokio = { version = "1", features = ["full"] }
 alloy = { version = "1.0.41", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }

@@ -15,7 +15,8 @@ export const DRIVERS: Record<string, DriverFactory> = {
   envio: envioDriver("hypersync"),
   "envio-rpc": envioDriver("rpc"),
   ponder: ponderDriver,
-  rindexer: rindexerDriver,
+  rindexer: rindexerDriver("rpc"),
+  "rindexer-hypersync": rindexerDriver("hypersync"),
   subgraph: subgraphDriver,
   subquery: subqueryDriver,
   sqd: sqdDriver("network"),
@@ -68,6 +69,13 @@ export const TOOLS: Record<
     toolUrl: "https://rindexer.xyz",
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
+    storage: "Postgres",
+  },
+  "rindexer-hypersync": {
+    name: "Rindexer",
+    toolUrl: "https://rindexer.xyz",
+    source: "HyperSync",
+    sourceUrl: HYPERSYNC_URL,
     storage: "Postgres",
   },
   subgraph: {
