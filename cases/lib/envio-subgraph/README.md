@@ -8,8 +8,8 @@ Node binary is.
 
 The driver runs `envio start -r` with the scenario's `subgraph/` as the working
 directory. There is no `config.yaml` there, and that is what puts envio into
-subgraph mode: it reads `subgraph.yaml`, translates it, and builds `generated/`
-with the project's own graph-cli.
+subgraph mode: it reads `subgraph.yaml`, translates it, and on start builds
+`generated/` with the project's own graph-cli.
 
 `envio` is pinned here, and `pnpm-workspace.yaml` acknowledges the one build
 script the install skips — pnpm 11 treats a skipped one as fatal, and esbuild's

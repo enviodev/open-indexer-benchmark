@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       envio:
-        specifier: 3.6.1-subgraph
-        version: 3.6.1-subgraph(react-dom@19.2.8(react@19.2.5))(supports-color@8.1.1)
+        specifier: 3.7.0-subgraph
+        version: 3.7.0-subgraph(react-dom@19.2.8(react@19.2.5))
 
 packages:
 
@@ -23,7 +23,6 @@ packages:
 
   '@clickhouse/client-common@1.17.0':
     resolution: {integrity: sha512-MiwwgXViFAQA2YZkN4ymF1ynzG0K49KeSX9/iOcmJetWkxqSekDdpyp1GjwATWa9R215uQ+hGzJtJujeQVZZIw==}
-    deprecated: 'Deprecated: import from @clickhouse/client or @clickhouse/client-web instead.'
 
   '@clickhouse/client@1.17.0':
     resolution: {integrity: sha512-Y3DQoamKZ/Iyosoq7Lj7lqpDkQDK4R/5mI52yJs4ZLPIO+d6/CYDqTbFBIb4No3C/AlXUYE4TKhj/kXDpe6rOA==}
@@ -461,36 +460,33 @@ packages:
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
-  envio-darwin-arm64@3.6.1-subgraph:
-    resolution: {integrity: sha512-wH9BUS4ggstHaCQu7GRksg7xUHlgtsH1oNsIM0DrtHZyQbP+n1LC25ozPJK3wgP5R5TkpHXWfmjHMiJR770d9w==}
+  envio-darwin-arm64@3.7.0-subgraph:
+    resolution: {integrity: sha512-pttmh60NkTC1ZFB9o62Esf9/jMlXo5asQE9Xzy1W+k5MLq+eMv+jQiEHnHmoMKF36RZ2hDQLbGynCu7+/PTPYg==}
     cpu: [arm64]
     os: [darwin]
 
-  envio-darwin-x64@3.6.1-subgraph:
-    resolution: {integrity: sha512-cVFzH+ufuh4HDE1qovcEI4/gGePSe0x0DAqubGa5z8q1Tb0/bgBmPZf2grRCmGYTi7LsvRm73HjVMvAl80doBg==}
+  envio-darwin-x64@3.7.0-subgraph:
+    resolution: {integrity: sha512-QSvjmFa9zee5EK6QfeVeDgKHFWh+bWJnVO7gaOOaJ9bgziPUTfmkGeRNTE/tk8xNmNJM/rExFJtkeEB1XviZFg==}
     cpu: [x64]
     os: [darwin]
 
-  envio-linux-arm64@3.6.1-subgraph:
-    resolution: {integrity: sha512-7v3tyB7S+gr9KLViPwljEMo+JQBW10AKBBbmmm+1LsV0KVTW9DB6ba+yBZqTtAKf3AvzLeS9ksENkUjyLvn6tQ==}
+  envio-linux-arm64@3.7.0-subgraph:
+    resolution: {integrity: sha512-dN57T6Y105/Ol3DS5hqorLQyXn7uJoa23S5V49OrGhx1AuxqyZSfr/AUQsMr/rFZNfh/WOIYw+SAb6Nb3l6DOw==}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
-  envio-linux-x64-musl@3.6.1-subgraph:
-    resolution: {integrity: sha512-Z8D0+/qwo1weADBzRBirupVFlz+EmL/cS4+DCim+y1vMFuvIEzHjJftUP4HLhNLbBl3L76BnI/DX3q1FR1FZlg==}
+  envio-linux-x64-musl@3.7.0-subgraph:
+    resolution: {integrity: sha512-R7xCbjgyn7Qt0l55cOGZ8EgA1YY36SYHxqHuJtq+RCGFaqW7yr8sdrpbJmqTq/t4HRj+/ROeDOAqCS2TOgv6mg==}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
-  envio-linux-x64@3.6.1-subgraph:
-    resolution: {integrity: sha512-5rHyDtUScL2y+2/8Is+U95LBB9BH+eOkE+Fgx2/dFTzxLRtKRLP0haSATEwh5DjpVvKmjcBL2Xm9/ylPwBA9AQ==}
+  envio-linux-x64@3.7.0-subgraph:
+    resolution: {integrity: sha512-sx9Dd6qD4qSwQ/pT8ZhtIetaGzT+qHT/iDbugf+X09+BWl+ULSlUcoob59QoiLrStTPLfUVdpf62EfWFy6o8Vg==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
-  envio@3.6.1-subgraph:
-    resolution: {integrity: sha512-nTtGwLo0uFwIyBKEan1V+UtpXJyi9I4MSjNaLOGFD8TzGiDe0WPe9tPw35ga5Rzw4+l2yHkCtEZcPjjQWs1Zug==}
+  envio@3.7.0-subgraph:
+    resolution: {integrity: sha512-BHgdhLpbu0IMfx1kiz2Xr+DNsnYCW0YeB7vItDxWepINf2hPgD1nTF3fbK957O/8m9adGMdMJcNoPJNRmLukMw==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -1345,11 +1341,11 @@ snapshots:
 
   bn.js@5.2.5: {}
 
-  body-parser@1.20.2(supports-color@8.1.1):
+  body-parser@1.20.2:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
-      debug: 2.6.9(supports-color@8.1.1)
+      debug: 2.6.9
       depd: 2.0.0
       destroy: 1.2.0
       http-errors: 2.0.0
@@ -1439,11 +1435,9 @@ snapshots:
 
   dateformat@4.6.3: {}
 
-  debug@2.6.9(supports-color@8.1.1):
+  debug@2.6.9:
     dependencies:
       ms: 2.0.0
-    optionalDependencies:
-      supports-color: 8.1.1
 
   deepmerge@4.3.1: {}
 
@@ -1475,22 +1469,22 @@ snapshots:
     dependencies:
       once: 1.4.0
 
-  envio-darwin-arm64@3.6.1-subgraph:
+  envio-darwin-arm64@3.7.0-subgraph:
     optional: true
 
-  envio-darwin-x64@3.6.1-subgraph:
+  envio-darwin-x64@3.7.0-subgraph:
     optional: true
 
-  envio-linux-arm64@3.6.1-subgraph:
+  envio-linux-arm64@3.7.0-subgraph:
     optional: true
 
-  envio-linux-x64-musl@3.6.1-subgraph:
+  envio-linux-x64-musl@3.7.0-subgraph:
     optional: true
 
-  envio-linux-x64@3.6.1-subgraph:
+  envio-linux-x64@3.7.0-subgraph:
     optional: true
 
-  envio@3.6.1-subgraph(react-dom@19.2.8(react@19.2.5))(supports-color@8.1.1):
+  envio@3.7.0-subgraph(react-dom@19.2.8(react@19.2.5)):
     dependencies:
       '@clickhouse/client': 1.17.0
       '@elastic/ecs-pino-format': 1.4.0
@@ -1505,7 +1499,7 @@ snapshots:
       date-fns: 3.3.1
       dotenv: 16.4.5
       eventsource: 4.1.0
-      express: 4.19.2(supports-color@8.1.1)
+      express: 4.19.2
       ink: 6.8.0(react@19.2.5)
       ink-big-text: 2.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5)
       ink-spinner: 5.0.0(ink@6.8.0(react@19.2.5))(react@19.2.5)
@@ -1519,11 +1513,11 @@ snapshots:
       viem: 2.54.0
       yargs: 17.7.2
     optionalDependencies:
-      envio-darwin-arm64: 3.6.1-subgraph
-      envio-darwin-x64: 3.6.1-subgraph
-      envio-linux-arm64: 3.6.1-subgraph
-      envio-linux-x64: 3.6.1-subgraph
-      envio-linux-x64-musl: 3.6.1-subgraph
+      envio-darwin-arm64: 3.7.0-subgraph
+      envio-darwin-x64: 3.7.0-subgraph
+      envio-linux-arm64: 3.7.0-subgraph
+      envio-linux-x64: 3.7.0-subgraph
+      envio-linux-x64-musl: 3.7.0-subgraph
     transitivePeerDependencies:
       - '@types/react'
       - bufferutil
@@ -1592,21 +1586,21 @@ snapshots:
     dependencies:
       eventsource-parser: 3.1.0
 
-  express@4.19.2(supports-color@8.1.1):
+  express@4.19.2:
     dependencies:
       accepts: 1.3.8
       array-flatten: 1.1.1
-      body-parser: 1.20.2(supports-color@8.1.1)
+      body-parser: 1.20.2
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 0.6.0
       cookie-signature: 1.0.6
-      debug: 2.6.9(supports-color@8.1.1)
+      debug: 2.6.9
       depd: 2.0.0
       encodeurl: 1.0.2
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 1.2.0(supports-color@8.1.1)
+      finalhandler: 1.2.0
       fresh: 0.5.2
       http-errors: 2.0.0
       merge-descriptors: 1.0.1
@@ -1618,8 +1612,8 @@ snapshots:
       qs: 6.11.0
       range-parser: 1.2.1
       safe-buffer: 5.2.1
-      send: 0.18.0(supports-color@8.1.1)
-      serve-static: 1.15.0(supports-color@8.1.1)
+      send: 0.18.0
+      serve-static: 1.15.0
       setprototypeof: 1.2.0
       statuses: 2.0.1
       type-is: 1.6.18
@@ -1645,9 +1639,9 @@ snapshots:
 
   fflate@0.8.3: {}
 
-  finalhandler@1.2.0(supports-color@8.1.1):
+  finalhandler@1.2.0:
     dependencies:
-      debug: 2.6.9(supports-color@8.1.1)
+      debug: 2.6.9
       encodeurl: 1.0.2
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -1991,9 +1985,9 @@ snapshots:
 
   secure-json-parse@4.1.0: {}
 
-  send@0.18.0(supports-color@8.1.1):
+  send@0.18.0:
     dependencies:
-      debug: 2.6.9(supports-color@8.1.1)
+      debug: 2.6.9
       depd: 2.0.0
       destroy: 1.2.0
       encodeurl: 1.0.2
@@ -2009,12 +2003,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  serve-static@1.15.0(supports-color@8.1.1):
+  serve-static@1.15.0:
     dependencies:
       encodeurl: 1.0.2
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 0.18.0(supports-color@8.1.1)
+      send: 0.18.0
     transitivePeerDependencies:
       - supports-color
 

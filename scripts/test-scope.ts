@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { INDEXERS as REGISTERED } from "../cases/lib/drivers/index.ts";
+import { INDEXERS as REGISTERED, TOOLS } from "../cases/lib/drivers/index.ts";
 import { selectScope } from "./select-scope.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -177,6 +177,10 @@ check("sqd project directory covers both sqd variants", [
   "cases/erc20-transfer-events/sqd/src/processor.ts",
 ], { "erc20-transfer-events": ["sqd", "sqd-rpc"] });
 
+check("rindexer project directory covers both rindexer variants", [
+  "cases/erc20-transfer-events/rindexer/rindexer.yaml",
+], { "erc20-transfer-events": ["rindexer", "rindexer-hypersync"] });
+
 // Envio Subgraph has no project directory: it runs the Subgraph tool's own
 // project, so a change to it has to re-measure all three rows together or the
 // comparison stops being like-for-like.
@@ -198,11 +202,37 @@ check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.t
 
 check("the sqd driver covers both sqd variants", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd", "sqd-rpc"]));
 
+check("the rindexer driver covers both rindexer variants", [
+  "cases/lib/drivers/rindexer.ts",
+], inEvery(["rindexer", "rindexer-hypersync"]));
+
 check(
   "the envio-subgraph driver covers both of its variants",
   ["cases/lib/drivers/envio-subgraph.ts"],
   inEvery(["envio-subgraph", "envio-subgraph-rpc"])
 );
+
+check(
+  "the shared envio CLI pin covers both Envio Subgraph variants",
+  ["cases/lib/envio-subgraph/package.json"],
+  inEvery(["envio-subgraph", "envio-subgraph-rpc"])
+);
+
+{
+  const pinned = JSON.parse(
+    readFileSync(resolve(ROOT, "cases/lib/envio-subgraph/package.json"), "utf8")
+  ).dependencies.envio as string;
+  const url = TOOLS["envio-subgraph"].toolUrl;
+  if (!url.includes(`v${pinned}`)) {
+    console.error(
+      `FAIL envio-subgraph version: TOOLS links ${url}, but ` +
+        `cases/lib/envio-subgraph pins envio@${pinned}`
+    );
+    failures++;
+  } else {
+    console.log(`ok envio-subgraph version: row links the pinned ${pinned} release`);
+  }
+}
 
 // Attributing a driver module to no indexer at all would select nothing and
 // publish the untouched carried-forward rows as if they had been re-measured.

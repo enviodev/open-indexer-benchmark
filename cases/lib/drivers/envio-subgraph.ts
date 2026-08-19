@@ -3,8 +3,8 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec, kill, psql, start } from "../process.ts";
-import { blocksIndexed, type DriverFactory } from "./common.ts";
-import { ENVIO_DB_URL } from "./envio.ts";
+import { type DriverFactory } from "./common.ts";
+import { createEnvioSnapshot, ENVIO_DB_URL } from "./envio.ts";
 
 const PG_PORT = 5433;
 
@@ -22,8 +22,8 @@ const CLI_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "envio-su
  *
  * There is no envio config anywhere in that directory — `subgraph.yaml` is the
  * config, and envio picks it up because no `config.yaml` sits beside it. The
- * mappings, schema and ABIs are the same files Graph Node reads, and
- * `generated/` is built by the project's own graph-cli.
+ * mappings, schema and ABIs are the same files Graph Node reads. On start,
+ * envio builds `generated/` with the project's own graph-cli.
  */
 export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
   config,
@@ -78,17 +78,7 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
       proc = start(envio, ["start", "-r"], dir, env);
       proc.on("exit", () => (done = true));
     },
-    async snapshot() {
-      const row = await psql(
-        ENVIO_DB_URL,
-        "SELECT events_processed, progress_block FROM public.envio_chains LIMIT 1"
-      );
-      const [eventsStr, blockStr] = row.split("|");
-      return {
-        events: parseInt(eventsStr, 10) || 0,
-        blocks: blocksIndexed(config, parseInt(blockStr, 10) || 0),
-      };
-    },
+    snapshot: createEnvioSnapshot(config),
     async stop() {
       await kill(proc);
       proc = null;

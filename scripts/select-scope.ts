@@ -193,6 +193,16 @@ export function selectScope(
           continue;
         }
       }
+      // The shared envio CLI is not harness: only the Envio Subgraph rows run
+      // it, so a pin bump should not re-measure everyone else.
+      if (parts[2] === "envio-subgraph") {
+        addEverywhere(
+          ["envio-subgraph", "envio-subgraph-rpc"].filter((i) =>
+            allIndexers.includes(i)
+          )
+        );
+        continue;
+      }
       addEverywhere(allIndexers);
       continue;
     }

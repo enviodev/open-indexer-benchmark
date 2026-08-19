@@ -32,7 +32,7 @@ const HYPERSYNC_URL = "https://docs.envio.dev/docs/HyperSync/overview";
 const HYPERRPC_URL = "https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc";
 /** The release the pinned envio comes from, so the row names its own version. */
 const ENVIO_SUBGRAPH_URL =
-  "https://github.com/enviodev/hyperindex/releases/tag/v3.6.1-subgraph";
+  "https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph";
 const SQD_SDK_URL = "https://sqd.dev/sdk/";
 const SQD_NETWORK_URL = "https://docs.sqd.dev/en/network/overview";
 

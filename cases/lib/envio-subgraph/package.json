@@ -4,6 +4,6 @@
   "license": "UNLICENSED",
   "description": "The envio CLI the Envio Subgraph tool drives each case's unmodified subgraph/ directory with. Installed once and shared across cases, like the Graph Node binary.",
   "dependencies": {
-    "envio": "3.6.1-subgraph"
+    "envio": "3.7.0-subgraph"
   }
 }
