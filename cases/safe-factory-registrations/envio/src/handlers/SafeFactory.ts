@@ -8,21 +8,21 @@ import { indexer } from "envio";
 // `proxy` became an indexed argument in 1.4.1 — same event signature, two
 // incompatible payloads — but past decoding they say the same thing.
 indexer.contractRegister(
-  { contract: "SafeProxyFactory", event: "ProxyCreation" },
+  { contract: "SafeProxyFactory", event: "ProxyCreation", fields: {} },
   async ({ event, context }) => {
     context.chain.Safe.add(event.params.proxy);
   }
 );
 
 indexer.contractRegister(
-  { contract: "SafeProxyFactoryModern", event: "ProxyCreation" },
+  { contract: "SafeProxyFactoryModern", event: "ProxyCreation", fields: {} },
   async ({ event, context }) => {
     context.chain.Safe.add(event.params.proxy);
   }
 );
 
 indexer.onEvent(
-  { contract: "SafeProxyFactory", event: "ProxyCreation" },
+  { contract: "SafeProxyFactory", event: "ProxyCreation", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.Safe.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -34,7 +34,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "SafeProxyFactoryModern", event: "ProxyCreation" },
+  { contract: "SafeProxyFactoryModern", event: "ProxyCreation", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.Safe.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -54,7 +54,7 @@ indexer.onEvent(
 // index *below* the ProxyCreation that announces it, in the same transaction.
 // Whether a tool records these is the capability this case measures.
 indexer.onEvent(
-  { contract: "Safe", event: "SafeSetup" },
+  { contract: "Safe", event: "SafeSetup", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.SafeSetup.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -67,7 +67,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "SafeReceived" },
+  { contract: "Safe", event: "SafeReceived", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.SafeReceived.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -80,7 +80,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "SafeModuleTransaction" },
+  { contract: "Safe", event: "SafeModuleTransaction", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.SafeModuleTransaction.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -95,7 +95,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "SafeMultiSigTransaction" },
+  { contract: "Safe", event: "SafeMultiSigTransaction", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.SafeMultiSigTransaction.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -109,7 +109,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ExecutionSuccess" },
+  { contract: "Safe", event: "ExecutionSuccess", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ExecutionSuccess.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -121,7 +121,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ExecutionSuccessV4" },
+  { contract: "Safe", event: "ExecutionSuccessV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ExecutionSuccess.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -133,7 +133,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ExecutionFailure" },
+  { contract: "Safe", event: "ExecutionFailure", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ExecutionFailure.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -145,7 +145,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ExecutionFailureV4" },
+  { contract: "Safe", event: "ExecutionFailureV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ExecutionFailure.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -157,7 +157,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ChangedThreshold" },
+  { contract: "Safe", event: "ChangedThreshold", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ChangedThreshold.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -169,7 +169,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ChangedMasterCopy" },
+  { contract: "Safe", event: "ChangedMasterCopy", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ChangedMasterCopy.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -181,7 +181,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ChangedFallbackHandler" },
+  { contract: "Safe", event: "ChangedFallbackHandler", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ChangedFallbackHandler.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -193,7 +193,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ChangedFallbackHandlerV4" },
+  { contract: "Safe", event: "ChangedFallbackHandlerV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ChangedFallbackHandler.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -205,7 +205,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ChangedGuard" },
+  { contract: "Safe", event: "ChangedGuard", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ChangedGuard.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -217,7 +217,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ChangedGuardV4" },
+  { contract: "Safe", event: "ChangedGuardV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ChangedGuard.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -229,7 +229,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "ChangedModuleGuard" },
+  { contract: "Safe", event: "ChangedModuleGuard", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.ChangedModuleGuard.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -241,7 +241,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "EnabledModule" },
+  { contract: "Safe", event: "EnabledModule", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.EnabledModule.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -253,7 +253,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "EnabledModuleV4" },
+  { contract: "Safe", event: "EnabledModuleV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.EnabledModule.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -265,7 +265,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "DisabledModule" },
+  { contract: "Safe", event: "DisabledModule", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.DisabledModule.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -277,7 +277,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "DisabledModuleV4" },
+  { contract: "Safe", event: "DisabledModuleV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.DisabledModule.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -289,7 +289,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "AddedOwner" },
+  { contract: "Safe", event: "AddedOwner", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.AddedOwner.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -301,7 +301,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "AddedOwnerV4" },
+  { contract: "Safe", event: "AddedOwnerV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.AddedOwner.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -313,7 +313,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "RemovedOwner" },
+  { contract: "Safe", event: "RemovedOwner", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.RemovedOwner.set({
       id: `${event.block.number}-${event.logIndex}`,
@@ -325,7 +325,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "Safe", event: "RemovedOwnerV4" },
+  { contract: "Safe", event: "RemovedOwnerV4", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.RemovedOwner.set({
       id: `${event.block.number}-${event.logIndex}`,

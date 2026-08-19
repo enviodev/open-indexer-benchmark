@@ -75,7 +75,7 @@ const getAllowance = createEffect(
 );
 
 indexer.onEvent(
-  { contract: "ERC20", event: "Approval" },
+  { contract: "ERC20", event: "Approval", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     const approved = event.params.value;
 
