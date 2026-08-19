@@ -1,7 +1,7 @@
 import { indexer } from "envio";
 
 indexer.onEvent(
-  { contract: "ERC20", event: "Transfer" },
+  { contract: "ERC20", event: "Transfer", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     const [sender, receiver] = await Promise.all([
       context.Account.getOrCreate({ id: event.params.from, balance: 0n }),
@@ -33,7 +33,7 @@ indexer.onEvent(
 );
 
 indexer.onEvent(
-  { contract: "ERC20", event: "Approval" },
+  { contract: "ERC20", event: "Approval", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.Allowance.set({
       id: `${event.params.owner}-${event.params.spender}`,
