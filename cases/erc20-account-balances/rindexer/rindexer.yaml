@@ -1,12 +1,16 @@
 name: erc20-indexer
 description: ERC-20 Transfer and Approval event indexer for RocketTokenRETH
-project_type: rust
+project_type: no-code
 timestamps: true
 
 networks:
   - name: ethereum
     chain_id: 1
     rpc: ${ETHEREUM_RPC}
+    # true routes historical log fetches through HyperSync (rindexer reads the
+    # API token from ENVIO_API_TOKEN); false is the plain RPC pipeline. The
+    # driver substitutes the value, because this one file backs both rows.
+    hypersync: ${RINDEXER_HYPERSYNC}
 
 storage:
   postgres:
@@ -24,6 +28,46 @@ contracts:
     include_events:
       - Transfer
       - Approval
+    tables:
+      - name: accounts
+        columns:
+          - name: holder
+          - name: balance
+            default: "0"
+        events:
+          - event: Transfer
+            operations:
+              - type: upsert
+                where:
+                  holder: $to
+                set:
+                  - column: balance
+                    action: add
+                    value: $value
+              - type: upsert
+                where:
+                  holder: $from
+                set:
+                  - column: balance
+                    action: subtract
+                    value: $value
+      - name: allowances
+        columns:
+          - name: owner
+          - name: spender
+          - name: amount
+            default: "0"
+        events:
+          - event: Approval
+            operations:
+              - type: upsert
+                where:
+                  owner: $owner
+                  spender: $spender
+                set:
+                  - column: amount
+                    action: set
+                    value: $value
 
 global:
   health_port: 8082

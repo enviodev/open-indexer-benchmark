@@ -2,7 +2,7 @@
 //
 //   CHANGED_FILES="$(git diff --name-only base...head)" node scripts/select-scope.ts
 //
-// A full run is one job per indexer per scenario — thirty-two at the time of
+// A full run is one job per indexer per scenario — forty-four at the time of
 // writing, each up to 45 minutes against shared data endpoints, most of them
 // re-measuring code the pull request never touched. On a pull request the run
 // is narrowed to what changed:
@@ -44,6 +44,7 @@
 const INDEXER_DIRS: Record<string, string> = {
   "envio-rpc": "envio",
   "sqd-rpc": "sqd",
+  "rindexer-hypersync": "rindexer",
   "envio-subgraph": "subgraph",
   "envio-subgraph-rpc": "subgraph",
 };
@@ -56,6 +57,7 @@ const INDEXER_DIRS: Record<string, string> = {
 const DRIVER_INDEXERS: Record<string, string[]> = {
   envio: ["envio", "envio-rpc"],
   sqd: ["sqd", "sqd-rpc"],
+  rindexer: ["rindexer", "rindexer-hypersync"],
   "envio-subgraph": ["envio-subgraph", "envio-subgraph-rpc"],
 };
 

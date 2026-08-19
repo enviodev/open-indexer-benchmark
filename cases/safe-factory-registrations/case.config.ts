@@ -240,16 +240,6 @@ export const caseConfig: CaseConfig = {
     childOf: proxyOf,
   },
 
-  unsupported: {
-    rindexer:
-      "its factory filter takes one factory per contract — `Contract using " +
-      "factory filter must use same factory across all networks` — so the " +
-      "children of Safe's four canonical factory deployments cannot be " +
-      "collected into one contract, and its no-code mode names tables after " +
-      "events, which leaves no way to declare the eight events Safe emits " +
-      "under one topic in two layouts",
-  },
-
   entities: [
     {
       key: "safe",

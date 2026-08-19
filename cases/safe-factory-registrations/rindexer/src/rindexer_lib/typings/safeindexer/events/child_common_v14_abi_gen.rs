@@ -1,0 +1,163 @@
+use alloy::sol;
+
+sol!(
+    #[sol(rpc, all_derives)]
+    RindexerChildCommonV14Gen,
+    r#"[
+  {
+    "anonymous": false,
+    "type": "event",
+    "name": "SafeSetup",
+    "inputs": [
+      {
+        "name": "initiator",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "owners",
+        "type": "address[]",
+        "indexed": false
+      },
+      {
+        "name": "threshold",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "initializer",
+        "type": "address",
+        "indexed": false
+      },
+      {
+        "name": "fallbackHandler",
+        "type": "address",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "anonymous": false,
+    "type": "event",
+    "name": "SafeReceived",
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "anonymous": false,
+    "type": "event",
+    "name": "SafeModuleTransaction",
+    "inputs": [
+      {
+        "name": "module",
+        "type": "address",
+        "indexed": false
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": false
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "indexed": false
+      },
+      {
+        "name": "operation",
+        "type": "uint8",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "anonymous": false,
+    "type": "event",
+    "name": "SafeMultiSigTransaction",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": false
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "indexed": false
+      },
+      {
+        "name": "operation",
+        "type": "uint8",
+        "indexed": false
+      },
+      {
+        "name": "safeTxGas",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "baseGas",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "gasPrice",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "gasToken",
+        "type": "address",
+        "indexed": false
+      },
+      {
+        "name": "refundReceiver",
+        "type": "address",
+        "indexed": false
+      },
+      {
+        "name": "signatures",
+        "type": "bytes",
+        "indexed": false
+      },
+      {
+        "name": "additionalInfo",
+        "type": "bytes",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "anonymous": false,
+    "type": "event",
+    "name": "ChangedThreshold",
+    "inputs": [
+      {
+        "name": "threshold",
+        "type": "uint256",
+        "indexed": false
+      }
+    ]
+  }
+]"#
+);

@@ -1,7 +1,7 @@
 import { indexer } from "envio";
 
 indexer.onEvent(
-  { contract: "ERC20", event: "Transfer" },
+  { contract: "ERC20", event: "Transfer", fields: { block: ["timestamp"] } },
   async ({ event, context }) => {
     context.TransferEvent.set({
       id: `${event.block.number}-${event.logIndex}`,

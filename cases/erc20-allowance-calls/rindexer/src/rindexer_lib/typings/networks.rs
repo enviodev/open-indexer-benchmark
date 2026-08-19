@@ -5,8 +5,9 @@
 
 use alloy::{primitives::U64, transports::http::reqwest::header::HeaderMap};
 use rindexer::{
+    hypersync::create_hypersync_provider,
     lazy_static,
-    manifest::network::{AddressFiltering, BlockPollFrequency},
+    manifest::network::{AddressFiltering, BlockPollFrequency, HypersyncConfig},
     notifications::ChainStateNotification,
     provider::{
         create_client, ChainProvider, JsonRpcCachedProvider, RetryClientError, RindexerProvider,
@@ -59,7 +60,10 @@ pub async fn get_ethereum_provider_cache() -> Arc<JsonRpcCachedProvider> {
                 &public_read_env_value("ETHEREUM_RPC").unwrap_or("ETHEREUM_RPC".to_string()),
                 1,
                 None,
-                None,
+                // Hand-set: the upstream RPC rejects eth_getLogs responses above
+                // 50,000 logs, and this case's eight tokens emit ~16 approvals a
+                // block, so an uncapped request never succeeds.
+                Some(U64::from(2000)),
                 None,
                 HeaderMap::new(),
                 None,
@@ -76,8 +80,39 @@ pub async fn get_ethereum_provider() -> Arc<RindexerProvider> {
     get_ethereum_provider_cache().await.get_inner_provider()
 }
 
+// Hand-added on top of the generated output, mirroring what `rindexer codegen`
+// emits for a hypersync-enabled network: one crate backs both benchmark rows,
+// so the data source is picked by the RINDEXER_HYPERSYNC variable the driver
+// sets rather than baked in at codegen time.
+static ETHEREUM_PROVIDER_HYPERSYNC: OnceCell<Arc<dyn ChainProvider>> = OnceCell::const_new();
+
+pub async fn get_ethereum_provider_hypersync() -> Arc<dyn ChainProvider> {
+    ETHEREUM_PROVIDER_HYPERSYNC
+        .get_or_init(|| async {
+            let hypersync_config = HypersyncConfig {
+                url: None,
+                api_token: None,
+                max_block_range: Some(U64::from(5000)),
+                stream_concurrency: None,
+                batch_size: None,
+                max_batch_size: None,
+                response_bytes_target: None,
+            };
+            let rpc_provider = get_ethereum_provider_cache().await;
+            create_hypersync_provider(&hypersync_config, "ethereum", 1, None, rpc_provider)
+                .await
+                .map(|provider| provider as Arc<dyn ChainProvider>)
+                .expect("Error creating hypersync provider")
+        })
+        .await
+        .clone()
+}
+
 pub async fn get_provider_cache_for_network(network: &str) -> Arc<dyn ChainProvider> {
     if network == "ethereum" {
+        if std::env::var("RINDEXER_HYPERSYNC").as_deref() == Ok("true") {
+            return get_ethereum_provider_hypersync().await;
+        }
         return get_ethereum_provider_cache().await;
     }
     panic!("Network not supported")
