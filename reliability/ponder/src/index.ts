@@ -8,7 +8,7 @@ ponder.on("MockToken:Transfer", async ({ event, context }) => {
   await context.db.insert(transferEvent).values({
     id: `${event.block.number}-${event.log.logIndex}`,
     blockNumber: Number(event.block.number),
-    logIndex: event.log.logIndex,
+    logIndex: BigInt(event.log.logIndex),
     from: event.args.from,
     to: event.args.to,
     value: event.args.value,
@@ -23,7 +23,7 @@ ponder.on("MockToken:MetadataUpdated", async ({ event, context }) => {
   await context.db.insert(tokenMetadata).values({
     id: `${event.block.number}-${event.log.logIndex}`,
     blockNumber: Number(event.block.number),
-    logIndex: event.log.logIndex,
+    logIndex: BigInt(event.log.logIndex),
     symbol: event.args.symbol,
     name: event.args.name,
   });

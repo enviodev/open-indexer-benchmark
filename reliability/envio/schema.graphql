@@ -1,7 +1,7 @@
 type TransferEvent {
   id: ID!
   blockNumber: Int!
-  logIndex: Int!
+  logIndex: BigInt!
   from: String!
   to: String!
   value: BigInt!
@@ -11,7 +11,7 @@ type TransferEvent {
 type TokenMetadata {
   id: ID!
   blockNumber: Int!
-  logIndex: Int!
+  logIndex: BigInt!
   symbol: String!
   name: String!
 }

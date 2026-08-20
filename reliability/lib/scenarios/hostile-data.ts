@@ -1,32 +1,58 @@
-// Data the chain says is real and the database cannot hold.
+// Data the chain says is real and the tool would rather not have.
 //
-// A `string` in an event is a byte array with no rules attached. Contracts emit
-// NUL bytes in them — sometimes from a fixed-size buffer copied wholesale,
-// sometimes on purpose — and PostgreSQL cannot store a NUL in a `text` column,
-// because its wire protocol terminates strings on one. So an indexer meets a
-// value it must not drop and cannot write, in the middle of its own write path.
+// Three values, on two blocks, each of which some indexer somewhere has choked
+// on. None of them is malformed: every one is a validly encoded thing a node
+// will hand you, and an indexer that refuses it is refusing data the chain says
+// happened.
 //
-// There is no perfect answer, and this scenario does not pretend otherwise. It
-// asks two things a benchmark can be fair about:
+//   A NUL byte in a token symbol. A `string` in an event is a byte array with
+//   no rules attached, and contracts emit NUL bytes in them — sometimes from a
+//   fixed-size buffer copied wholesale, sometimes on purpose. PostgreSQL cannot
+//   store one in a `text` column, because its wire protocol terminates strings
+//   on it. So the tool meets a value it must not drop and cannot write, in the
+//   middle of its own write path.
 //
-//   Did the tool keep going? A crash loop on one log means every contract that
-//   tool indexes stops at that block, forever, until a human intervenes.
+//   A transfer of 2^256-1, which is what a uint256 column is for and what a
+//   bigint column is not.
+//
+//   A log indexed near the top of the unsigned 32-bit range, which is what some
+//   chains put on synthetic logs, and which halted a Ponder backfill in
+//   ponder-sh/ponder#2373.
+//
+// Two questions a benchmark can be fair about, whatever anyone thinks the
+// correct handling is:
+//
+//   Did the tool keep going? A crash loop or a hard stop on one log means every
+//   contract that tool indexes stops at that block, forever, until a human
+//   intervenes. That is the outcome an operator feels regardless of whose bug
+//   it is.
 //
 //   Did it say anything? Storing the value with the NUL stripped is fine.
 //   Storing it escaped is fine. Skipping the row and logging it is defensible.
 //   Skipping it silently is the one outcome an operator cannot recover from,
 //   because nothing in the database ever suggests a row is missing.
 //
-// The same block also carries a transfer of 2^256-1, which is what a uint256
-// column is for and what a bigint column is not.
+// The two hostile blocks are kept apart on purpose. Put on one block, a tool
+// that stopped would leave no way to say which value stopped it.
 
 import { sleep } from "../../../cases/lib/process.ts";
-import { HOSTILE_NAME, HOSTILE_SYMBOL, HOSTILE_VALUE, ZERO_ADDRESS } from "../chain.ts";
+import {
+  HOSTILE_NAME,
+  HOSTILE_SYMBOL,
+  HOSTILE_VALUE,
+  LARGE_LOG_INDEX,
+  ZERO_ADDRESS,
+} from "../chain.ts";
 import type { Check, Scenario, ScenarioOutcome } from "../harness.ts";
 import { rowFields } from "../introspect.ts";
 import { worst } from "./helpers.ts";
 
-const HOSTILE_BLOCK = 40;
+/** Carries the NUL-byte symbol and the uint256 max transfer. */
+const NUL_BLOCK = 40;
+
+/** Carries one transfer logged at `LARGE_LOG_INDEX`. */
+const BIG_INDEX_BLOCK = 60;
+
 const TOTAL_BLOCKS = 90;
 
 /** What a value looks like once the byte PostgreSQL refuses has been dropped. */
@@ -40,13 +66,15 @@ export const hostileData: Scenario = {
   key: "hostile-data",
   title: "Hostile values",
   summary:
-    "One block emits a token symbol containing a NUL byte, a name with an emoji, a tab and " +
-    "a newline, and a transfer of 2^256-1. Checks that the indexer gets past the block and " +
-    "that the values are not silently lost.",
+    "Two blocks carry values a tool may not want: a token symbol containing a NUL byte, a " +
+    "name with an emoji, a tab and a newline, a transfer of 2^256-1, and a log indexed at " +
+    "0xfffffffc. Checks that the indexer gets past both blocks and that nothing is silently " +
+    "lost.",
   chain: { blockTimeSeconds: 2, transfersPerBlock: 2 },
 
   setup(chain) {
-    chain.emitHostileDataAt(HOSTILE_BLOCK);
+    chain.emitHostileDataAt(NUL_BLOCK);
+    chain.emitLargeLogIndexAt(BIG_INDEX_BLOCK);
     chain.append(TOTAL_BLOCKS);
   },
 
@@ -57,40 +85,53 @@ export const hostileData: Scenario = {
     const progress = await ctx.progress();
     const checks: Check[] = [];
 
-    if (!reached && progress < HOSTILE_BLOCK) {
-      // The interesting failure: not "it stored the wrong thing" but "it never
-      // got past the block at all", which is a stuck pipeline, not a bad row.
-      return {
-        status: "fail",
-        detail:
-          `stopped at block ${progress} and never got past the hostile block ` +
-          `${HOSTILE_BLOCK}` +
-          (ctx.crashes.length > 0
-            ? `, after ${ctx.crashes.length} crashes`
-            : ", without crashing"),
-        checks,
-      };
-    }
+    // Which hostile blocks it never reached — stated, not blamed. A tool fetches
+    // logs a range at a time, so one that refuses a range refuses every block in
+    // it and comes to rest well short of the value that stopped it: Ponder halts
+    // around block 25 over a log in block 60, having never read block 40 either.
+    // From outside the process there is no way to tell those apart, so the note
+    // says where it stopped and which blocks that cost. What the tool itself
+    // said is evidence worth having, and the harness appends it to every result
+    // that is not a pass, so it is not repeated here.
+    const unreached = [NUL_BLOCK, BIG_INDEX_BLOCK].filter((block) => progress < block);
 
     checks.push({
       name: "kept indexing",
-      status: reached ? "pass" : "degraded",
+      status: reached ? "pass" : "fail",
       detail: reached
         ? `reached block ${progress}`
-        : `got past the hostile block but only reached ${progress} of ${ctx.chain.height}`,
+        : `stopped at block ${progress} of ${ctx.chain.height}` +
+          (unreached.length > 0
+            ? `, never reaching the hostile block${unreached.length > 1 ? "s" : ""} ` +
+              unreached.join(" and ")
+            : "") +
+          (ctx.crashes.length > 0
+            ? `, after ${ctx.crashes.length} crashes`
+            : ", without crashing or exiting"),
     });
 
     // Let anything buffered land before reading the tables.
     await sleep(2_000);
 
-    // ── The metadata row ──
     const metadataRows = await ctx.rows("tokenMetadata");
-    const row = metadataRows.find((text) => rowFields(text)[0] === String(HOSTILE_BLOCK));
-    if (!row) {
+    const transferRows = await ctx.rows("transferEvent");
+    /** Rows the tool holds for one block, whatever their log index. */
+    const rowsAt = (block: number) =>
+      transferRows.filter((text) => rowFields(text)[0] === String(block));
+
+    // ── The NUL byte ──
+    const row = metadataRows.find((text) => rowFields(text)[0] === String(NUL_BLOCK));
+    if (progress < NUL_BLOCK) {
       checks.push({
         name: "symbol stored",
         status: "fail",
-        detail: `no metadata row for block ${HOSTILE_BLOCK}: the event was dropped silently`,
+        detail: `block ${NUL_BLOCK} was never indexed, so the symbol never reached the database`,
+      });
+    } else if (!row) {
+      checks.push({
+        name: "symbol stored",
+        status: "fail",
+        detail: `no metadata row for block ${NUL_BLOCK}: the event was dropped silently`,
       });
     } else {
       const [, , symbol, name] = rowFields(row);
@@ -110,16 +151,20 @@ export const hostileData: Scenario = {
     }
 
     // ── The uint256 transfer ──
-    const transferRows = await ctx.rows("transferEvent");
-    const hostileTransfer = transferRows.find((text) => {
-      const [block, , from] = rowFields(text);
-      return block === String(HOSTILE_BLOCK) && from === ZERO_ADDRESS;
-    });
-    if (!hostileTransfer) {
+    const hostileTransfer = rowsAt(NUL_BLOCK).find(
+      (text) => rowFields(text)[2] === ZERO_ADDRESS
+    );
+    if (progress < NUL_BLOCK) {
       checks.push({
         name: "uint256 max",
         status: "fail",
-        detail: `the transfer of 2^256-1 in block ${HOSTILE_BLOCK} was not stored`,
+        detail: `block ${NUL_BLOCK} was never indexed`,
+      });
+    } else if (!hostileTransfer) {
+      checks.push({
+        name: "uint256 max",
+        status: "fail",
+        detail: `the transfer of 2^256-1 in block ${NUL_BLOCK} was not stored`,
       });
     } else {
       const value = rowFields(hostileTransfer)[4];
@@ -133,28 +178,65 @@ export const hostileData: Scenario = {
       });
     }
 
+    // ── The large log index ──
+    // Three outcomes worth telling apart: the log is there, the log is gone but
+    // the tool carried on, and the tool stopped at that block. Only the last is
+    // an indexer somebody has to go and restart.
+    const atBigIndex = rowsAt(BIG_INDEX_BLOCK);
+    const bigIndexRow = atBigIndex.find(
+      (text) => rowFields(text)[1] === String(LARGE_LOG_INDEX)
+    );
+    if (progress < BIG_INDEX_BLOCK) {
+      checks.push({
+        name: "large log index",
+        status: "fail",
+        detail:
+          `stopped before block ${BIG_INDEX_BLOCK}: the log indexed ` +
+          `${LARGE_LOG_INDEX} (0x${LARGE_LOG_INDEX.toString(16)}) halted the backfill`,
+      });
+    } else if (bigIndexRow) {
+      checks.push({
+        name: "large log index",
+        status: "pass",
+        detail: `stored with its index of ${LARGE_LOG_INDEX} intact`,
+      });
+    } else {
+      checks.push({
+        name: "large log index",
+        status: "degraded",
+        detail:
+          atBigIndex.length > 0
+            ? `indexed the rest of block ${BIG_INDEX_BLOCK} but dropped the log ` +
+              `indexed ${LARGE_LOG_INDEX}`
+            : `indexed past block ${BIG_INDEX_BLOCK} without storing any of its logs`,
+      });
+    }
+
     await ctx.halt();
 
     const failed = checks.filter((check) => check.status === "fail");
     const soft = checks.filter((check) => check.status === "degraded");
-    // No crash metric here: the harness publishes that count as a column of its
-    // own for every scenario, and a second one under the same name was
-    // rendering as a duplicate column in the table.
+
+    // A tool that stopped indexing did not also independently fail to store the
+    // values on the blocks it never read; those checks are consequences of the
+    // first one, and listing them all as findings buries the one that matters.
+    const stalled = checks.find((check) => check.name === "kept indexing");
+    const root =
+      stalled?.status === "fail"
+        ? [stalled]
+        : failed.length > 0
+          ? failed
+          : soft;
 
     return {
       status: worst(checks),
       detail:
-        failed.length > 0
-          ? failed.map((check) => check.detail).join("; ")
-          : soft.length > 0
-            ? soft.map((check) => check.detail).join("; ")
-            : `kept indexing and ${
-                checks.find((check) => check.name === "symbol stored")?.detail ??
-                "stored the values"
-              }` +
-              (ctx.crashes.length > 0
-                ? `, after ${ctx.crashes.length} crashes`
-                : ", without crashing"),
+        root.length > 0
+          ? root.map((check) => `${check.name}: ${check.detail}`).join("; ")
+          : `kept indexing and stored every hostile value` +
+            (ctx.crashes.length > 0
+              ? `, after ${ctx.crashes.length} crashes`
+              : ", without crashing"),
       checks,
     };
   },

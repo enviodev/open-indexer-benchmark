@@ -43,6 +43,6 @@ export const ponderDriver: DriverFactory = (ctx) => {
     },
     alive: () => proc.alive(),
     exit: () => proc.exit(),
-    output: () => proc.output(),
+    output: (lines) => proc.output(lines),
   };
 };

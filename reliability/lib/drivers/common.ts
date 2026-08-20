@@ -53,8 +53,8 @@ export interface ReliabilityDriver {
   alive(): boolean;
   /** The last unexpected exit, or null while the process is up. */
   exit(): ProcessExit | null;
-  /** The last lines the tool logged, so a crash can be reported with its cause. */
-  output(): string[];
+  /** The last lines the tool logged, so a failure can be reported with its cause. */
+  output(lines?: number): string[];
 }
 
 export type DriverFactory = (ctx: DriverContext) => ReliabilityDriver;

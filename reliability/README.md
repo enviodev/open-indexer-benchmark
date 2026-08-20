@@ -149,23 +149,48 @@ missing, or both.
 
 ### Hostile values
 
-One block emits a token symbol containing a NUL byte, a name containing an
-emoji, a tab and a newline, and a transfer of 2²⁵⁶−1.
+Two blocks carry values a tool may not want. None of them is malformed: every
+one is a validly encoded thing a node will hand you.
 
-The NUL is the headline. PostgreSQL cannot store one in a `text` column — its
-wire protocol terminates strings on it — so an indexer meets a value it must not
-drop and cannot write, in the middle of its own write path. Contracts do emit
-them, sometimes from a fixed-size buffer copied wholesale.
+| value | why it is hard |
+| --- | --- |
+| a token symbol containing a NUL byte | PostgreSQL cannot store one in a `text` column — its wire protocol terminates strings on it — so the tool meets a value it must not drop and cannot write, inside its own write path |
+| a name with an emoji, a tab and a newline | ordinary text that breaks anything assembling SQL or logs by concatenation |
+| a transfer of 2²⁵⁶−1 | what a uint256 column is for, and what a bigint column is not |
+| a log indexed at `0xfffffffc` | some chains put indices near the uint32 ceiling on synthetic logs; this one halted a Ponder backfill in [ponder-sh/ponder#2373](https://github.com/ponder-sh/ponder/pull/2373) |
 
-There is no perfect answer and this scenario does not pretend otherwise. It asks
-two things instead. Did the tool keep going — a crash loop on one log stops every
-contract that tool indexes, at that block, until a human intervenes. And did it
-say anything: storing the value with the NUL stripped is fine, storing it
-escaped is fine, skipping the row and logging it is defensible, and skipping it
-silently is the one outcome an operator cannot recover from.
+The NUL byte and the uint256 sit on one block; the large log index sits on
+another, twenty blocks later. Kept apart on purpose — a tool that stopped would
+otherwise leave no way to say which value stopped it.
 
-Reported: whether it got past the block, exactly what ended up stored, and
-whether the uint256 survived a column that may not have been wide enough.
+There is no perfect answer to any of these and this scenario does not pretend
+otherwise. The last one is openly contested: the pull request above was closed
+on the grounds that an index that large is an RPC or chain bug rather than
+something an indexer should accommodate, which is a defensible position. This
+suite does not take a side. It emits the value, reports what each tool does, and
+leaves the argument to the reader.
+
+What is not a matter of opinion is the shape of the outcome, so that is what is
+graded:
+
+- **Did the tool keep going?** A hard stop or a crash loop on one log means
+  every contract that tool indexes stops at that block until a human
+  intervenes. That is what an operator feels regardless of whose bug it is.
+  Note that a tool fetching logs a range at a time can come to rest well short
+  of the offending block — Ponder stops around block 25 over a log in block 60 —
+  so the block it stopped at and the block that stopped it are both reported.
+- **Did it say anything?** Storing the value with the NUL stripped is fine.
+  Storing it escaped is fine. Skipping the row and logging it is defensible.
+  Skipping it silently is the one outcome an operator cannot recover from.
+
+The entity schemas here all use a 64-bit column for the log index. That is
+deliberate: an `int4` in this repository's own schema would reject the log
+before the indexer's limits ever came into it, and the scenario would be
+measuring these projects rather than the tools.
+
+Reported: whether it got past each block, exactly what ended up stored, and —
+when a tool stalls without exiting — the last error it logged, since a silent
+stall otherwise reads as a mystery rather than a finding.
 
 ### Head latency
 

@@ -19,13 +19,19 @@ import {
   logsBloom,
   selector,
 } from "../reliability/lib/abi.ts";
-import { CONTRACT, HOSTILE_SYMBOL, MockChain } from "../reliability/lib/chain.ts";
+import {
+  CONTRACT,
+  HOSTILE_SYMBOL,
+  LARGE_LOG_INDEX,
+  MockChain,
+} from "../reliability/lib/chain.ts";
 import { MockRpcServer } from "../reliability/lib/rpc-server.ts";
 import { diffRows, expectedRows } from "../reliability/lib/entities.ts";
 import { buildScenarioTable, buildSummaryTable } from "../reliability/lib/report.ts";
 import { TOOL_INFO, outOfScope } from "../reliability/lib/drivers/index.ts";
 import { TOOLS as BENCHMARK_TOOLS } from "../cases/lib/drivers/index.ts";
 import { SCENARIOS } from "../reliability/lib/scenarios/index.ts";
+import { lastErrorLine } from "../reliability/lib/harness.ts";
 import type { ScenarioResult } from "../reliability/lib/harness.ts";
 
 let failures = 0;
@@ -154,6 +160,35 @@ console.log("\nmock chain");
       log.topics.every((topic) => topic.length === 66 && topic.startsWith("0x"))
     )
   );
+
+  // ponder-sh/ponder#2373: a log index near the uint32 ceiling, which some
+  // chains put on synthetic logs and which halted a backfill.
+  {
+    const big = new MockChain({ seed: "big" });
+    big.emitLargeLogIndexAt(4);
+    big.append(8);
+    const indices = big.blockByNumber(4)!.logs.map((log) => log.logIndex);
+    check("a large log index is emitted where asked", indices.includes(LARGE_LOG_INDEX));
+    equal("it is 0xfffffffc, the value from the report", LARGE_LOG_INDEX, 0xfffffffc);
+    check("it is inside JavaScript's safe integer range", LARGE_LOG_INDEX < Number.MAX_SAFE_INTEGER);
+    check(
+      "it does not fit an int4, which is the point",
+      LARGE_LOG_INDEX > 2_147_483_647
+    );
+    check(
+      "log indices in that block still ascend",
+      indices.every((index, at) => at === 0 || index > indices[at - 1])
+    );
+    equal(
+      "ordinary blocks are untouched",
+      big.blockByNumber(5)!.logs.map((log) => log.logIndex),
+      [0, 1]
+    );
+    check(
+      "transaction indices stay positional, so receipts still line up",
+      big.blockByNumber(4)!.logs.every((log, at) => log.transactionIndex === at)
+    );
+  }
 
   equal("finalized height trails the head", a.finalizedHeight, 0);
   const deep = new MockChain({ seed: "deep", finalityDepth: 5 });
@@ -374,6 +409,31 @@ console.log("\nreport");
     new Set(rows.map((line) => cellsOf(line).length)).size,
     1
   );
+}
+
+// ── Picking the line worth publishing ──────────────────────────────────
+// A tool that stalls without exiting is only legible through what it logged,
+// and a thrown error is several lines of which the last is often the least
+// useful. This is Ponder's real output on the large log index.
+console.log("\ntool error reporting");
+{
+  const ponder = [
+    "12:47:33.015 WARN  Failed to fetch latest block chain=mainnet number=90",
+    "RpcProviderError: Invalid RPC response: 'log.logIndex' (4294967292) is larger " +
+      "than the maximum allowed value (2147483647).",
+    "Please report this error to the RPC operator.",
+  ];
+  check(
+    "the sentence naming the value wins over the one below it",
+    lastErrorLine(ponder)?.includes("4294967292") === true,
+    String(lastErrorLine(ponder))
+  );
+  equal(
+    "a plain complaint is still found when nothing was thrown",
+    lastErrorLine(["worker failed to start"]),
+    "worker failed to start"
+  );
+  equal("quiet output yields nothing", lastErrorLine(["all fine"]), null);
 }
 
 // ── Coverage of the throughput benchmark ───────────────────────────────

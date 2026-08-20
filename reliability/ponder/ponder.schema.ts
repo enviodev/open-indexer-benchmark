@@ -7,7 +7,11 @@ import { onchainTable } from "ponder";
 export const transferEvent = onchainTable("transfer_event", (t) => ({
   id: t.text().primaryKey(),
   blockNumber: t.integer().notNull(),
-  logIndex: t.integer().notNull(),
+  // Wide enough for the largest index the chain can produce, not merely for the
+  // ones it usually does. An int4 here would reject the hostile-values
+  // scenario's log before the indexer's own limits ever came into it, and the
+  // scenario would be measuring this schema rather than the tool.
+  logIndex: t.bigint().notNull(),
   from: t.hex().notNull(),
   to: t.hex().notNull(),
   value: t.bigint().notNull(),
@@ -17,7 +21,7 @@ export const transferEvent = onchainTable("transfer_event", (t) => ({
 export const tokenMetadata = onchainTable("token_metadata", (t) => ({
   id: t.text().primaryKey(),
   blockNumber: t.integer().notNull(),
-  logIndex: t.integer().notNull(),
+  logIndex: t.bigint().notNull(),
   symbol: t.text().notNull(),
   name: t.text().notNull(),
 }));

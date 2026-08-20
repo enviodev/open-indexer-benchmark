@@ -8,7 +8,7 @@ export function handleTransfer(event: Transfer): void {
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
   entity.blockNumber = event.block.number.toI32();
-  entity.logIndex = event.logIndex.toI32();
+  entity.logIndex = event.logIndex;
   entity.from = event.params.from.toHexString();
   entity.to = event.params.to.toHexString();
   entity.value = event.params.value;
@@ -24,7 +24,7 @@ export function handleMetadataUpdated(event: MetadataUpdated): void {
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
   entity.blockNumber = event.block.number.toI32();
-  entity.logIndex = event.logIndex.toI32();
+  entity.logIndex = event.logIndex;
   entity.symbol = event.params.symbol;
   entity.name = event.params.name;
   entity.save();

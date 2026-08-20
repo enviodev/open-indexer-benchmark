@@ -52,6 +52,29 @@ export const HOSTILE_NAME =
 /** uint256 max, which overflows anything narrower than numeric(78, 0). */
 export const HOSTILE_VALUE = (1n << 256n) - 1n;
 
+/**
+ * A log index near the top of the unsigned 32-bit range, which is what some
+ * chains put on synthetic logs.
+ *
+ * The value is the one from ponder-sh/ponder#2373, where a backfill halted on
+ * logs indexed `0xffffffe2` and `0xfffffffc`. It is worth being precise about
+ * what this tests, because the tools disagree about whether it is a case at
+ * all: Ponder's maintainer closed that pull request on the grounds that an
+ * index this large is an RPC or chain bug rather than something an indexer
+ * should accommodate, and that is a defensible position.
+ *
+ * This suite does not take a side. It emits the value, reports what each tool
+ * does with it, and leaves the argument to the reader — which is the only way a
+ * benchmark can usefully cover a case its subjects disagree about. What is not
+ * a matter of opinion is the difference between a tool that stores the row, one
+ * that skips it, and one that stops indexing the chain.
+ *
+ * It fits in a JavaScript number and in a PostgreSQL bigint, and does not fit
+ * in an int4. The log is emitted last in its block so the indices within that
+ * block still increase, leaving magnitude as the only thing under test.
+ */
+export const LARGE_LOG_INDEX = 0xfffffffc;
+
 export interface MockLog {
   address: string;
   topics: string[];
@@ -153,6 +176,8 @@ export class MockChain {
   private epochs = new Map<number, number>();
   /** Heights that additionally emit the hostile MetadataUpdated event. */
   private hostileHeights = new Set<number>();
+  /** Heights that additionally emit a transfer logged at LARGE_LOG_INDEX. */
+  private largeLogIndexHeights = new Set<number>();
 
   constructor(options: ChainOptions = {}) {
     this.options = { ...DEFAULTS, ...options };
@@ -193,6 +218,14 @@ export class MockChain {
    */
   emitHostileDataAt(height: number): void {
     this.hostileHeights.add(height);
+  }
+
+  /**
+   * Mark a height as carrying one transfer logged at `LARGE_LOG_INDEX`. Like
+   * `emitHostileDataAt`, it must be set before the height is built.
+   */
+  emitLargeLogIndexAt(height: number): void {
+    this.largeLogIndexHeights.add(height);
   }
 
   /** Extend the canonical chain by `count` blocks and return them. */
@@ -309,7 +342,13 @@ export class MockChain {
     // place" harder to read in the results.
     if (number === 0) return block;
 
-    const emit = (topics: string[], data: string) => {
+    /**
+     * `logIndex` defaults to the log's position in the block. It is overridable
+     * only so a scenario can emit one at `LARGE_LOG_INDEX`; the transaction
+     * index stays positional either way, since that is what ties a log to the
+     * receipt that carries it.
+     */
+    const emit = (topics: string[], data: string, logIndex?: number) => {
       const index = block.logs.length;
       const transaction: MockTransaction = {
         hash: hexFrom(digest(this.options.seed, "tx", number, epoch, index), 32),
@@ -323,7 +362,7 @@ export class MockChain {
         address: CONTRACT,
         topics,
         data,
-        logIndex: index,
+        logIndex: logIndex ?? index,
         transactionHash: transaction.hash,
         transactionIndex: index,
       });
@@ -354,6 +393,16 @@ export class MockChain {
         `0x${encodeUint256(HOSTILE_VALUE)}`
       );
       emit([METADATA_TOPIC], encodeStrings([HOSTILE_SYMBOL, HOSTILE_NAME]));
+    }
+
+    if (this.largeLogIndexHeights.has(number)) {
+      // Last in the block, so the indices within it still ascend and the only
+      // unusual thing about this log is how large its index is.
+      emit(
+        [TRANSFER_TOPIC, addressTopic(hexFrom(seed, 20)), addressTopic(ZERO_ADDRESS)],
+        `0x${encodeUint256(1n)}`,
+        LARGE_LOG_INDEX
+      );
     }
 
     return block;

@@ -8,7 +8,7 @@ indexer.onEvent(
     context.TransferEvent.set({
       id: `${event.block.number}-${event.logIndex}`,
       blockNumber: event.block.number,
-      logIndex: event.logIndex,
+      logIndex: BigInt(event.logIndex),
       from: event.params.from,
       to: event.params.to,
       value: event.params.value,
@@ -26,7 +26,7 @@ indexer.onEvent(
     context.TokenMetadata.set({
       id: `${event.block.number}-${event.logIndex}`,
       blockNumber: event.block.number,
-      logIndex: event.logIndex,
+      logIndex: BigInt(event.logIndex),
       symbol: event.params.symbol,
       name: event.params.name,
     });

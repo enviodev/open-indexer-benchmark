@@ -13,7 +13,7 @@ export async function handleTransfer(log: TransferLog): Promise<void> {
   await TransferEvent.create({
     id: `${log.blockNumber}-${log.logIndex}`,
     blockNumber: log.blockNumber,
-    logIndex: log.logIndex,
+    logIndex: BigInt(log.logIndex),
     from: log.args.from.toLowerCase(),
     to: log.args.to.toLowerCase(),
     value: log.args.value.toBigInt(),
@@ -32,7 +32,7 @@ export async function handleMetadataUpdated(
   await TokenMetadata.create({
     id: `${log.blockNumber}-${log.logIndex}`,
     blockNumber: log.blockNumber,
-    logIndex: log.logIndex,
+    logIndex: BigInt(log.logIndex),
     symbol: log.args.symbol,
     name: log.args.name,
   }).save();

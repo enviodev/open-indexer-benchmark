@@ -427,6 +427,18 @@ export async function runScenario(
     await rpc.close();
   }
 
+  // A tool that failed without ever exiting still had something to say about
+  // it. Published in the same place a crash reason would have been, since to a
+  // reader they answer the same question: Ponder's stall on a large log index
+  // looks like nothing at all from outside the process, and says
+  // `'log.logIndex' (4294967292) is larger than the maximum allowed value`
+  // inside it, which is the entire finding.
+  let toolDetail = describeCrashes(crashes, givenUp);
+  if (!toolDetail && outcome.status !== "pass") {
+    const line = lastErrorLine(driver.output(40));
+    if (line) toolDetail = `last error the tool logged: ${trim(line)}`;
+  }
+
   const recoveries = crashes
     .map((crash) => crash.recoveredAfterMs)
     .filter((ms): ms is number => ms !== null);
@@ -441,7 +453,7 @@ export async function runScenario(
     crashes: crashes.length,
     restarts,
     worstRecoveryMs: recoveries.length > 0 ? Math.max(...recoveries) : null,
-    crashDetail: describeCrashes(crashes, givenUp),
+    crashDetail: toolDetail,
     seconds: (performance.now() - startedAt) / 1_000,
   };
 }
@@ -453,10 +465,7 @@ export async function runScenario(
  */
 function describeCrashes(crashes: Crash[], givenUp: boolean): string {
   if (crashes.length === 0) return "";
-  const reason = crashes[crashes.length - 1].output
-    .map((line) => line.trim())
-    .reverse()
-    .find((line) => /error|panic|fatal|exception|failed/i.test(line));
+  const reason = lastErrorLine(crashes[crashes.length - 1].output);
   const times = crashes.length === 1 ? "once" : `${crashes.length} times`;
   const tail = givenUp ? ", and did not come back" : "";
   // No em-dash: published notes are split on the first one, which separates the
@@ -464,6 +473,24 @@ function describeCrashes(crashes: Crash[], givenUp: boolean): string {
   return reason
     ? `crashed ${times}${tail}, last with: ${trim(reason)}`
     : `crashed ${times}${tail}`;
+}
+
+/**
+ * The most recent line that reads like a complaint, from a tool's output.
+ *
+ * A thrown error is usually several lines, and the last of them is often the
+ * least useful — Ponder's stall on a large log index ends with "Please report
+ * this error to the RPC operator", one line below the sentence naming the
+ * value. So a line shaped like `SomeError: message` wins over a bare mention of
+ * the word, and only if there is no such line does the last mention stand in.
+ */
+export function lastErrorLine(output: string[]): string | null {
+  const lines = output.map((line) => line.trim()).reverse();
+  const thrown = lines.find((line) => /\b\w*(Error|Exception)\b\s*:/.test(line));
+  if (thrown) return thrown;
+  return (
+    lines.find((line) => /error|panic|fatal|exception|failed|invalid/i.test(line)) ?? null
+  );
 }
 
 const trim = (line: string, max = 160): string =>
