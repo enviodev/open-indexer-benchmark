@@ -26,18 +26,20 @@ How well does an indexer cope with data it has to read back? Every rETH transfer
 <!-- BENCHMARK:erc20-account-balances:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 13,336.7 | 97,262.1 | — | ✅ | Postgres 2.2 MB |
-| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 2,235.5 | 16,422.6 | 6x slower | ✅ | Postgres 5.2 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 707.1 | 5,389.0 | 18.9x slower | ✅ | Postgres 2.2 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 471.0 | 2,787.5 | 28.3x slower | ✅ | Postgres 5.1 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 420.0 | 2,915.1 | 31.8x slower | ✅ | Postgres 2.3 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 65.2 | 858.1 | 204.7x slower | ✅ | Postgres 3.3 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 36.8 | 484.5 | 362.4x slower | ✅ | Postgres 6.9 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 25.0 | 329.2 | 534.4x slower | ❓ (1) | Postgres ~4.4 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 19.3 | 243.0 | 692.7x slower | ❓ (2) | Postgres ~2.3 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 12,277.6 | 89,391.5 | — | ✅ | Postgres 2.2 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 11,145.8 | 81,151.1 | 1.1x slower | ✅ | Postgres 2.2 MB |
+| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 2,076.7 | 16,351.9 | 5.9x slower | ✅ | Postgres 5.2 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 557.0 | 3,897.8 | 22x slower | ✅ | Postgres 2.2 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 429.1 | 2,850.0 | 28.6x slower | ✅ | Postgres 5.1 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 268.9 | 2,360.5 | 45.7x slower | ✅ | Postgres 2.2 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 240.6 | 2,259.4 | 51x slower | ✅ | Postgres 2.2 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 64.0 | 843.0 | 191.8x slower | ✅ | Postgres 3.3 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 44.8 | 590.5 | 273.8x slower | ✅ | Postgres 6.9 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 25.2 | 331.7 | 486.3x slower | ❓ (1) | Postgres ~4.4 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 18.6 | 229.0 | 659.9x slower | ❓ (2) | Postgres ~2.4 MB |
 
-> **(1)** SubQuery — missing 1.4% of the data: the verification range was not finished within 300s
-> **(2)** Squid SDK — missing 24% of the data: the verification range was not finished within 300s
+> **(1)** SubQuery — missing 0.22% of the data: the verification range was not finished within 300s
+> **(2)** Squid SDK — missing 26% of the data: the verification range was not finished within 300s
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 [How this case works, and how to run it →](./cases/erc20-account-balances/README.md)
@@ -50,15 +52,17 @@ How fast can an indexer write? Every USDC transfer is stored once, with nothing 
 <!-- BENCHMARK:erc20-transfer-events:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 77,902.9 | 8,324.6 | — | ✅ | Postgres 3.4 MB |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 65,888.5 | 7,199.6 | 1.2x slower | ✅ | Postgres 1.4 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 16,686.6 | 1,937.8 | 4.7x slower | ✅ | Postgres 1.4 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 7,288.8 | 918.0 | 10.7x slower | ✅ | Postgres 3.4 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 2,606.1 | 304.0 | 29.9x slower | ✅ | Postgres 1.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1,678.3 | 208.6 | 46.4x slower | ✅ | Postgres 1.4 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 230.5 | 29.4 | 337.9x slower | ✅ | Postgres 2.5 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 153.0 | 19.1 | 509.1x slower | ✅ | Postgres 2.8 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 32.7 | 4.1 | 2380.6x slower | ✅ | Postgres 1.9 MB |
+| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 88,131.5 | 9,763.7 | — | ✅ | Postgres 3.4 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 64,731.3 | 7,077.5 | 1.4x slower | ✅ | Postgres 1.4 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 42,394.4 | 4,602.9 | 2.1x slower | ✅ | Postgres 1.4 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 16,889.5 | 1,968.6 | 5.2x slower | ✅ | Postgres 1.4 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 12,685.6 | 1,514.9 | 6.9x slower | ✅ | Postgres 3.4 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1,924.8 | 230.0 | 45.8x slower | ✅ | Postgres 1.4 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 841.7 | 119.1 | 104.7x slower | ✅ | Postgres 1.4 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 834.1 | 118.0 | 105.7x slower | ✅ | Postgres 1.4 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 229.7 | 29.2 | 383.8x slower | ✅ | Postgres 2.5 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 117.4 | 14.4 | 751x slower | ✅ | Postgres 2.8 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 47.1 | 5.8 | 1872.2x slower | ✅ | Postgres 1.9 MB |
 <!-- BENCHMARK:erc20-transfer-events:END -->
 
 [How this case works, and how to run it →](./cases/erc20-transfer-events/README.md)
@@ -71,18 +75,20 @@ Not everything an indexer needs is in the logs. Every approval on the eight busi
 <!-- BENCHMARK:erc20-allowance-calls:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 12,223.0 | 809.5 | — | ✅ | Postgres 8.4 MB |
-| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 7,701.0 | 493.7 | 1.6x slower | ✅ | Postgres 7.3 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 6,712.9 | 437.9 | 1.8x slower | ✅ | Postgres 7.2 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 5,870.9 | 383.3 | 2.1x slower | ✅ | Postgres 8.3 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1,747.7 | 114.9 | 7x slower | ✅ | Postgres 8.2 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 762.3 | 40.3 | 16x slower | ✅ | Postgres 8.4 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 70.4 | 4.4 | 173.5x slower | ✅ | Postgres 20.1 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 37.1 | 2.6 | 329.2x slower | ❓ (1) | Postgres ~11.5 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4.1 | 0.3 | 3005.7x slower | ❓ (2) | Postgres ~16.6 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 14,774.7 | 971.6 | — | ✅ | Postgres 8.3 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 11,593.8 | 758.4 | 1.3x slower | ✅ | Postgres 8.4 MB |
+| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 7,760.7 | 497.6 | 1.9x slower | ✅ | Postgres 7.3 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 7,084.1 | 457.5 | 2.1x slower | ✅ | Postgres 7.2 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 2,754.8 | 195.3 | 5.4x slower | ✅ | Postgres 8.2 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 1,995.4 | 138.4 | 7.4x slower | ✅ | Postgres 8.6 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 769.7 | 40.7 | 19.2x slower | ✅ | Postgres 8.3 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 597.6 | 32.6 | 24.7x slower | ✅ | Postgres 8.6 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 71.2 | 4.5 | 207.6x slower | ✅ | Postgres 20.2 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 38.8 | 2.7 | 380.7x slower | ❓ (1) | Postgres ~11.8 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4.5 | 0.3 | 3272.8x slower | ❓ (2) | Postgres ~16.4 MB |
 
-> **(1)** Ponder — missing 42% of the data: the verification range was not finished within 300s
-> **(2)** SubQuery — missing 94% of the data: the verification range was not finished within 300s
+> **(1)** Ponder — missing 39% of the data: the verification range was not finished within 300s
+> **(2)** SubQuery — missing 93% of the data: the verification range was not finished within 300s
 <!-- BENCHMARK:erc20-allowance-calls:END -->
 
 [How this case works, and how to run it →](./cases/erc20-allowance-calls/README.md)
@@ -95,14 +101,16 @@ What happens when you do not know the contracts up front? The indexer watches th
 <!-- BENCHMARK:safe-factory-registrations:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 9,269.5 | 3,272.3 | — | ✅ | Postgres 14.0 MB |
-| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 6,521.4 | 2,302.2 | 1.4x slower | ✅ | Postgres 11.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 5,097.3 | 1,799.4 | 1.8x slower | ✅ | Postgres 14.0 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4,035.3 | 1,424.5 | 2.3x slower | ✅ | Postgres 11.3 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 3,613.2 | 1,292.7 | 2.6x slower | ❌ (1) | Postgres 13.8 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 401.5 | 141.7 | 23.1x slower | ❌ (2) | Postgres 13.8 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 292.0 | 103.1 | 31.7x slower | ✅ | Postgres 25.4 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 52.2 | 23.3 | 177.6x slower | ❓ (3) | Postgres ~37.9 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 8,312.5 | 2,934.5 | — | ✅ | Postgres 14.0 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 7,493.2 | 2,645.2 | 1.1x slower | ✅ | Postgres 14.0 MB |
+| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 7,220.2 | 2,548.9 | 1.2x slower | ✅ | Postgres 11.3 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 5,409.1 | 1,909.5 | 1.5x slower | ✅ | Postgres 11.4 MB |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 5,195.8 | 1,834.2 | 1.6x slower | ✅ | Postgres 14.0 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 4,078.9 | 1,459.3 | 2x slower | ❌ (1) | Postgres 13.8 MB |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 3,437.6 | 1,213.5 | 2.4x slower | ✅ | Postgres 14.0 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 359.1 | 126.8 | 23.2x slower | ❌ (2) | Postgres 13.8 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 286.8 | 101.3 | 29x slower | ✅ | Postgres 25.3 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 51.9 | 23.1 | 160.3x slower | ❓ (3) | Postgres ~35.4 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (4) | — |
 
 > **(1)** Squid SDK — 921 of 927 safe setups missing; 10 of 11 fallback handler changes missing; 211 of 293 module enables missing
