@@ -12,7 +12,7 @@
 // table unreadable, and an explanation that is not published makes the verdict
 // unfalsifiable.
 
-import { OUT_OF_SCOPE, TOOL_INFO } from "./drivers/index.ts";
+import { TOOL_INFO, outOfScope } from "./drivers/index.ts";
 import type { Scenario, ScenarioResult } from "./harness.ts";
 
 const GLYPH: Record<string, string> = {
@@ -101,7 +101,7 @@ export function buildSummaryTable(
     lines.push(`| ${cells.join(" | ")} |`);
   }
 
-  for (const [tool, reason] of Object.entries(OUT_OF_SCOPE)) {
+  for (const [tool, reason] of Object.entries(outOfScope())) {
     notes.push(`**(${notes.length + 1})** ${tool} — ${reason}`);
     lines.push(
       `| ${[

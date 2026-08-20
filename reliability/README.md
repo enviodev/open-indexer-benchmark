@@ -217,12 +217,55 @@ The per-scenario tables carry the numbers behind the glyph.
 Any tool that can be pointed at an arbitrary JSON-RPC endpoint: Envio, Ponder,
 rindexer, Subgraph (Graph Node) and SubQuery.
 
-Envio and Sqd are also benchmarked on their own data pipelines in the throughput
-scenarios, and those pipelines cannot be shown a chain that only exists inside
-this process. Envio is therefore run here with RPC as its sync source — the same
-indexer, the same write path, reorg handling and restart recovery, reading from
-somewhere else. Sqd reads the SQD network and has no RPC sync mode, so it is
-published as a row of dashes with that reason attached rather than left out.
+The throughput benchmark measures a tool once per data source it supports. This
+suite measures it once, over RPC, because RPC is the only way to serve a chain
+that exists inside this process. That is not a narrower test of the tool: the
+write path, the reorg unwinding and the restart recovery are the same code
+whichever source fed them. So the Envio row here answers for both of the
+benchmark's Envio rows, and the rindexer row for both of its rindexer rows.
+
+What is left over is published as a row of dashes with the reason attached, and
+that list is **worked out from the benchmark's own registry rather than written
+down** (`lib/drivers/index.ts`). A tool whose only source is HyperSync or SQD
+Network says so; a tool that could be measured here but has no driver yet says
+that instead. Both beat being absent, which reads as a tool nobody thought of.
+
+The list was hand-written once and did not survive its first merge: four
+variants landed at once, two of them RPC-only, and the published note went on
+claiming the Squid SDK "cannot be pointed at the mock chain" after `sqd-rpc` had
+made that untrue. `scripts/test-reliability.ts` now fails if any benchmark tool
+is neither covered nor explained.
+
+
+## When the benchmark changes
+
+The two suites share a repository and almost nothing else, which is deliberate —
+but three kinds of change upstream do reach this one.
+
+**A new scenario in `cases/`** needs nothing here. Reliability does not run the
+benchmark's cases: it has one contract, two events and two entities of its own,
+sized for chaos rather than throughput. A fourth or fifth benchmark case changes
+no file in this directory.
+
+**A new tool or variant in the benchmark registry** appears in the reliability
+table by itself, on the next run, as a dashed row explaining why it is not
+measured. Nothing breaks and nothing goes silently missing. Turning that row
+into a measured one is the "Adding a tool" recipe below; until someone does, the
+gap is visible in the published table rather than only in this file.
+
+**A new version of a tool** does not propagate. The indexer projects here are
+separate installs with their own lockfiles, so a bump in `cases/` leaves this
+suite on the version it had. That is a feature while a run is in flight and a
+liability afterwards — reliability results describe whatever version this
+directory pins, so bump them together and say so. The pins are
+`reliability/*/package.json`, `reliability/subquery/docker-compose.yml`, and,
+shared with the benchmark, `GRAPH_NODE_VERSION` in
+`cases/lib/drivers/subgraph.ts`.
+
+Only two files are shared outright: `cases/lib/process.ts` for spawning and
+`psql`, and the Graph Node installer, so both suites test the same binary. Both
+are in this workflow's `paths:` filter, so a change to either runs the
+reliability jobs too.
 
 
 ## Adding a tool

@@ -23,6 +23,8 @@ import { CONTRACT, HOSTILE_SYMBOL, MockChain } from "../reliability/lib/chain.ts
 import { MockRpcServer } from "../reliability/lib/rpc-server.ts";
 import { diffRows, expectedRows } from "../reliability/lib/entities.ts";
 import { buildScenarioTable, buildSummaryTable } from "../reliability/lib/report.ts";
+import { TOOL_INFO, outOfScope } from "../reliability/lib/drivers/index.ts";
+import { TOOLS as BENCHMARK_TOOLS } from "../cases/lib/drivers/index.ts";
 import { SCENARIOS } from "../reliability/lib/scenarios/index.ts";
 import type { ScenarioResult } from "../reliability/lib/harness.ts";
 
@@ -339,8 +341,8 @@ console.log("\nreport");
   check("the note text is published", table.includes("lost 3 rows"));
   check("a passing row carries no note", table.includes("| ✅ |"));
   check(
-    "tools that cannot be driven are still listed",
-    table.includes("sqd") && table.includes("envio-hypersync")
+    "tools this suite does not run are still listed",
+    Object.keys(outOfScope()).every((tool) => table.includes(tool))
   );
   check(
     "no note contains an em-dash before its detail",
@@ -372,6 +374,33 @@ console.log("\nreport");
     new Set(rows.map((line) => cellsOf(line).length)).size,
     1
   );
+}
+
+// ── Coverage of the throughput benchmark ───────────────────────────────
+// The benchmark gains tools faster than this suite does — four variants landed
+// in one merge — and a tool that appears in neither the results nor the
+// out-of-scope notes is simply absent, which reads as a tool nobody thought to
+// measure rather than one nobody has got to yet.
+console.log("\nbenchmark coverage");
+{
+  const benchmarkKeys = Object.keys(BENCHMARK_TOOLS).sort();
+  const covered = Object.values(TOOL_INFO).flatMap((info) => info.covers);
+  const accounted = [...new Set([...covered, ...Object.keys(outOfScope())])].sort();
+  equal("every benchmark tool is either run here or explained", accounted, benchmarkKeys);
+
+  const unknown = covered.filter((key) => !(key in BENCHMARK_TOOLS));
+  equal("no reliability row claims a benchmark tool that does not exist", unknown, []);
+
+  const twice = covered.filter((key, at) => covered.indexOf(key) !== at);
+  equal("no benchmark tool is claimed by two reliability rows", twice, []);
+
+  for (const [key, reason] of Object.entries(outOfScope())) {
+    check(
+      `the reason for ${key} carries no em-dash`,
+      !reason.includes("\u2014"),
+      reason
+    );
+  }
 }
 
 console.log(
