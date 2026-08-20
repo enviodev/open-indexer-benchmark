@@ -27,7 +27,7 @@ jobs:
     name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
     runs-on: ubuntu-latest
     # One job is one indexer on one scenario, and they all run concurrently, so
-    # this bounds a single benchmark rather than the suite: phase A's ten-minute
+    # this bounds a single benchmark rather than the suite: phase A's five-minute
     # cap, two throughput windows, and the install and build each of the three
     # runs pays for. It is a backstop for a hung runner — a job that reaches it
     # produces no row at all, which is why it sits above what a real run costs.
@@ -90,7 +90,7 @@ jobs:
       # timer starts, so it costs CI wall clock rather than benchmark
       # accuracy — the cache keeps that cost off most runs.
       - name: Cache cargo build
-        if: matrix.indexer == 'rindexer'
+        if: matrix.indexer == 'rindexer' || matrix.indexer == 'rindexer-hypersync'
         uses: actions/cache@v4
         with:
           path: |
@@ -116,7 +116,7 @@ jobs:
             ponder)
               docker pull postgres:17-alpine
               ;;
-            rindexer)
+            rindexer|rindexer-hypersync)
               docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
               # A rust project is a crate of its own and runs its own binary,
               # so it is compiled here rather than installing the CLI. The
@@ -159,7 +159,7 @@ jobs:
               docker compose -f "$CASE_DIR/subquery/docker-compose.yml" pull
               docker compose -f "$CASE_DIR/subquery/docker-compose.yml" build
               ;;
-            sqd)
+            sqd|sqd-rpc)
               docker compose -f "$CASE_DIR/sqd/docker-compose.yml" pull
               ;;
           esac
@@ -167,16 +167,25 @@ jobs:
       - name: Run benchmark
         run: |
           set -o pipefail
+          # A contract call in flight is an open socket at both ends, and the
+          # External Contract Calls scenario is a measurement of how many a tool
+          # keeps in flight — tens of thousands of them. The open-file limit
+          # would cap that silently and read as a tool that stopped scaling, so
+          # it goes as high as the runner allows before anything starts.
+          ulimit -n "$(ulimit -Hn)" || true
+          echo "open files: $(ulimit -n)"
           node "cases/$CASE/run.ts" "$INDEXER" --duration="$DURATION" 2>&1 | tee /tmp/benchmark-output.txt
         env:
           CASE: ${{ inputs.case }}
           INDEXER: ${{ matrix.indexer }}
           DURATION: ${{ inputs.duration }}
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
-          # Sqd's archive (v2.archive.subsquid.io) requires an API key as of
-          # 19 May 2026. The @subsquid archive client reads it from SQD_API_KEY.
-          # Get a key at https://portal.sqd.dev and add it as the SQD_API_KEY
-          # repo secret. Without it, the sqd jobs report 0 (CREDENTIALS_INVALID).
+          # The SQD Network gateway (v2.archive.subsquid.io) requires an API key
+          # as of 19 May 2026. The @subsquid archive client reads it from
+          # SQD_API_KEY. Get a key at https://portal.sqd.dev and add it as the
+          # SQD_API_KEY repo secret. Without it, the sqd job reports 0
+          # (CREDENTIALS_INVALID). The sqd-rpc job never touches the gateway, so
+          # it runs without a key.
           SQD_API_KEY: ${{ secrets.SQD_API_KEY }}
 
       - name: Post results to job summary

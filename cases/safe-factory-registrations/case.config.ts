@@ -57,20 +57,24 @@ const singletonOf = (log: DecodedLog) =>
 
 const START_BLOCK = 24_600_000;
 
-// Both phases run this one range. It is sized by contract registrations rather
-// than by blocks — 199,977 of them, six figures of dynamic contracts — since
-// what the case has to demonstrate is that an indexer stays correct while its
-// contract set grows, and the throughput phase re-runs the same configuration
-// rather than a different one.
+// Both phases run this one range. What it has to be deep enough to show is
+// that an indexer stays correct while its contract set grows: these 30,000
+// blocks register 82,268 children, at 2.7 per block.
 //
-// It also stops here rather than at the chain head, unlike the other cases.
-// Safe's deployment traffic comes in bursts: these 60,000 blocks hold the
-// canonical factories' creations at 3.3 per block, and the 340,000 blocks that
-// follow add only 65,000 more, a fifth of one per block. Running to the head
-// would spend most of the window scanning near-empty blocks, which measures
-// how fast an indexer skips rather than how it copes with a contract set
-// growing underneath it.
-const END_BLOCK = 24_660_000;
+// It used to be twice as long, back when the verification run was capped at ten
+// minutes. At five, the two slowest tools that were finishing the range —
+// Ponder at 462s, the Squid SDK on RPC at 403s — would stop about two thirds
+// through and report a partial row instead of a verified one; halving it puts
+// them near 200s. What that costs is depth, and the second half is where the
+// depth was: the 30,000 blocks after this one register another 117,709
+// children and hold most of the range's SafeSetups.
+//
+// It also stops here rather than at the chain head, unlike the other cases,
+// so that both phases walk the same range and the same growth. Safe's
+// deployment traffic comes in bursts, and past the burst are blocks holding a
+// fifth of an event each, which measure how fast an indexer skips rather than
+// how it copes with a contract set growing underneath it.
+const END_BLOCK = 24_630_000;
 
 // ── The Safe ABI, as it is actually deployed ────────────────────────────
 //
@@ -234,16 +238,6 @@ export const caseConfig: CaseConfig = {
   child: {
     topics: Object.values(CHILD_TOPICS),
     childOf: proxyOf,
-  },
-
-  unsupported: {
-    rindexer:
-      "its factory filter takes one factory per contract — `Contract using " +
-      "factory filter must use same factory across all networks` — so the " +
-      "children of Safe's four canonical factory deployments cannot be " +
-      "collected into one contract, and its no-code mode names tables after " +
-      "events, which leaves no way to declare the eight events Safe emits " +
-      "under one topic in two layouts",
   },
 
   entities: [
@@ -417,9 +411,9 @@ export const caseConfig: CaseConfig = {
 
         // Everything below arrives long after the proxy was registered, so no
         // tool loses it to discovery order. What it costs is matching against a
-        // contract set six figures deep: SafeReceived alone is emitted 52,882
-        // times chain-wide across the throughput range against 413 for these
-        // factories' children.
+        // contract set tens of thousands deep: SafeReceived alone is emitted
+        // 26,827 times chain-wide across the throughput range against 216 for
+        // these factories' children.
         case CHILD_TOPICS.safeReceived:
           rows.safeReceived.push(
             canonicalRow([

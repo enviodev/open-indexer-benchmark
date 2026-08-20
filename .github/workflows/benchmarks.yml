@@ -34,9 +34,11 @@ jobs:
       case1: ${{ steps.set-matrix.outputs.case1 }}
       case2: ${{ steps.set-matrix.outputs.case2 }}
       case3: ${{ steps.set-matrix.outputs.case3 }}
+      case4: ${{ steps.set-matrix.outputs.case4 }}
       indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
       indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
       indexers3: ${{ steps.set-matrix.outputs.indexers3 }}
+      indexers4: ${{ steps.set-matrix.outputs.indexers4 }}
       partial: ${{ steps.set-matrix.outputs.partial }}
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
@@ -67,12 +69,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ -z "$INDEXERS" ]; then
-            INDEXERS_JSON='["envio","envio-rpc","ponder","rindexer","subgraph","subquery","sqd"]'
+            INDEXERS_JSON='["envio","envio-rpc","envio-subgraph","envio-subgraph-rpc","ponder","rindexer","rindexer-hypersync","subgraph","subquery","sqd","sqd-rpc"]'
           else
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-transfer-events","safe-factory-registrations"]'
+            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
@@ -89,16 +91,16 @@ jobs:
 
           # Scenarios run one after another, which needs one `needs`-chained job
           # per scenario below — GitHub cannot order a matrix. That makes the
-          # number of scenario slots fixed: adding a fourth scenario means adding
-          # a fourth `scenario-N` job here. Fail loudly rather than silently
+          # number of scenario slots fixed: adding a fifth scenario means adding
+          # a fifth `scenario-N` job here. Fail loudly rather than silently
           # dropping the extra scenario from the run and from the table.
-          if [ "$COUNT" -gt 3 ]; then
-            echo "Only 3 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
+          if [ "$COUNT" -gt 4 ]; then
+            echo "Only 4 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
             exit 1
           fi
 
           # Every scenario measures every indexer, unless a pull request
-          # narrows it: there a full run is twenty-one long jobs against shared
+          # narrows it: there a full run is forty-four long jobs against shared
           # data endpoints, nearly all of them re-measuring untouched code.
           # `main` and manual runs stay full — they publish the README table,
           # which has to hold a complete set of results.
@@ -142,7 +144,7 @@ jobs:
           # One scenario slot per `scenario-N` job below. A slot with no case
           # is skipped by that job's `if`, so the loop covers a run with fewer
           # scenarios than slots without special-casing it.
-          for N in 1 2 3; do
+          for N in 1 2 3 4; do
             CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
             if [ -n "$SCOPE" ]; then
               INDEXERS_N=$(echo "$SCOPE" | jq -c --arg c "$CASE_N" '.indexers[$c] // []')
@@ -155,9 +157,10 @@ jobs:
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
-  # The harness has three test scripts — scripts/test-verification.ts,
-  # scripts/test-tables.ts and scripts/test-scope.ts — that are run locally when
-  # the verification layer, the result table or the pull request run filter
+  # The harness has four test scripts — scripts/test-verification.ts,
+  # scripts/test-tables.ts, scripts/test-rpc-mock.ts and scripts/test-scope.ts —
+  # that are run locally when the verification layer, the result table, the
+  # endpoint that serves a case's contract calls, or the pull request run filter
   # changes. They are deliberately not a CI job: the verification test needs a
   # live HyperSync token, which forks do not have. The one exception is
   # test-scope.ts, which the setup job runs before trusting the filter's
@@ -203,9 +206,20 @@ jobs:
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
+  scenario-4:
+    name: ${{ needs.setup.outputs.case4 }}
+    needs: [setup, scenario-1, scenario-2, scenario-3]
+    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case4 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ needs.setup.outputs.case4 }}
+      indexers: ${{ needs.setup.outputs.indexers4 }}
+      duration: ${{ needs.setup.outputs.duration }}
+    secrets: inherit
+
   summary:
     name: Summary
-    needs: [setup, scenario-1, scenario-2, scenario-3]
+    needs: [setup, scenario-1, scenario-2, scenario-3, scenario-4]
     # A pull request that changed nothing benchmark-related runs no scenario,
     # so there is nothing to tabulate — and an empty table reads as "measured,
     # found nothing" rather than "not measured".

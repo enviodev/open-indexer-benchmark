@@ -12,8 +12,16 @@ networks:
     # and rindexer stalls without indexing. Pin an explicit per-request block
     # range so each fetch stays within provider limits, and fan the historic
     # backfill across several concurrent workers for throughput.
-    max_block_range: 1000
-    fetch_concurrency: 10
+    #
+    # The driver substitutes the values, because this one file backs two rows:
+    # the RPC row keeps 1000/10, and the HyperSync row runs rindexer's
+    # defaults (50000/1) — its per-request limits are HyperSync's own, not an
+    # RPC node's.
+    max_block_range: ${RINDEXER_MAX_BLOCK_RANGE}
+    fetch_concurrency: ${RINDEXER_FETCH_CONCURRENCY}
+    # true routes historical log fetches through HyperSync (rindexer reads the
+    # API token from ENVIO_API_TOKEN); false is the plain RPC pipeline.
+    hypersync: ${RINDEXER_HYPERSYNC}
 
 storage:
   postgres:

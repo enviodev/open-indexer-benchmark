@@ -2,7 +2,7 @@
 //
 //   CHANGED_FILES="$(git diff --name-only base...head)" node scripts/select-scope.ts
 //
-// A full run is one job per indexer per scenario — twenty-one at the time of
+// A full run is one job per indexer per scenario — forty-four at the time of
 // writing, each up to 45 minutes against shared data endpoints, most of them
 // re-measuring code the pull request never touched. On a pull request the run
 // is narrowed to what changed:
@@ -12,6 +12,8 @@
 //                               (config, expected output) is shared by every
 //                               indexer in it, so every indexer is re-measured
 //   cases/lib/drivers/<x>.ts    that indexer, in every scenario
+//   cases/lib/rpc-mock.ts       every indexer, but only the scenarios whose
+//                               handlers read contract state through it
 //   cases/lib/**                every indexer, every scenario
 //   .github/workflows/**        every indexer, every scenario
 //   this file, build-tables.ts  every indexer, every scenario — they are the
@@ -34,18 +36,47 @@
 // Note that `main` and workflow_dispatch runs never call this: they publish the
 // README table and the table has to hold a full set of results.
 
-/** Indexers whose project directory is not named after them. */
-const INDEXER_DIRS: Record<string, string> = { "envio-rpc": "envio" };
+/**
+ * Indexers whose project directory is not named after them. The Envio Subgraph
+ * variants have no directory of their own at all — they run the Subgraph tool's
+ * `subgraph/` project unchanged, so a change to it re-runs them too.
+ */
+const INDEXER_DIRS: Record<string, string> = {
+  "envio-rpc": "envio",
+  "sqd-rpc": "sqd",
+  "rindexer-hypersync": "rindexer",
+  "envio-subgraph": "subgraph",
+  "envio-subgraph-rpc": "subgraph",
+};
 
 /**
  * Driver modules under cases/lib/drivers that back more than one indexer.
  * Like INDEXER_DIRS, this duplicates a fact the drivers registry owns;
  * test-scope.ts pins both against the registry so they cannot drift silently.
  */
-const DRIVER_INDEXERS: Record<string, string[]> = { envio: ["envio", "envio-rpc"] };
+const DRIVER_INDEXERS: Record<string, string[]> = {
+  envio: ["envio", "envio-rpc"],
+  sqd: ["sqd", "sqd-rpc"],
+  rindexer: ["rindexer", "rindexer-hypersync"],
+  "envio-subgraph": ["envio-subgraph", "envio-subgraph-rpc"],
+};
 
 /** Driver modules that are shared plumbing rather than one tool's driver. */
 const SHARED_DRIVERS = new Set(["common", "index"]);
+
+/**
+ * Modules directly under cases/lib that only some scenarios use, and which
+ * scenarios those are. Everything else under lib is harness every scenario runs
+ * through, so it selects everything.
+ *
+ * Like DRIVER_INDEXERS this duplicates a fact the case configs own — which of
+ * them declare `ethCall` — and test-scope.ts pins the two together, so a second
+ * scenario reading contract state cannot leave this map quietly narrowing a run
+ * that should have been full.
+ */
+const LIB_MODULE_CASES: Record<string, string[]> = {
+  "rpc-mock": ["erc20-allowance-calls"],
+};
 
 /**
  * Scripts that are part of the CI pipeline itself. Nothing else executes
@@ -65,6 +96,7 @@ const PIPELINE_SCRIPTS = new Set([
 const LOCAL_SCRIPTS = new Set([
   "scripts/test-scope.ts",
   "scripts/test-tables.ts",
+  "scripts/test-rpc-mock.ts",
   "scripts/test-verification.ts",
   "scripts/test-reliability.ts",
   "scripts/run-benchmarks.ts",
@@ -144,6 +176,15 @@ export function selectScope(
     }
 
     if (parts[1] === "lib") {
+      // A lib module only some scenarios use is theirs alone; the endpoint that
+      // serves contract calls is only ever started by a case that declares one.
+      if (parts.length === 3) {
+        const used = LIB_MODULE_CASES[parts[2].replace(/\.ts$/, "")];
+        if (used) {
+          for (const benchCase of used) add(benchCase, allIndexers);
+          continue;
+        }
+      }
       // cases/lib/drivers/<name>.ts drives one tool everywhere; everything
       // else under lib is the harness all of them run through.
       if (parts[2] === "drivers" && parts.length === 4) {
@@ -159,6 +200,16 @@ export function selectScope(
           addEverywhere(driven);
           continue;
         }
+      }
+      // The shared envio CLI is not harness: only the Envio Subgraph rows run
+      // it, so a pin bump should not re-measure everyone else.
+      if (parts[2] === "envio-subgraph") {
+        addEverywhere(
+          ["envio-subgraph", "envio-subgraph-rpc"].filter((i) =>
+            allIndexers.includes(i)
+          )
+        );
+        continue;
       }
       addEverywhere(allIndexers);
       continue;

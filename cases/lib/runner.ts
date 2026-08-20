@@ -8,7 +8,7 @@
 //     when every indexer holds exactly the same data, which is what a bounded
 //     range guarantees and a fixed time window cannot.
 //
-//     The range is not guaranteed to be reachable: the run is capped at ten
+//     The range is not guaranteed to be reachable: the run is capped at five
 //     minutes, and an indexer that has not finished by then is verified on what
 //     it did index. That row reports a real check of real data over a known
 //     fraction of the range, with the fraction named and its storage scaled to
@@ -44,6 +44,7 @@ import {
 import { fetchChainHeight } from "./hypersync.ts";
 import { psql, sleep } from "./process.ts";
 import { type BenchmarkResult, toTableRow } from "./result.ts";
+import { startRpcMock, type RpcMock } from "./rpc-mock.ts";
 import { buildTable, formatBytes, formatRate } from "./table.ts";
 import { verify, type Verification } from "./verify.ts";
 
@@ -57,12 +58,12 @@ const HEAD_OFFSET = 500;
 
 /**
  * Stop the verification run after this long, whatever it has reached. Every
- * case gets the same ten minutes: a range an indexer cannot finish inside it is
+ * case gets the same five minutes: a range an indexer cannot finish inside it is
  * itself the finding, and the run is verified and rated from where it got to
  * rather than discarded — so a slow tool reports how much of the data it holds
  * instead of reporting nothing at all.
  */
-const PHASE_A_TIMEOUT_S = 600;
+const PHASE_A_TIMEOUT_S = 300;
 
 /**
  * How many throughput windows to run for indexers fast enough to get one.
@@ -75,19 +76,38 @@ const THROUGHPUT_RUNS = 2;
 
 const DEFAULT_WINDOW_S = 100;
 
+/**
+ * How long to wait for progress to stop moving before a phase that reached its
+ * target is called finished, and how many times to look. Long enough to cover a
+ * batch commit that lands out of order, short enough that a finished run pays
+ * about a second for the check.
+ */
+const SETTLE_MS = 500;
+const SETTLE_READS = 6;
+
 // ── Cleanup on unexpected exit ─────────────────────────────────────────
 
 let activeDriver: Driver | null = null;
+let activeMock: RpcMock | null = null;
 
 async function cleanup() {
-  if (!activeDriver) return;
-  const driver = activeDriver;
-  activeDriver = null;
+  const mock = activeMock;
+  activeMock = null;
+  if (activeDriver) {
+    const driver = activeDriver;
+    activeDriver = null;
+    try {
+      await driver.stop();
+    } catch {}
+    try {
+      await driver.cleanup();
+    } catch {}
+  }
+  // Closed after the indexer, which may still be mid-call: an endpoint that
+  // disappears first turns an orderly shutdown into a page of connection
+  // errors from a process that is already on its way out.
   try {
-    await driver.stop();
-  } catch {}
-  try {
-    await driver.cleanup();
+    await mock?.close();
   } catch {}
 }
 
@@ -164,11 +184,55 @@ async function runPhase(
     }
   }
 
+  // A target being met is not by itself proof that everything before it has
+  // landed. Two drivers read position from the rows the indexer wrote — the
+  // highest block that produced one — and an indexer that works on several
+  // block ranges at once can commit a later range before an earlier one, so
+  // the position can arrive before the rows behind it do. Wait for the row
+  // count to stop moving before calling the phase finished: on a run that is
+  // genuinely done this costs one extra reading, and on one that is not it is
+  // the difference between verifying complete data and reporting a hole in it
+  // as a data mismatch.
+  const metTarget = last.blocks >= targetBlocks || last.events >= targetEvents;
+  for (let settle = 0; metTarget && settle < SETTLE_READS; settle++) {
+    if (performance.now() >= deadline) break;
+    await sleep(SETTLE_MS);
+    let next: Snapshot;
+    try {
+      next = (await driver.snapshot()) ?? last;
+    } catch {
+      break;
+    }
+    const moved = next.events > last.events || next.blocks > last.blocks;
+    last = next;
+    if (!moved) break;
+  }
+
   // Take the final reading and stamp the elapsed time from the same moment, so
   // the reported rate is internally consistent.
-  try {
-    last = (await driver.snapshot()) ?? last;
-  } catch {}
+  //
+  // Retried, unlike the readings during the run. A failure mid-run costs one
+  // sample of many; a failure here is the whole measurement, and it decides
+  // whether the phase counts as completed at all. It happens: the reading
+  // spawns a psql process, and a run that ended with thousands of sockets open
+  // has been seen to fail that spawn once and publish a finished range as
+  // "indexed nothing".
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      last = (await driver.snapshot()) ?? last;
+      break;
+    } catch (err) {
+      if (attempt === 3) {
+        console.log(
+          `  Warning: could not read final progress for ${opts.name} ` +
+            `(${String((err as Error)?.message ?? err).split("\n")[0]}) — ` +
+            `reporting the last reading taken during the run.`
+        );
+        break;
+      }
+      await sleep(500);
+    }
+  }
   const elapsedS = (performance.now() - startedAt) / 1_000;
   const completed = last.blocks >= targetBlocks || last.events >= targetEvents;
 
@@ -297,6 +361,24 @@ function unsupportedResult(key: string, reason: string): BenchmarkResult {
   };
 }
 
+/**
+ * What the case's own endpoint served during the phase that just ended. Peak
+ * concurrency is the number that explains a row: the endpoint imposes no limit
+ * of its own, so it is how many calls the tool chose to have outstanding.
+ */
+function reportCalls(mock: RpcMock | null) {
+  if (!mock) return;
+  const { calls, rejected, peakInFlight } = mock.stats();
+  if (calls === 0 && rejected === 0) return;
+  console.log(
+    `  Contract calls: ${calls.toLocaleString("en-US")} served, ` +
+      `peak ${peakInFlight} in flight` +
+      (rejected > 0
+        ? ` — ${rejected.toLocaleString("en-US")} refused as outside the case`
+        : "")
+  );
+}
+
 async function benchmarkIndexer(
   key: string,
   config: CaseConfig,
@@ -304,7 +386,8 @@ async function benchmarkIndexer(
   rpcUrl: string,
   apiToken: string,
   windowS: number,
-  headEndBlock: number
+  headEndBlock: number,
+  mock: RpcMock | null
 ): Promise<BenchmarkResult> {
   const factory = DRIVERS[key];
   const { name } = TOOLS[key];
@@ -315,7 +398,17 @@ async function benchmarkIndexer(
   // final block yields one less than that. Comparing progress against the
   // inclusive count would mean block-based completion could never fire, leaving
   // completion to hinge entirely on the event count matching exactly.
-  const rangeTargetBlocks = config.verifyEndBlock - config.startBlock;
+  //
+  // The target is the last block that carries an event rather than the end
+  // block itself, because half the drivers read progress from the rows the
+  // indexer wrote — the highest block that produced one — and a range whose
+  // final blocks hold nothing leaves them permanently short. Safe's factory
+  // range ends seven blocks after its last ProxyCreation, which was enough to
+  // publish a completed run as "exited without finishing the verification
+  // range" and to downgrade what verification found to a note about the run
+  // stopping short.
+  const rangeTargetBlocks =
+    (expected.lastEventBlock ?? config.verifyEndBlock) - config.startBlock;
 
   // ── Phase A: bounded verification run ──
   const phaseA = factory({ config, rpcUrl, endBlock: config.verifyEndBlock });
@@ -329,6 +422,7 @@ async function benchmarkIndexer(
   );
 
   await phaseA.prepare();
+  mock?.reset();
   const rangeRun = await runPhase(phaseA, {
     name,
     targetBlocks: rangeTargetBlocks,
@@ -336,6 +430,7 @@ async function benchmarkIndexer(
     maxSeconds: PHASE_A_TIMEOUT_S,
   });
   await phaseA.stop();
+  reportCalls(mock);
 
   console.log(
     rangeRun.completed
@@ -443,9 +538,18 @@ async function benchmarkIndexer(
     );
 
     await phaseB.prepare();
+    mock?.reset();
     const windowRun = await runPhase(phaseB, {
       name,
-      targetBlocks: headEndBlock - config.startBlock,
+      // Same allowance as phase A, and it matters for the same reason: a case
+      // that pins its window to the verification range is one an indexer can
+      // reach the end of, and then whether the run counts turns on whether the
+      // range's last blocks happened to hold an event. A window that runs to
+      // the chain head is nowhere near its target either way.
+      targetBlocks:
+        (headEndBlock === expected.endBlock
+          ? (expected.lastEventBlock ?? headEndBlock)
+          : headEndBlock) - config.startBlock,
       targetEvents: Number.POSITIVE_INFINITY,
       maxSeconds: windowS,
     });
@@ -456,6 +560,7 @@ async function benchmarkIndexer(
     // from a broken run.
     const died = phaseB.exited() && !windowRun.completed;
     await phaseB.stop();
+    reportCalls(mock);
     await phaseB.cleanup();
     activeDriver = null;
 
@@ -464,6 +569,34 @@ async function benchmarkIndexer(
         `\nRun ${attempt}: the indexer exited after ${windowRun.elapsedS.toFixed(
           1
         )}s without reaching the end block — discarding this sample.\n`
+      );
+      continue;
+    }
+
+    // A window that recorded nothing is not a measurement of zero. An indexer
+    // whose first batch is still in flight when the window closes has written
+    // no rows yet, and phase A — which this tool finished, or it would not be
+    // here — is a real measurement of the same work. Publishing the zero would
+    // put a tool that indexed the range correctly at the bottom of the table
+    // with a rate no run actually produced.
+    if (windowRun.events === 0) {
+      console.log(
+        `\nRun ${attempt}: nothing had been written when the ${windowS}s window ` +
+          `closed — discarding this sample.\n`
+      );
+      continue;
+    }
+
+    // Rows but no position. Every driver reads the two from different places,
+    // and a window that recorded events cannot have covered no blocks — so
+    // this is a progress reading that failed or had not been written yet, not
+    // a measurement. Publishing it would put a real events/s next to a
+    // blocks/s of zero.
+    if (windowRun.blocks === 0) {
+      console.log(
+        `\nRun ${attempt}: ${windowRun.events.toLocaleString("en-US")} events were ` +
+          `written but the indexer's block position still read zero — discarding ` +
+          `this sample.\n`
       );
       continue;
     }
@@ -593,7 +726,7 @@ async function run(config: CaseConfig) {
     console.error("Error: ENVIO_API_TOKEN environment variable is required.");
     process.exit(1);
   }
-  const rpcUrl = `https://1.rpc.hypersync.xyz/${apiToken}`;
+  const upstreamRpcUrl = `https://1.rpc.hypersync.xyz/${apiToken}`;
 
   const expected: Expected = JSON.parse(
     readFileSync(resolve(config.dir, "expected.json"), "utf8")
@@ -612,6 +745,16 @@ async function run(config: CaseConfig) {
   const headEndBlock =
     config.throughputEndBlock ?? (await fetchChainHeight(apiToken)) - HEAD_OFFSET;
 
+  // A case whose handlers read contract state is pointed at an endpoint of the
+  // benchmark's own, which answers those reads and relays everything else. One
+  // endpoint serves the whole run: it holds no per-indexer state, and standing
+  // it up per phase would only add ways for a port to still be in use.
+  const mock = config.ethCall
+    ? await startRpcMock(upstreamRpcUrl, config.ethCall)
+    : null;
+  activeMock = mock;
+  const rpcUrl = mock?.url ?? upstreamRpcUrl;
+
   console.log(`=== ${config.title} Benchmark ===`);
   console.log(
     `Verification range: ${config.startBlock.toLocaleString(
@@ -619,6 +762,12 @@ async function run(config: CaseConfig) {
     )}–${config.verifyEndBlock.toLocaleString("en-US")} · ` +
       `throughput window: ${windowS}s up to block ${headEndBlock.toLocaleString("en-US")}`
   );
+  if (config.ethCall) {
+    console.log(
+      `Contract calls are served by the benchmark at ${rpcUrl}: ` +
+        `${config.ethCall.latencyMs}ms each, as many at once as it is given`
+    );
+  }
   console.log(`Running: ${selected.join(", ")}\n`);
 
   const results: BenchmarkResult[] = [];
@@ -642,7 +791,8 @@ async function run(config: CaseConfig) {
       rpcUrl,
       apiToken,
       windowS,
-      headEndBlock
+      headEndBlock,
+      mock
     );
     results.push(result);
 
@@ -656,6 +806,9 @@ async function run(config: CaseConfig) {
     console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);
     await sleep(3_000);
   }
+
+  activeMock = null;
+  await mock?.close();
 
   console.log(`\n=== Results ===\n`);
   console.log(buildTable(results.map(toTableRow)));

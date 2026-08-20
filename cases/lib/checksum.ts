@@ -64,6 +64,20 @@ export interface Expected {
   generatedAt: string;
   /** Total events the indexer is expected to process across all entities. */
   totalEvents: number;
+  /**
+   * The highest block in the range that carries an event, which is not
+   * necessarily `endBlock` — the last blocks of a range are often empty.
+   *
+   * This is what "finished the range" means for a tool whose progress is read
+   * from the data it wrote rather than from a position it reports. Such a tool
+   * can only ever appear to reach the last block that produced a row, so
+   * holding it to `endBlock` calls a completed run partial and hides whatever
+   * verification actually found behind a note about the run stopping short.
+   *
+   * Optional so an `expected.json` generated before this field still loads;
+   * without it the target falls back to `endBlock`.
+   */
+  lastEventBlock?: number;
   entities: Record<string, EntityExpectation>;
 }
 

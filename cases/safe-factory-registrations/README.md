@@ -1,6 +1,6 @@
 # Factory Contract Registration
 
-Index the canonical Safe proxy factories on Ethereum Mainnet from block 24,600,000 to 24,660,000 and every proxy they create. Both phases run that one range, by the end of which the registered contract set is 199,977 deep.
+Index the canonical Safe proxy factories on Ethereum Mainnet from block 24,600,000 to 24,630,000 and every proxy they create. Both phases run that one range, by the end of which the registered contract set is 82,268 deep.
 
 The other cases fix the contract set in configuration. This one does not: nothing is known about the children at build time, and the set grows throughout the run. What is measured is the cost of that growth — how an indexer's per-contract bookkeeping, address matching and log filtering hold up as the set gets large.
 
@@ -14,8 +14,8 @@ The other cases fix the contract set in configuration. This one does not: nothin
   | v1.4.1 | [`0x4e1dcf7a…ec67`](https://etherscan.io/address/0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67) | `(address indexed proxy, address singleton)` |
   | v1.5.0 | [`0x14f2982d…5e7b`](https://etherscan.io/address/0x14f2982d601c9458f93bd70b218933a6f8165e7b) | `(address indexed proxy, address singleton)` |
 - **Events Indexed**: `ProxyCreation` on the factories, and the fifteen events a Safe emits on every proxy they create
-- **Block Range**: 24,600,000 to 24,660,000 — indexed to completion, then checked against `expected.json`
-- **Child contracts registered in that range**: 199,977, six figures of dynamic contracts
+- **Block Range**: 24,600,000 to 24,630,000 — indexed to completion, then checked against `expected.json`
+- **Child contracts registered in that range**: 82,268, tens of thousands of dynamic contracts
 - **Features**: `dynamic contract registration`, `event decoding`, `storage write` (insert-only, no updates)
 
 Only the canonical factories are indexed. Several other contracts on mainnet emit the same `ProxyCreation` topic — some of them heavily — but they are not Safe deployments, and including them would make the case a topic scan rather than a factory case. The pre-1.3.0 factories are left out for the opposite reason: they emit a different event (`ProxyCreation(address)`) and have created nothing in this range.
@@ -45,7 +45,7 @@ There is no aggregation and nothing is read back. Registration cost is the varia
 
 Fifteen events, the whole of what a Safe emits: `SafeSetup`, `SafeReceived`, `SafeModuleTransaction`, `SafeMultiSigTransaction`, `ExecutionSuccess`, `ExecutionFailure`, `ChangedThreshold`, `ChangedMasterCopy`, `ChangedFallbackHandler`, `ChangedGuard`, `ChangedModuleGuard`, `EnabledModule`, `DisabledModule`, `AddedOwner` and `RemovedOwner`.
 
-Only `SafeSetup` fires in the transaction that creates the proxy; the rest fire for the life of the Safe, when the child is already registered and no tool loses them to discovery order. What they cost is matching. Across the range these fifteen topics are emitted 94,298 times chain-wide and 18,663 of those belong to proxies these factories created — `SafeReceived` alone is 52,882 against 413. A tool that hands its child address set to the data source pays for the 18,663. A tool that subscribes by topic and filters in the handler pays for all 94,298, on a contract set of 199,977 addresses.
+Only `SafeSetup` fires in the transaction that creates the proxy; the rest fire for the life of the Safe, when the child is already registered and no tool loses them to discovery order. What they cost is matching. Across the range these fifteen topics are emitted 40,406 times chain-wide and 2,713 of those belong to proxies these factories created — `SafeReceived` alone is 26,827 against 216. A tool that hands its child address set to the data source pays for the 2,713. A tool that subscribes by topic and filters in the handler pays for all 40,406, on a contract set of 82,268 addresses.
 
 ### One topic, two layouts
 
@@ -57,7 +57,7 @@ Safe 1.4.x made an argument `indexed` on eight of these events — `ExecutionSuc
 | --- | --- |
 | Envio | two events, the second renamed with `name:` |
 | Ponder | two ABI items; an overloaded event is named by its full signature |
-| Sqd | two decoders, picked in the handler from the log's topic count |
+| Squid SDK | two decoders, picked in the handler from the log's topic count |
 | Subgraph | two handlers; Graph Node runs whichever one's ABI can decode the log |
 | SubQuery | one only — see the note below |
 | Rindexer | neither — the case is skipped |
@@ -66,7 +66,7 @@ SubQuery resolves an event from its topic0 alone, so two fragments sharing one m
 
 ### The SafeSetup ordering, and why it is in the case
 
-Most of the proxies these factories deploy are not Safes at all — a proxy points at whatever singleton its deployer chose, and only a small share of them are set up as a Safe and emit `SafeSetup`. That is why 199,977 registrations yield 10,524 setups. The rare event is the interesting one, because of where it lands.
+Most of the proxies these factories deploy are not Safes at all — a proxy points at whatever singleton its deployer chose, and only a small share of them are set up as a Safe and emit `SafeSetup`. That is why 82,268 registrations yield 927 setups. The rare event is the interesting one, because of where it lands.
 
 A Safe proxy is deployed and set up in a single transaction, and the two logs come out in this order:
 
@@ -77,7 +77,7 @@ logIndex n + 1  ProxyCreation  ← emitted by the factory, announcing that proxy
 
 The child's event precedes the factory event that announces it. An indexer that discovers children strictly in event order has not registered the proxy at the moment its `SafeSetup` goes past, and cannot record it. An indexer that resolves the factory's child address set ahead of matching child logs can.
 
-This is deliberate. Both designs are defensible, the difference is invisible in the usual factory example where children only emit events days later, and it decides whether a real Safe indexer sees the owners and threshold a safe was created with. The case exists partly to make that difference measurable, so a tool recording 0 of the 10,524 `SafeSetup` rows is reporting a design choice, not a bug, and the note under the results table says so.
+This is deliberate. Both designs are defensible, the difference is invisible in the usual factory example where children only emit events days later, and it decides whether a real Safe indexer sees the owners and threshold a safe was created with. The case exists partly to make that difference measurable, so a tool recording 0 of the 927 `SafeSetup` rows is reporting a design choice, not a bug, and the note under the results table says so.
 
 Every implementation here is written the way that tool's own documentation recommends. None of them is nudged toward or away from capturing the setup events.
 
@@ -86,13 +86,13 @@ Every implementation here is written the way that tool's own documentation recom
 - **Envio** — [envio/](./envio/)
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
-- **Sqd** — [sqd/](./sqd/)
+- **Squid SDK** — [sqd/](./sqd/)
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
 
-Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
+Requires Node 23.6+, Docker, an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Squid SDK run that reads from SQD Network.
 
 ```bash
 ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node cases/safe-factory-registrations/run.ts
@@ -100,9 +100,11 @@ ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node cases/safe-factory-registra
 
 Each indexer indexes the range to completion — its database is then checked against `expected.json` and measured — before re-running the same range for the throughput window. Indexers too slow to finish it within that window skip the re-run and report their rate from the verification run.
 
-The verification run is capped at ten minutes, as in every scenario. The range is sixty thousand blocks, two hundred thousand events and two hundred thousand contract registrations, and this is the case most likely to hit that cap — an indexer that does is stopped there and verified on what it managed, so its row carries the rate it achieved, a `~` storage figure scaled from the share of the range it covered, and a note naming the share of the data it is missing.
+The verification run is capped at five minutes, as in every scenario. The range is thirty thousand blocks, eighty-five thousand events and eighty thousand contract registrations, and this is the case most likely to hit that cap — an indexer that does is stopped there and verified on what it managed, so its row carries the rate it achieved, a `~` storage figure scaled from the share of the range it covered, and a note naming the share of the data it is missing.
 
-Unlike the other cases, the throughput window stops at a fixed block rather than at the chain head. Safe's deployment traffic comes in bursts, and these 60,000 blocks hold the canonical factories' creations at 3.3 per block, against a fifth of one per block for the next 340,000. Running to the head would spend most of the window scanning near-empty blocks — a measure of how fast an indexer skips, not of how it copes with a contract set growing underneath it. The fastest indexers reach the end block before the window closes, and their rate is computed over the time it took.
+The range is sized against that cap. It was 60,000 blocks while the cap was ten minutes; at five, the two slowest tools that were finishing it — Ponder at 462s and the Squid SDK on RPC at 403s — would have been cut off around two thirds of the way through and lost their verification. Thirty thousand blocks puts them near 200s, with room for a noisy runner.
+
+Unlike the other cases, the throughput window stops at a fixed block rather than at the chain head. Both phases then walk the same range and the same contract-set growth, and the alternative is worse in both directions: Safe's deployment traffic comes in bursts, so a head-bound window would run past the burst into blocks holding a fifth of an event each and end up measuring how fast an indexer skips. The fastest indexers reach the end block before the window closes, and their rate is computed over the time it took.
 
 The throughput window defaults to 60 seconds. Pass a custom duration (in seconds) with `--duration`:
 
@@ -144,13 +146,9 @@ A `factory()` reads one event layout, so there are two child declarations — `S
 
 Skipped, and published as a row of dashes with the reason. Two parts of the case are out of reach:
 
-A contract's `factory` filter takes one factory. Giving each canonical Safe deployment its own `details` block panics on startup with `Contract using factory filter must use same factory across all networks`, and giving each its own contract produces a second set of identically named tables in another schema, which table resolution rejects as ambiguous rather than guessing between. Only the v1.3.0 pair is reachable that way, leaving the children of v1.4.1 and v1.5.0 unindexed.
+Long marked unsupported — a verdict written for a **no-code** project, where it is real: no-code names tables after events (so the dual-layout events cannot get two decodes), and multiple contracts produce identically named tables that table resolution rejects as ambiguous. The case now runs as a **rust** project, whose handlers own their tables: the protocol is expressed as eight contracts — one factory definition per factory generation, one contract per event layout for the ten dual-layout events — all writing one hand-owned table set. The [project README](./rindexer/README.md) walks through the structure and the documented hand-edits it needs on top of `rindexer codegen` output.
 
-`include_events` also names an event once, so there is nowhere to put the second decode for the eight events that arrive under one topic0 in two layouts.
-
-`rindexer.yaml` is kept at the closest configuration rindexer can express, with both limits written down beside it.
-
-### Sqd (Subsquid)
+### Squid SDK
 
 Runs the processor and GraphQL server as separate native Node.js processes, with a Docker Postgres for storage.
 
@@ -158,7 +156,9 @@ Both factory generations share a topic0, so one subscription covers all four add
 
 There is no address list to give the processor for the children, so `SafeSetup` is subscribed to by topic chain-wide and the handler drops logs from proxies these factories did not create — the pattern SQD's own factory-contract guide describes. The set of known proxies is built as the batch is walked, in chain order.
 
-Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+The `sqd` variant ingests from the SQD Network gateway (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+
+The `sqd-rpc` variant runs the same project with the gateway left off (`SQD_SOURCE=rpc`), so it ingests from the RPC endpoint alone — the regime SQD documents for chains SQD Network does not cover. It needs no API key. Each variant configures only its own source: the `sqd` run is given no RPC endpoint at all, since a processor holding both falls back to RPC near the head and its row would then be measuring a mixture of the two.
 
 ### Subgraph (Graph Node)
 

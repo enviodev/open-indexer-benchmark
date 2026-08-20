@@ -7,10 +7,10 @@
 // indexer nobody re-ran — so the cases that widen the scope (case run logic,
 // shared driver plumbing, the workflows themselves) are the ones worth pinning.
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { INDEXERS as REGISTERED } from "../cases/lib/drivers/index.ts";
+import { INDEXERS as REGISTERED, TOOLS } from "../cases/lib/drivers/index.ts";
 import { selectScope } from "./select-scope.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -27,6 +27,39 @@ const inEvery = (indexers: string[]) =>
 const EVERYTHING = inEvery(INDEXERS);
 
 let failures = 0;
+
+// The workflow spells its default indexer list out in shell, because the matrix
+// is built before any of this code runs. That makes it the one copy the drivers
+// registry cannot reach — and an indexer missing from it is not selected away,
+// it simply never gets a job, which reads as a scenario that has no such row.
+{
+  const workflow = readFileSync(
+    resolve(ROOT, ".github", "workflows", "benchmarks.yml"),
+    "utf8"
+  );
+  const line = workflow.match(/INDEXERS_JSON='(\[[^']*\])'/);
+  if (!line) {
+    console.error("FAIL workflow: no default INDEXERS_JSON found in benchmarks.yml");
+    failures++;
+  } else {
+    const listed: string[] = JSON.parse(line[1]);
+    const missing = REGISTERED.filter((i) => !listed.includes(i));
+    const extra = listed.filter((i) => !REGISTERED.includes(i));
+    // A name listed twice is neither missing nor unknown, and it would run the
+    // indexer twice and publish its row twice.
+    const duplicated = listed.filter((i, at) => listed.indexOf(i) !== at);
+    if (missing.length > 0 || extra.length > 0 || duplicated.length > 0) {
+      console.error(
+        `FAIL workflow: benchmarks.yml's default indexer list disagrees with the ` +
+          `drivers registry — missing [${missing.join(", ")}], unknown [${extra.join(", ")}], ` +
+          `duplicated [${duplicated.join(", ")}]`
+      );
+      failures++;
+    } else {
+      console.log(`ok workflow: all ${REGISTERED.length} indexers get a job`);
+    }
+  }
+}
 
 function check(name: string, changed: string[], expected: Record<string, string[]>) {
   const scope = selectScope(changed, CASES, INDEXERS);
@@ -108,6 +141,30 @@ for (const indexer of REGISTERED) {
 }
 if (driverFailures === 0) console.log(`ok drivers: all ${REGISTERED.length} indexers driven`);
 
+// And the same pin for the lib modules only some scenarios use. The filter's
+// map of which scenarios use cases/lib/rpc-mock.ts is a copy of which case
+// configs declare `ethCall`; if a second scenario starts reading contract state
+// and the map is not updated, its jobs would sit out a change to the endpoint
+// they depend on. Ask the configs directly.
+const callCases: string[] = [];
+for (const benchCase of CASES) {
+  const mod = await import(resolve(ROOT, "cases", benchCase, "case.config.ts"));
+  if (mod.caseConfig?.ethCall) callCases.push(benchCase);
+}
+const mockScope = selectScope(["cases/lib/rpc-mock.ts"], CASES, INDEXERS);
+if (JSON.stringify(mockScope.cases) !== JSON.stringify(callCases)) {
+  console.error(
+    `FAIL lib modules: cases/lib/rpc-mock.ts selects ${JSON.stringify(mockScope.cases)}, ` +
+      `but ${JSON.stringify(callCases)} declare ethCall — update LIB_MODULE_CASES ` +
+      `in select-scope.ts`
+  );
+  failures++;
+} else {
+  console.log(
+    `ok lib modules: the call endpoint selects exactly the ${callCases.length} scenario(s) using it`
+  );
+}
+
 check("one indexer in one scenario", ["cases/erc20-transfer-events/ponder/src/index.ts"], {
   "erc20-transfer-events": ["ponder"],
 });
@@ -115,6 +172,21 @@ check("one indexer in one scenario", ["cases/erc20-transfer-events/ponder/src/in
 check("envio project directory covers both envio variants", [
   "cases/erc20-transfer-events/envio/config.yaml",
 ], { "erc20-transfer-events": ["envio", "envio-rpc"] });
+
+check("sqd project directory covers both sqd variants", [
+  "cases/erc20-transfer-events/sqd/src/processor.ts",
+], { "erc20-transfer-events": ["sqd", "sqd-rpc"] });
+
+check("rindexer project directory covers both rindexer variants", [
+  "cases/erc20-transfer-events/rindexer/rindexer.yaml",
+], { "erc20-transfer-events": ["rindexer", "rindexer-hypersync"] });
+
+// Envio Subgraph has no project directory: it runs the Subgraph tool's own
+// project, so a change to it has to re-measure all three rows together or the
+// comparison stops being like-for-like.
+check("the subgraph project covers Graph Node and both Envio Subgraph variants", [
+  "cases/erc20-transfer-events/subgraph/src/mapping.ts",
+], { "erc20-transfer-events": ["envio-subgraph", "envio-subgraph-rpc", "subgraph"] });
 
 check("scenario run logic runs the whole scenario", ["cases/erc20-transfer-events/run.ts"], {
   "erc20-transfer-events": INDEXERS,
@@ -124,9 +196,43 @@ check("expected output runs the whole scenario", [
   "cases/erc20-account-balances/expected.json",
 ], { "erc20-account-balances": INDEXERS });
 
-check("a driver runs its indexer in every scenario", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd"]));
+check("a driver runs its indexer in every scenario", ["cases/lib/drivers/ponder.ts"], inEvery(["ponder"]));
 
 check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.ts"], inEvery(["envio", "envio-rpc"]));
+
+check("the sqd driver covers both sqd variants", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd", "sqd-rpc"]));
+
+check("the rindexer driver covers both rindexer variants", [
+  "cases/lib/drivers/rindexer.ts",
+], inEvery(["rindexer", "rindexer-hypersync"]));
+
+check(
+  "the envio-subgraph driver covers both of its variants",
+  ["cases/lib/drivers/envio-subgraph.ts"],
+  inEvery(["envio-subgraph", "envio-subgraph-rpc"])
+);
+
+check(
+  "the shared envio CLI pin covers both Envio Subgraph variants",
+  ["cases/lib/envio-subgraph/package.json"],
+  inEvery(["envio-subgraph", "envio-subgraph-rpc"])
+);
+
+{
+  const pinned = JSON.parse(
+    readFileSync(resolve(ROOT, "cases/lib/envio-subgraph/package.json"), "utf8")
+  ).dependencies.envio as string;
+  const url = TOOLS["envio-subgraph"].toolUrl;
+  if (!url.includes(`v${pinned}`)) {
+    console.error(
+      `FAIL envio-subgraph version: TOOLS links ${url}, but ` +
+        `cases/lib/envio-subgraph pins envio@${pinned}`
+    );
+    failures++;
+  } else {
+    console.log(`ok envio-subgraph version: row links the pinned ${pinned} release`);
+  }
+}
 
 // Attributing a driver module to no indexer at all would select nothing and
 // publish the untouched carried-forward rows as if they had been re-measured.

@@ -32,13 +32,13 @@ For each **Approval** event:
 - **Envio** — [envio/](./envio/)
 - **Ponder** — [ponder/](./ponder/)
 - **Rindexer** — [rindexer/](./rindexer/)
-- **Sqd** — [sqd/](./sqd/)
+- **Squid SDK** — [sqd/](./sqd/)
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
 ## Running the Benchmark
 
-Requires Node 23.6+, Docker, a Rust toolchain (for the rindexer implementation), an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Sqd implementation.
+Requires Node 23.6+, Docker, a Rust toolchain (for the rindexer implementation), an [Envio](https://envio.dev) API token for the RPC endpoint and ground truth, and an [SQD](https://portal.sqd.dev) API key (`SQD_API_KEY`) for the Squid SDK run that reads from SQD Network.
 
 ```bash
 ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts
@@ -46,7 +46,7 @@ ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts
 
 Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
 
-The verification run is capped at ten minutes. An indexer that has not finished by then is stopped there and verified on what it did index, so its row carries a rate, a `~` storage figure scaled from the share of the range it covered, and a note naming the share of the data it is missing rather than no result at all.
+The verification run is capped at five minutes. An indexer that has not finished by then is stopped there and verified on what it did index, so its row carries a rate, a `~` storage figure scaled from the share of the range it covered, and a note naming the share of the data it is missing rather than no result at all.
 
 The throughput window defaults to 100 seconds. Pass a custom duration (in seconds) with `--duration`:
 
@@ -94,11 +94,13 @@ Event tables and their inserts are exactly what `rindexer codegen` produces. Onl
 
 The crate is built with `cargo build --release` before the timer begins, and Postgres runs in a separate container started beforehand. Two things follow: the `rindexer` crate is pinned to a git tag rather than tracking `master`, so runs are reproducible, and the binary is built from source rather than being the released CLI. `rindexer new rust` also does not scaffold a rustls crypto provider while the dependency graph enables two, so `main` installs one explicitly — without it the binary panics on its first HTTPS request.
 
-### Sqd (Subsquid)
+### Squid SDK
 
 Runs the processor as a native Node.js process against a Docker Postgres instance. The handler batches all events in memory per block range, then flushes accounts, allowances, transfer events, and approval events concurrently via `Promise.all`.
 
-Sqd ingests from the SQD archive (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+The `sqd` variant ingests from the SQD Network gateway (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
+
+The `sqd-rpc` variant runs the same project with the gateway left off (`SQD_SOURCE=rpc`), so it ingests from the RPC endpoint alone — the regime SQD documents for chains SQD Network does not cover. It needs no API key. Each variant configures only its own source: the `sqd` run is given no RPC endpoint at all, since a processor holding both falls back to RPC near the head and its row would then be measuring a mixture of the two.
 
 ### Subgraph
 

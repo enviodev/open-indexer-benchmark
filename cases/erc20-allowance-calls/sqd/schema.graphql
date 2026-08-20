@@ -1,0 +1,17 @@
+type ApprovalEvent @entity {
+  id: ID!
+  token: String!
+  owner: String!
+  spender: String!
+  approved: BigInt!
+  allowance: BigInt!
+  timestamp: Int!
+}
+
+type TokenAllowance @entity {
+  id: ID!
+  token: String!
+  owner: String!
+  spender: String!
+  allowance: BigInt!
+}

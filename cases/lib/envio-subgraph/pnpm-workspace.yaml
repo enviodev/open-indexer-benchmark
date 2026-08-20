@@ -1,0 +1,5 @@
+# envio pulls esbuild, whose postinstall selects its platform binary. pnpm 11
+# disallows every build script until it is reviewed here, and fails the install
+# on an unreviewed one.
+allowBuilds:
+  esbuild: true

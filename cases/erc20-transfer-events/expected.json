@@ -1,8 +1,9 @@
 {
   "startBlock": 18600000,
   "endBlock": 18600999,
-  "generatedAt": "2026-07-30T11:31:49.131Z",
+  "generatedAt": "2026-08-12T11:16:51.173Z",
   "totalEvents": 8059,
+  "lastEventBlock": 18600999,
   "entities": {
     "transferEvent": {
       "rowCount": 8059,

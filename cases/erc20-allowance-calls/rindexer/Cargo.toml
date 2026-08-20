@@ -1,0 +1,22 @@
+[package]
+name = "erc20indexer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# rindexer's scaffold points this at the master branch; pinned to the tag
+# matching the CLI that generated the typings so a benchmark run is
+# reproducible.
+rindexer = { git = "https://github.com/joshstevens19/rindexer", tag = "v0.43.0" }
+tokio = { version = "1", features = ["full"] }
+alloy = { version = "1.0.41", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+# The batch's allowance reads are issued together rather than one after
+# another, which is what join_all is for.
+futures = "0.3"
+# The dependency graph turns on both of rustls' crypto providers, which leaves
+# it unable to pick one on its own; main installs one explicitly.
+rustls = "0.23"
+
+[profile.release]
+opt-level = 3

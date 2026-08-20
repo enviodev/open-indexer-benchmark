@@ -4,6 +4,12 @@
 
 This benchmark indexes raw ERC-20 `Transfer` events on the USDC token contract on Ethereum Mainnet from block 18,600,000.
 
+The one project backs two benchmark rows: `rindexer` reads logs over plain
+RPC, and `rindexer-hypersync` reads them from
+[HyperSync](https://docs.envio.dev/docs/HyperSync/overview). The switch is the
+`RINDEXER_HYPERSYNC` variable substituted into `rindexer.yaml` — see
+`.env.example` for the values each row runs with.
+
 ## Pre-requisites
 
 - [rindexer CLI](https://rindexer.xyz/docs/start-building/installation)
@@ -14,6 +20,11 @@ This benchmark indexes raw ERC-20 `Transfer` events on the USDC token contract o
 ```bash
 curl -L https://rindexer.xyz/install.sh | bash
 ```
+
+The HyperSync row needs rindexer v0.43.0 or newer (the release that shipped
+`networks[].hypersync`) and an `ENVIO_API_TOKEN` (create one at
+[envio.dev/app/api-tokens](https://envio.dev/app/api-tokens)); the driver
+refuses to run it on an older CLI rather than silently measure RPC.
 
 ## Setup
 
