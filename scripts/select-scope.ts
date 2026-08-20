@@ -2,7 +2,7 @@
 //
 //   CHANGED_FILES="$(git diff --name-only base...head)" node scripts/select-scope.ts
 //
-// A full run is one job per indexer per scenario — thirty-two at the time of
+// A full run is one job per indexer per scenario — forty-four at the time of
 // writing, each up to 45 minutes against shared data endpoints, most of them
 // re-measuring code the pull request never touched. On a pull request the run
 // is narrowed to what changed:
@@ -36,11 +36,17 @@
 // Note that `main` and workflow_dispatch runs never call this: they publish the
 // README table and the table has to hold a full set of results.
 
-/** Indexers whose project directory is not named after them. */
+/**
+ * Indexers whose project directory is not named after them. The Envio Subgraph
+ * variants have no directory of their own at all — they run the Subgraph tool's
+ * `subgraph/` project unchanged, so a change to it re-runs them too.
+ */
 const INDEXER_DIRS: Record<string, string> = {
   "envio-rpc": "envio",
   "sqd-rpc": "sqd",
   "rindexer-hypersync": "rindexer",
+  "envio-subgraph": "subgraph",
+  "envio-subgraph-rpc": "subgraph",
 };
 
 /**
@@ -52,6 +58,7 @@ const DRIVER_INDEXERS: Record<string, string[]> = {
   envio: ["envio", "envio-rpc"],
   sqd: ["sqd", "sqd-rpc"],
   rindexer: ["rindexer", "rindexer-hypersync"],
+  "envio-subgraph": ["envio-subgraph", "envio-subgraph-rpc"],
 };
 
 /** Driver modules that are shared plumbing rather than one tool's driver. */
@@ -185,6 +192,16 @@ export function selectScope(
           addEverywhere(driven);
           continue;
         }
+      }
+      // The shared envio CLI is not harness: only the Envio Subgraph rows run
+      // it, so a pin bump should not re-measure everyone else.
+      if (parts[2] === "envio-subgraph") {
+        addEverywhere(
+          ["envio-subgraph", "envio-subgraph-rpc"].filter((i) =>
+            allIndexers.includes(i)
+          )
+        );
+        continue;
       }
       addEverywhere(allIndexers);
       continue;

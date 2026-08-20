@@ -2,6 +2,7 @@
 
 import type { DriverFactory } from "./common.ts";
 import { envioDriver } from "./envio.ts";
+import { envioSubgraphDriver } from "./envio-subgraph.ts";
 import { ponderDriver } from "./ponder.ts";
 import { rindexerDriver } from "./rindexer.ts";
 import { sqdDriver } from "./sqd.ts";
@@ -14,6 +15,8 @@ export type { Ctx, Driver, DriverFactory, Snapshot } from "./common.ts";
 export const DRIVERS: Record<string, DriverFactory> = {
   envio: envioDriver("hypersync"),
   "envio-rpc": envioDriver("rpc"),
+  "envio-subgraph": envioSubgraphDriver("hypersync"),
+  "envio-subgraph-rpc": envioSubgraphDriver("rpc"),
   ponder: ponderDriver,
   rindexer: rindexerDriver("rpc"),
   "rindexer-hypersync": rindexerDriver("hypersync"),
@@ -27,6 +30,9 @@ export const INDEXERS = Object.keys(DRIVERS);
 
 const HYPERSYNC_URL = "https://docs.envio.dev/docs/HyperSync/overview";
 const HYPERRPC_URL = "https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc";
+/** The release the pinned envio comes from, so the row names its own version. */
+const ENVIO_SUBGRAPH_URL =
+  "https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph";
 const SQD_SDK_URL = "https://sqd.dev/sdk/";
 const SQD_NETWORK_URL = "https://docs.sqd.dev/en/network/overview";
 
@@ -53,6 +59,23 @@ export const TOOLS: Record<
   "envio-rpc": {
     name: "Envio Indexer",
     toolUrl: "https://envio.dev",
+    source: "RPC",
+    sourceUrl: HYPERRPC_URL,
+    storage: "Postgres",
+  },
+  // The Subgraph case's own project, indexed by HyperIndex instead of Graph
+  // Node. Nothing in that directory changes, so the row is a like-for-like
+  // reading of the same subgraph.
+  "envio-subgraph": {
+    name: "Envio Subgraph",
+    toolUrl: ENVIO_SUBGRAPH_URL,
+    source: "HyperSync",
+    sourceUrl: HYPERSYNC_URL,
+    storage: "Postgres",
+  },
+  "envio-subgraph-rpc": {
+    name: "Envio Subgraph",
+    toolUrl: ENVIO_SUBGRAPH_URL,
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
