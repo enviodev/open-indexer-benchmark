@@ -17,6 +17,29 @@ The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s re
 Contributions are welcome — we already have some from the [SQD](https://sqd.dev) team. Open an issue or a pull request to add an indexer, add a scenario, report a result that looks wrong, or improve the methodology. Indexer teams especially: nobody knows your tool better than you do. Or just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
 
 
+## Reliability
+
+Speed is one question about an indexer and it is not the one that wakes anyone
+up. These scores are the other question: what the tool does when its database
+restarts under it, when the chain rewrites six blocks it had already stored,
+when the node it reads from starts answering 429 to everything, when a token's
+`symbol()` returns no data at all. Each column is a list of checks a tool either
+passes or does not, run against a chain the benchmark makes up so that a
+nine-block reorg or a thirty-second stall happens on demand and happens the same
+way every time. Follow any score for the list behind it.
+
+<!-- RELIABILITY:START -->
+_No reliability results collected._
+<!-- RELIABILITY:END -->
+
+The column with a number beside it carries the measurement a score cannot make:
+how many times a tool had to be restarted by hand to get through the database
+restart, and the median gap between a block being published and its rows being
+readable. A dash is not a zero — it means the run could not ask.
+
+[What each score is made of, check by check →](./cases/reliability/README.md)
+
+
 ## Scenarios
 
 ### State Aggregation

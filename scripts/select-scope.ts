@@ -14,6 +14,9 @@
 //   cases/lib/drivers/<x>.ts    that indexer, in every scenario
 //   cases/lib/rpc-mock.ts       every indexer, but only the scenarios whose
 //                               handlers read contract state through it
+//   cases/lib/chain-mock.ts,    nothing — the reliability suite is not on any
+//   cases/lib/reliability/**    throughput job's execution path, and has its
+//                               own credential-free tests in checks.yml
 //   cases/lib/**                every indexer, every scenario
 //   .github/workflows/**        every indexer, every scenario
 //   this file, build-tables.ts  every indexer, every scenario — they are the
@@ -95,6 +98,9 @@ const PIPELINE_SCRIPTS = new Set([
  */
 const LOCAL_SCRIPTS = new Set([
   "scripts/test-scope.ts",
+  "scripts/test-chain-mock.ts",
+  "scripts/test-reliability.ts",
+  "scripts/build-reliability-doc.ts",
   "scripts/test-tables.ts",
   "scripts/test-rpc-mock.ts",
   "scripts/test-verification.ts",
@@ -102,10 +108,26 @@ const LOCAL_SCRIPTS = new Set([
   "scripts/generate-expected.ts",
 ]);
 
+/**
+ * The reliability suite: the chain it serves, the catalog it scores against,
+ * and the table it publishes. None of it is imported by a case config, a
+ * driver or the throughput runner, so no benchmark job executes a line of it —
+ * re-measuring forty-four throughput rows because a reorg check was reworded
+ * would be pure runner time. It has its own tests, which run on every push.
+ *
+ * That is only true while nothing under cases/ reaches into it, so
+ * test-scope.ts checks that rather than trusting this comment.
+ */
+function isReliabilityOnly(file: string, parts: string[]): boolean {
+  if (file === "cases/lib/chain-mock.ts") return true;
+  return parts[0] === "cases" && parts[1] === "lib" && parts[2] === "reliability";
+}
+
 /** True for a file that cannot change what a benchmark run measures. */
 function isInert(file: string, parts: string[]): boolean {
   // Documentation never changes what a run measures, wherever it sits.
   if (parts[parts.length - 1] === "README.md") return true;
+  if (isReliabilityOnly(file, parts)) return true;
   if (file === ".gitignore" || file === "LICENSE") return true;
   // Archived third-party results, kept for reference only.
   if (parts[0] === "sentio-benchmarks-may-2025") return true;

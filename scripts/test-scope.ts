@@ -292,6 +292,47 @@ check("selections merge across files, in canonical order", [
 
 check("an unknown case directory is ignored", ["cases/erc20-approvals/run.ts"], {});
 
+// The reliability suite runs nothing in the throughput matrix, which is only
+// safe while no benchmark job can reach it. The filter cannot check that for
+// itself, so the pin is here: if a case config, a driver or the runner ever
+// imports the mock chain or the scoring catalog, the suite is on a benchmark
+// job's execution path and a change to it has to re-measure those rows.
+check("the mock chain runs no throughput job", ["cases/lib/chain-mock.ts"], {});
+check("the reliability catalog runs no throughput job", [
+  "cases/lib/reliability/scenarios.ts",
+], {});
+{
+  const reliability = /from\s+"[^"]*(chain-mock|reliability\/)/;
+  const offenders: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = resolve(dir, entry.name);
+      // The suite is allowed to import itself.
+      if (path === resolve(ROOT, "cases", "lib", "reliability")) continue;
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules") walk(path);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts")) continue;
+      if (path === resolve(ROOT, "cases", "lib", "chain-mock.ts")) continue;
+      if (reliability.test(readFileSync(path, "utf8"))) {
+        offenders.push(path.slice(ROOT.length + 1));
+      }
+    }
+  };
+  walk(resolve(ROOT, "cases"));
+  if (offenders.length > 0) {
+    console.error(
+      `FAIL reliability isolation: ${offenders.join(", ")} import the reliability ` +
+        `suite, so a benchmark job now executes it — remove isReliabilityOnly from ` +
+        `select-scope.ts's isInert, or drop the import`
+    );
+    failures++;
+  } else {
+    console.log("ok reliability isolation: no benchmark job executes the reliability suite");
+  }
+}
+
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed`);
   process.exit(1);

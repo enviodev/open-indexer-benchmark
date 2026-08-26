@@ -19,3 +19,23 @@ What the result table columns mean:
 The verification run is capped at five minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 
 Each scenario's own page documents its block range, contracts, entities and per-tool implementation notes.
+
+## Reliability
+
+The reliability table answers a different question from the ones above, and is
+built differently. There is no rate to measure: each column is a list of checks
+a tool either passes or does not — its database restarting under it, the chain
+rewriting blocks it had already stored, a node that stalls, a `symbol()` that
+returns nothing — and the published number is the share of the points it earned.
+
+Those scenarios do not read a real chain. They serve one: a nine-block reorg, a
+thirty-second outage and a log index of `0xffffffe2` cannot be arranged on a
+real network on demand, and could never be arranged twice the same way, so the
+suite makes up a chain that does all three identically every run. The cost is
+that every tool is measured on its RPC ingestion path, whatever it reads in
+production; the source column says so.
+
+Each scenario, each check, what it is worth and what a pass means is in
+[cases/reliability/README.md](./cases/reliability/README.md), which is generated
+from the same catalog the scores are computed from — so what a number means and
+how it was reached cannot drift apart.
