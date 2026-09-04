@@ -19,3 +19,31 @@ What the result table columns mean:
 The verification run is capped at five minutes. An indexer that has not finished by then is stopped there and verified on what it indexed, so it still gets a rate and a note saying how much data is missing.
 
 Each scenario's own page documents its block range, contracts, entities and per-tool implementation notes.
+
+## Reliability
+
+The reliability table answers a different question from the ones above, and is
+built differently. There is no rate to measure: each column is a list of checks
+a tool either passes or does not — its database restarting under it, the chain
+rewriting blocks it had already stored, a node that stalls, a `symbol()` that
+returns nothing — and the published number is simply how many of them it passed
+over how many it was asked. Checks are not weighted against each other, because
+a weighting is an opinion the arithmetic would hide; a cell reading `4 / 6` is a
+claim about which four, and the linked page names them. A check the run could
+not put leaves the fraction rather than counting as a failure, so a column
+nothing could be measured in shows a dash rather than `0 / n`.
+
+Those scenarios do not read a real chain. They serve one: a nine-block reorg, a
+thirty-second outage and a log index of `0xffffffe2` cannot be arranged on a
+real network on demand, and could never be arranged twice the same way, so the
+suite makes up a chain that does all three identically every run. The cost is
+that every tool is measured on its RPC ingestion path, whatever it reads in
+production; the source column says so.
+
+Each scenario, each check and what a pass means is in
+[cases/reliability/README.md](./cases/reliability/README.md), which is generated
+from the same catalog the scores are computed from — so what a number means and
+how it was reached cannot drift apart. That page ends with the failures the
+suite does not yet provoke and what each would take to build, because a full
+column means a tool survived the situations someone thought to write down, which
+is a smaller claim than "reliable".

@@ -1,0 +1,37 @@
+name: Checks
+
+# The harness's own tests, for the parts that need no credentials and no
+# indexer: the pull request scope filter, the result tables and their parser,
+# the mock chain the reliability scenarios serve, and the reliability catalog
+# and scoring. All four run in a second or two, so they run on every push
+# rather than being remembered before a release.
+#
+# The tests that are still deliberately absent — scripts/test-verification.ts
+# and scripts/test-rpc-mock.ts — need a live HyperSync token, which forks do
+# not have.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  harness:
+    name: Harness tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/test-scope.ts
+      - run: node scripts/test-tables.ts
+      - run: node scripts/test-chain-mock.ts
+      # Also fails when cases/reliability/README.md has fallen behind the
+      # catalog, so a score can never link to an explanation of a check that
+      # has since been rewritten.
+      - run: node scripts/test-reliability.ts
