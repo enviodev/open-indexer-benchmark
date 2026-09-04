@@ -26,18 +26,26 @@ when the node it reads from starts answering 429 to everything, when a token's
 `symbol()` returns no data at all. Each column is a list of checks a tool either
 passes or does not, run against a chain the benchmark makes up so that a
 nine-block reorg or a thirty-second stall happens on demand and happens the same
-way every time. Follow any score for the list behind it.
+way every time.
+
+A cell is the checks passed over the checks asked. Nothing is weighted, because
+a weighting would be an opinion buried in the arithmetic — `4 / 6` is a claim
+about *which four*, and the page behind every cell names them.
 
 <!-- RELIABILITY:START -->
 _No reliability results collected._
 <!-- RELIABILITY:END -->
 
-The column with a number beside it carries the measurement a score cannot make:
+The column with a number beside it carries the measurement a count cannot make:
 how many times a tool had to be restarted by hand to get through the database
 restart, and the median gap between a block being published and its rows being
-readable. A dash is not a zero — it means the run could not ask.
+readable. A dash is not `0 / n` — it means the run could not ask.
 
-[What each score is made of, check by check →](./cases/reliability/README.md)
+There is no passing mark, and a full column is a smaller claim than it looks:
+it means the tool survived the situations someone thought to write down. What
+is not yet asked is published too, at the end of the same page.
+
+[Every check, and what is still missing →](./cases/reliability/README.md)
 
 
 ## Scenarios

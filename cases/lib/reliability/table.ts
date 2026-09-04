@@ -5,9 +5,9 @@
 // result keeps its last published row rather than vanishing — because the two
 // tables sit on the same page and a reader should not have to learn them
 // separately. What differs is what a cell holds. There, a cell is a
-// measurement. Here it is a verdict over a list of checks, which is only
-// honest if the list is one click away, so every cell is a link into the
-// scenario page that explains what the number was made of.
+// measurement. Here it is "4 / 6": the checks a tool passed over the checks it
+// was asked. That is only honest if the six are one click away, so every cell
+// is a link into the scenario page that lists them.
 //
 // Each group cell may also carry one number the score cannot express: how many
 // times a tool had to be restarted by hand, how far behind the head it runs.
@@ -15,7 +15,7 @@
 // costs.
 
 import { GROUPS, SCENARIOS } from "./scenarios.ts";
-import type { ToolScore } from "./score.ts";
+import { tallyRank, type Tally, type ToolScore } from "./score.ts";
 
 /** Where a score links to, relative to the repository README. */
 export const DETAIL_PAGE = "./cases/reliability/README.md";
@@ -30,9 +30,10 @@ export interface ReliabilityRow {
   source: string;
   /** Rendered cell per group id. */
   cells: Record<string, string>;
-  overall: number | null;
+  /** Passes over asks across the whole suite; asked 0 means nothing ran. */
+  overall: Tally;
   overallCell: string;
-  /** Numbered notes this row earned: a dash to explain, or a zero to name. */
+  /** Numbered notes this row earned: a dash to explain, or a nil to name. */
   notes: string[];
   carriedOver?: boolean;
 }
@@ -67,11 +68,10 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
   return null;
 }
 
-function scoreCell(group: string, score: number | null, headline: string | null): string {
+function scoreCell(group: string, tally: Tally, headline: string | null): string {
   const link = `${DETAIL_PAGE}#${group}`;
-  if (score === null) return `[${NO_VALUE}](${link})`;
-  const value = Number.isInteger(score) ? String(score) : score.toFixed(1);
-  return `[${value}${headline ? ` · ${headline}` : ""}](${link})`;
+  if (tally.asked === 0) return `[${NO_VALUE}](${link})`;
+  return `[${tally.passed} / ${tally.asked}${headline ? ` · ${headline}` : ""}](${link})`;
 }
 
 /**
@@ -93,20 +93,20 @@ export function toReliabilityRow(
 
   for (const group of GROUPS) {
     const scored = score.groups.find((g) => g.group === group.id);
-    const value = scored?.score ?? null;
-    cells[group.id] = scoreCell(group.id, value, headlineOf(group.id, measures));
+    const tally: Tally = scored ?? { passed: 0, asked: 0 };
+    cells[group.id] = scoreCell(group.id, tally, headlineOf(group.id, measures));
 
-    if (value === null) {
+    if (tally.asked === 0) {
       const why = scored?.scenarios
         .flatMap((s) => s.skipped.map((skip) => skip.detail))
         .find(Boolean);
       notes.push(`${group.title} was not measured${why ? `: ${why}` : ""}`);
       continue;
     }
-    if (value === 0) {
+    if (tally.passed === 0) {
       const worst = scored?.scenarios.flatMap((s) => s.failures)[0];
       notes.push(
-        `failed every ${group.title} check${worst ? `, starting with: ${worst.detail}` : ""}`
+        `passed no ${group.title} check${worst ? `, starting with: ${worst.detail}` : ""}`
       );
     }
   }
@@ -116,11 +116,9 @@ export function toReliabilityRow(
     tool: `[${score.name}](${score.toolUrl})`,
     source: `[${score.source}](${score.sourceUrl})`,
     cells,
-    overall: score.overall,
+    overall: { passed: score.passed, asked: score.asked },
     overallCell:
-      score.overall === null
-        ? NO_VALUE
-        : `**${Number.isInteger(score.overall) ? score.overall : score.overall.toFixed(1)}**`,
+      score.asked === 0 ? NO_VALUE : `**${score.passed} / ${score.asked}**`,
     notes,
   };
 }
@@ -130,11 +128,13 @@ const HEAD = ["tool", "source", ...GROUPS.map((g) => g.title), "overall"];
 export function buildReliabilityTable(rows: ReliabilityRow[]): string {
   if (rows.length === 0) return "_No reliability results collected._";
 
-  // Highest overall first; a row with no overall at all sorts last, since
-  // ranking an absence among scores would be meaningless either way it went.
+  // Best share first, then most checks passed. A row nothing ran for sorts
+  // last: ranking an absence among results would be meaningless either way it
+  // went, and tallyRank gives it a share of -1 to keep it there.
   const sorted = [...rows].sort((a, b) => {
-    if ((a.overall === null) !== (b.overall === null)) return a.overall === null ? 1 : -1;
-    return (b.overall ?? 0) - (a.overall ?? 0);
+    const [shareA, passedA] = tallyRank(a.overall);
+    const [shareB, passedB] = tallyRank(b.overall);
+    return shareB - shareA || passedB - passedA;
   });
 
   const lines = [
@@ -187,7 +187,7 @@ export const RELIABILITY_END = "<!-- RELIABILITY:END -->";
 /**
  * Read back a table this module rendered, so a tool whose reliability job
  * failed keeps its last published row. Cells are preserved verbatim; only the
- * overall score is parsed, and only to sort by.
+ * overall tally is parsed, and only to sort by.
  */
 export function parsePublishedReliability(markdown: string): ReliabilityRow[] {
   const start = markdown.indexOf(RELIABILITY_START);
@@ -205,17 +205,20 @@ export function parsePublishedReliability(markdown: string): ReliabilityRow[] {
     const label = cells[0].replace(/\s*⚠️\s*$/, "").trim();
     const name = linkText(label);
     if (!name) continue;
-    // "**82.5** (1, 2)" — the note references belong to the run that published
-    // them, and a carried row is re-numbered from its own notes, so strip them.
+    // "**23 / 35** (1, 2)" — the note references belong to the run that
+    // published them, and a carried row is re-numbered from its own notes, so
+    // strip them before the cell is kept.
     const overallCell = cells[cells.length - 1].replace(/\s*\(\d+(?:,\s*\d+)*\)\s*$/, "");
-    const parsed = parseFloat(overallCell.replace(/\*/g, ""));
+    const tally = overallCell.replace(/\*/g, "").match(/(\d+)\s*\/\s*(\d+)/);
 
     rows.push({
       name,
       tool: label,
       source: cells[1],
       cells: Object.fromEntries(GROUPS.map((group, i) => [group.id, cells[2 + i]])),
-      overall: Number.isFinite(parsed) ? parsed : null,
+      overall: tally
+        ? { passed: Number(tally[1]), asked: Number(tally[2]) }
+        : { passed: 0, asked: 0 },
       overallCell,
       // Notes are not carried: they were numbered against the table that
       // published them, and re-rendering would point them at other rows.

@@ -14,8 +14,18 @@
 // hand, which is the point — the scoring has to be checkable without a run.
 
 import { existsSync, readFileSync } from "node:fs";
-import { GROUPS, SCENARIOS, scenarioPoints } from "../cases/lib/reliability/scenarios.ts";
-import { measuresOf, scoreTool, type ToolReliability } from "../cases/lib/reliability/score.ts";
+import {
+  CANDIDATES,
+  GROUPS,
+  SCENARIOS,
+  checkCount,
+} from "../cases/lib/reliability/scenarios.ts";
+import {
+  measuresOf,
+  scoreTool,
+  tallyRank,
+  type ToolReliability,
+} from "../cases/lib/reliability/score.ts";
 import {
   buildReliabilityTable,
   parsePublishedReliability,
@@ -56,13 +66,13 @@ check(
   "check ids are unique within a scenario",
   SCENARIOS.every((s) => new Set(s.checks.map((c) => c.id)).size === s.checks.length)
 );
-// Not arithmetic necessity — the scenario score is a share either way — but a
-// convention worth pinning: a reader comparing two scenarios' checks should be
-// able to read the points as percentages of that scenario without arithmetic.
+// Every check moves a published number by the same amount, so a scenario that
+// asks nothing is a column that cannot be scored, and a check nobody would
+// argue about is dilution rather than evidence.
 check(
-  "every scenario's checks add up to 100 points",
-  SCENARIOS.every((s) => scenarioPoints(s) === 100),
-  SCENARIOS.map((s) => `${s.id}=${scenarioPoints(s)}`).join(", ")
+  "every scenario asks at least two checks",
+  SCENARIOS.every((s) => checkCount(s) >= 2),
+  SCENARIOS.map((s) => `${s.id}=${checkCount(s)}`).join(", ")
 );
 // An anchor is a link target the results table hard-codes, so two of them
 // answering to the same name would send half the readers to the wrong section.
@@ -74,6 +84,27 @@ check(
 check(
   "every check explains what a pass means",
   SCENARIOS.every((s) => s.checks.every((c) => c.detail.length > 40 && c.label.length > 0))
+);
+check(
+  "every candidate names a real column, or asks for a new one",
+  CANDIDATES.every(
+    (candidate) =>
+      candidate.group === "new" || GROUPS.some((group) => group.id === candidate.group)
+  ),
+  CANDIDATES.filter(
+    (c) => c.group !== "new" && !GROUPS.some((g) => g.id === c.group)
+  ).map((c) => c.title).join(", ")
+);
+// The backlog is only useful if it stays a backlog: a candidate already built
+// would be a page telling readers something is missing when it is not.
+check(
+  "no candidate duplicates a scenario already in the suite",
+  CANDIDATES.every(
+    (candidate) =>
+      !SCENARIOS.some(
+        (scenario) => scenario.title.toLowerCase() === candidate.title.toLowerCase()
+      )
+  )
 );
 check(
   "no group publishes two headline measures",
@@ -104,7 +135,13 @@ function perfect(name: string): ToolReliability {
   };
 }
 
-check("a tool that passes everything scores 100", scoreTool(perfect("Perfect")).overall === 100);
+const ALL_CHECKS = SCENARIOS.reduce((n, s) => n + checkCount(s), 0);
+const flawless = scoreTool(perfect("Perfect"));
+check(
+  "a tool that passes everything passes every check",
+  flawless.passed === ALL_CHECKS && flawless.asked === ALL_CHECKS,
+  `${flawless.passed}/${flawless.asked} of ${ALL_CHECKS}`
+);
 
 const halfReorgs = perfect("Half");
 halfReorgs.runs = halfReorgs.runs.map((run) =>
@@ -120,33 +157,16 @@ halfReorgs.runs = halfReorgs.runs.map((run) =>
     : run
 );
 const half = scoreTool(halfReorgs);
+const halfReorgTally = half.groups.find((g) => g.group === "reorgs");
 check(
-  "a failed check costs exactly its points",
-  half.groups.find((g) => g.group === "reorgs")?.score === 80,
-  JSON.stringify(half.groups.find((g) => g.group === "reorgs")?.score)
+  "a failed check costs exactly one check",
+  halfReorgTally?.passed === 5 && halfReorgTally?.asked === 6,
+  JSON.stringify(halfReorgTally && [halfReorgTally.passed, halfReorgTally.asked])
 );
 check(
-  "and moves the overall by its share of one group",
-  half.overall === 96,
-  String(half.overall)
-);
-
-const partial = perfect("Partial");
-partial.runs = partial.runs.map((run) =>
-  run.scenario === "reorg-cases"
-    ? {
-        ...run,
-        checks: {
-          ...run.checks,
-          storm: { status: "partial", share: 0.5, detail: "two of three reorgs reconciled" },
-        },
-      }
-    : run
-);
-check(
-  "a partial check earns its share",
-  scoreTool(partial).groups.find((g) => g.group === "reorgs")?.score === 92.5,
-  String(scoreTool(partial).groups.find((g) => g.group === "reorgs")?.score)
+  "and costs exactly one check of the overall, wherever it happened",
+  half.passed === ALL_CHECKS - 1 && half.asked === ALL_CHECKS,
+  `${half.passed}/${half.asked}`
 );
 
 // A question the run could not put must not read as a failure: it leaves both
@@ -163,9 +183,11 @@ skipped.runs = skipped.runs.map((run) =>
       }
     : run
 );
+const skippedReorgs = scoreTool(skipped).groups.find((g) => g.group === "reorgs");
 check(
-  "an unmeasured check does not cost points",
-  scoreTool(skipped).groups.find((g) => g.group === "reorgs")?.score === 100
+  "an unmeasured check leaves the fraction rather than failing",
+  skippedReorgs?.passed === 5 && skippedReorgs?.asked === 5,
+  JSON.stringify(skippedReorgs && [skippedReorgs.passed, skippedReorgs.asked])
 );
 
 const unmeasured = scoreTool({
@@ -175,37 +197,37 @@ const unmeasured = scoreTool({
     checks: Object.fromEntries(scenario.checks.map((c) => [c.id, pass])),
   })),
 });
+const headLatency = unmeasured.groups.find((g) => g.group === "head-latency");
 check(
-  "a group nothing was measured in scores null, not zero",
-  unmeasured.groups.find((g) => g.group === "head-latency")?.score === null
+  "a group nothing was measured in asks nothing, rather than failing",
+  headLatency?.asked === 0 && headLatency?.passed === 0
 );
 check(
-  "and is left out of the overall rather than dragging it down",
-  unmeasured.overall === 100,
-  String(unmeasured.overall)
+  "and shrinks the overall's denominator instead of its numerator",
+  unmeasured.passed === unmeasured.asked && unmeasured.asked < ALL_CHECKS,
+  `${unmeasured.passed}/${unmeasured.asked} of ${ALL_CHECKS}`
 );
 
-// Groups are averaged, not pooled: elaborating one group's checks must not
-// change how much the others are worth.
-const oneGroupGone = perfect("Lopsided");
-oneGroupGone.runs = oneGroupGone.runs.map((run) =>
-  run.scenario === "awkward-values"
-    ? {
-        ...run,
-        checks: Object.fromEntries(
-          SCENARIOS.find((s) => s.id === "awkward-values")!.checks.map((c) => [
-            c.id,
-            fail("stalled on the value"),
-          ])
-        ),
-      }
-    : run
-);
-check(
-  "one failed group costs exactly one group's share of the overall",
-  scoreTool(oneGroupGone).overall === 80,
-  String(scoreTool(oneGroupGone).overall)
-);
+// A tool asked fewer questions must not outrank one that answered more of them
+// only because the ones it was spared would have been failures.
+{
+  const partialRun = scoreTool({
+    ...perfect("Sparse"),
+    runs: [
+      {
+        scenario: "reorg-cases",
+        checks: { shallow: pass, "removes-event": pass },
+      },
+    ],
+  });
+  const [sparseShare] = tallyRank(partialRun);
+  const [flawlessShare, flawlessPassed] = tallyRank(flawless);
+  check(
+    "a perfect run over two checks ties on share but loses on count",
+    sparseShare === flawlessShare && flawlessPassed > partialRun.passed,
+    `${partialRun.passed}/${partialRun.asked} vs ${flawless.passed}/${flawless.asked}`
+  );
+}
 
 // ── The table ──────────────────────────────────────────────────────────
 
@@ -241,8 +263,13 @@ console.log(`\n${table}\n`);
 check("the headline restart count reaches the table", table.includes("2 restarts"), table);
 check("the headline head lag reaches the table", table.includes("640ms"), table);
 check(
-  "a zero column earns a numbered note",
-  /\*\*\(1\)\*\* Example Indexer — failed every crash recovery check/.test(table),
+  "a column the tool passed nothing in earns a numbered note",
+  /\*\*\(1\)\*\* Example Indexer — passed no crash recovery check/.test(table),
+  table
+);
+check(
+  "cells read as passes over asks",
+  table.includes("[0 / 10 · 2 restarts]") && table.includes("**25 / 35**"),
   table
 );
 check(
@@ -264,9 +291,10 @@ check(
   "rows are recovered by tool and source together",
   new Set(parsed.map(reliabilityRowKey)).size === rows.length
 );
+const recovered = parsed.find((row) => row.name === "Example Indexer")?.overall;
 check(
   "the recovered overall matches what was published",
-  parsed.find((row) => row.name === "Example Indexer")?.overall === 80,
+  recovered?.passed === 25 && recovered?.asked === 35,
   JSON.stringify(parsed.map((r) => [r.name, r.overall]))
 );
 check(

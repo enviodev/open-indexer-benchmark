@@ -20,7 +20,12 @@
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GROUPS, SCENARIOS, scenarioPoints } from "../cases/lib/reliability/scenarios.ts";
+import {
+  CANDIDATES,
+  GROUPS,
+  SCENARIOS,
+  checkCount,
+} from "../cases/lib/reliability/scenarios.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DOC_PATH = resolve(ROOT, "cases", "reliability", "README.md");
@@ -60,26 +65,32 @@ throughput.
 
 ## How a score is put together
 
-Each check below is worth the points it names, and every scenario's checks add
-up to 100. A scenario's score is the share of its points earned; a column's
-score is the share earned across the scenarios in it; the overall score is the
-mean of the columns.
+There is nothing to it, on purpose. Every check below either passes or does
+not. A cell in the results table is the passes over the asks — \`4 / 6\` — and
+the overall column is the same sum across the whole suite.
 
-Columns are averaged rather than pooled, so that writing four more reorg checks
-does not quietly demote crash recovery for every tool. The columns are meant to
-be equal questions and the arithmetic says so.
+Checks are not weighted against each other. A weighting would be an opinion
+buried in the arithmetic, deciding on your behalf that losing rows is worth one
+and a half times taking a minute to notice, and leaving a number nobody can
+argue with. \`4 / 6\` is a claim about *which four*, and this page names them.
+
+Two consequences, stated rather than corrected for. A check has to be worth
+asking on its own, since each one moves the number by the same amount — a
+trivial check would dilute its column. And a column with more checks pulls
+harder on the overall than one with fewer, so the overall is a count of
+questions answered, not a verdict weighted by importance. Read the columns.
 
 A check the run could not put — the tool exited before the scenario reached it,
-the case does not apply — is scored as neither pass nor fail: it leaves the
+the case does not apply — is scored as neither pass nor fail. It leaves the
 fraction entirely, so a score is always over what was actually asked. A column
-where nothing could be measured publishes a dash, never a zero. "Not measured"
-and "measured, scored nothing" are opposite findings and the table keeps them
-apart.
+where nothing could be measured publishes a dash, never \`0 / n\`: "not
+measured" and "measured, passed nothing" are opposite findings and the table
+keeps them apart.
 
-Points are not spread evenly on purpose. Losing data is not the same finding as
-taking longer to notice, so a check about rows that are wrong is worth more than
-one about seconds spent recovering — and both are published, because an operator
-choosing a tool cares about each.
+There is no total to aim for and no passing mark. A tool that answers every
+question in this file is a tool that survived the situations someone thought to
+write down, which is not the same as a reliable tool — see
+[what this does not measure](#not-measured) at the end.
 `;
 
 function anchor(id: string): string {
@@ -109,8 +120,8 @@ for (const group of GROUPS) {
     group.blurb,
     "",
     scenarios.length === 1
-      ? `One scenario, scored out of ${scenarioPoints(scenarios[0])} points.`
-      : `${scenarios.length} scenarios, each scored out of 100 points; the column is the share earned across all of them.`,
+      ? `One scenario, ${checkCount(scenarios[0])} checks.`
+      : `${scenarios.length} scenarios, ${scenarios.reduce((n, s) => n + checkCount(s), 0)} checks between them; the column counts all of them together.`,
     ""
   );
 
@@ -124,11 +135,10 @@ for (const group of GROUPS) {
       "",
       "**What the harness does.** " + scenario.method,
       "",
-      "| check | points | what a pass means |",
-      "| --- | --- | --- |",
+      "| check | what a pass means |",
+      "| --- | --- |",
       ...scenario.checks.map(
-        (check) =>
-          `| ${check.label} | ${check.points} | ${check.detail.replace(/\|/g, "\\|")} |`
+        (check) => `| ${check.label} | ${check.detail.replace(/\|/g, "\\|")} |`
       ),
       ""
     );
@@ -148,7 +158,31 @@ for (const group of GROUPS) {
   }
 }
 
+// The backlog, published rather than filed. A score is a claim about a list,
+// so the list's edges are part of the claim: a reader who can see what was not
+// asked cannot mistake a full column for a guarantee.
 lines.push(
+  anchor("not-measured"),
+  "",
+  "## What this does not measure",
+  "",
+  "Everything above is a situation someone thought to write down. These are the",
+  "ones already identified as fair game and not yet built — published here rather",
+  "than left in an issue tracker, because a tool that passes every check above has",
+  "passed every check above, and that is a smaller claim than \"reliable\".",
+  "",
+  "Suggestions are welcome, and so are pull requests: adding one is a matter of",
+  "moving its entry up into [`cases/lib/reliability/scenarios.ts`](../lib/reliability/scenarios.ts)",
+  "and teaching the harness to provoke it.",
+  "",
+  "| candidate | column it would join | why it matters | what it would take |",
+  "| --- | --- | --- | --- |",
+  ...CANDIDATES.map((candidate) => {
+    const group = GROUPS.find((g) => g.id === candidate.group);
+    const column = group ? group.title : "a new column";
+    return `| ${candidate.title} | ${column} | ${candidate.why.replace(/\|/g, "\\|")} | ${candidate.how.replace(/\|/g, "\\|")} |`;
+  }),
+  "",
   "---",
   "",
   "_This page is generated from [`cases/lib/reliability/scenarios.ts`](../lib/reliability/scenarios.ts)",
