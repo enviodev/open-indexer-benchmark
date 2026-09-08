@@ -21,16 +21,7 @@ const CASES = readdirSync(resolve(ROOT, "cases"))
   .sort();
 const INDEXERS = [...REGISTERED];
 
-/**
- * Tools a scenario declares it cannot run. They have no project directory in
- * it — that is what being unsupported means — so the registry pin below has
- * nothing to look for and would otherwise report the absence as drift.
- */
-const UNSUPPORTED: Record<string, Set<string>> = {};
-for (const benchCase of CASES) {
-  const mod = await import(resolve(ROOT, "cases", benchCase, "case.config.ts"));
-  UNSUPPORTED[benchCase] = new Set(Object.keys(mod.caseConfig.unsupported ?? {}));
-}
+
 
 /** The given indexers, in every scenario — what a repo-wide change selects. */
 const inEvery = (indexers: string[]) =>
@@ -103,26 +94,26 @@ function check(name: string, changed: string[], expected: Record<string, string[
 // directory each indexer's projects live in. If they drift, a changed indexer
 // silently keeps its stale carried-forward row instead of being re-measured,
 // which is the one failure mode the filter must not have. Pin the two
-// together: a change in every registered indexer's project directory must
-// select that indexer, in every scenario it exists in.
+// together: a change in some registered indexer's project directory must
+// select that indexer. Scenario by scenario would be stricter, but a scenario
+// only some tools implement — Solana — has directories for only those, and an
+// absent directory would then be indistinguishable from a stale mapping.
 for (const indexer of REGISTERED) {
-  for (const benchCase of CASES) {
-    if (UNSUPPORTED[benchCase]!.has(indexer)) continue;
-    const dirs = readdirSync(resolve(ROOT, "cases", benchCase));
-    const dir = dirs.find((d) => {
+  const selectable = CASES.some((benchCase) =>
+    readdirSync(resolve(ROOT, "cases", benchCase)).some((d) => {
       const picked =
         selectScope([`cases/${benchCase}/${d}/x`], CASES, INDEXERS).indexers[benchCase] ?? [];
       // A proper subset, so the whole-scenario fallback for a directory the
       // filter does not recognize cannot pass for a match.
       return picked.includes(indexer) && picked.length < INDEXERS.length;
-    });
-    if (!dir) {
-      console.error(
-        `FAIL registry: no directory under cases/${benchCase}/ selects "${indexer}" — ` +
-          `does select-scope.ts's INDEXER_DIRS know about it?`
-      );
-      failures++;
-    }
+    })
+  );
+  if (!selectable) {
+    console.error(
+      `FAIL registry: no directory in any scenario selects "${indexer}" — ` +
+        `does select-scope.ts's INDEXER_DIRS know about it?`
+    );
+    failures++;
   }
 }
 if (failures === 0) console.log(`ok registry: all ${REGISTERED.length} indexers selectable`);

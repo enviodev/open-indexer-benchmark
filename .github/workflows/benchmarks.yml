@@ -139,6 +139,24 @@ jobs:
             fi
           fi
 
+          # A scenario only runs the tools it has a project for. Without this a
+          # scenario no one has ported yet spawns a job per tool that fails on
+          # a missing directory, which reads as a broken benchmark rather than
+          # as an implementation nobody has written.
+          AVAILABLE=$(ALL_CASES="$CASES_JSON" ALL_INDEXERS="$INDEXERS_JSON" \
+            node scripts/case-indexers.ts)
+          echo "Available per scenario: $AVAILABLE"
+
+          # The summary reads SELECTED to tell a job that failed apart from one
+          # this run never asked for, so it has to be narrowed the same way the
+          # matrix is — otherwise a tool a scenario does not implement is
+          # reported as a job that produced nothing.
+          if [ -n "$SELECTED" ]; then
+            SELECTED=$(jq -cn --argjson sel "$SELECTED" --argjson avail "$AVAILABLE" \
+              'reduce ($sel | keys_unsorted[]) as $k ({};
+                 .[$k] = ($sel[$k] - ($sel[$k] - ($avail[$k] // []))))')
+          fi
+
           echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
           echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
           echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
@@ -153,6 +171,10 @@ jobs:
             else
               INDEXERS_N="$INDEXERS_JSON"
             fi
+            # Intersect with what the scenario implements, keeping order.
+            INDEXERS_N=$(jq -cn --argjson want "$INDEXERS_N" \
+              --argjson have "$(echo "$AVAILABLE" | jq -c --arg c "$CASE_N" '.[$c] // []')" \
+              '$want - ($want - $have)')
             echo "case$N=$CASE_N" >> "$GITHUB_OUTPUT"
             echo "indexers$N=$INDEXERS_N" >> "$GITHUB_OUTPUT"
           done

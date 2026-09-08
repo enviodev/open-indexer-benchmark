@@ -37,13 +37,22 @@ indexer.onInstruction(
 
 // Plain `transfer` carries no mint — its accounts are (source, destination,
 // authority) — so which token moved is only knowable from the transaction's
-// token balances. The source account's own activity answers it exactly; the
-// upstream package instead asks whether *any* balance in the transaction
-// carries the mint, which over-matches every swap that touches two tokens.
+// token balances. Either of the two token accounts answers it, since SPL Token
+// rejects a transfer between different mints, and reading only one of them
+// would miss the transfers whose account is opened and closed inside the same
+// transaction: such an account has no balance to report and appears in no
+// balance record. The upstream package instead asks whether *any* balance in
+// the transaction carries the mint, which over-matches every swap that touches
+// two tokens.
 indexer.onInstruction(
   { program: "SplToken", instruction: "transfer", fields },
   async ({ instruction, context }) => {
-    if (instruction.accounts.source.activity?.token?.mint !== MINT) return;
+    if (
+      instruction.accounts.source.activity?.token?.mint !== MINT &&
+      instruction.accounts.destination.activity?.token?.mint !== MINT
+    ) {
+      return;
+    }
 
     context.Transfer.set({
       id: `${instruction.transaction.signature}:${instruction.path.join(".")}`,

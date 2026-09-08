@@ -41,7 +41,7 @@
  * variants have no directory of their own at all — they run the Subgraph tool's
  * `subgraph/` project unchanged, so a change to it re-runs them too.
  */
-const INDEXER_DIRS: Record<string, string> = {
+export const INDEXER_DIRS: Record<string, string> = {
   "envio-rpc": "envio",
   "sqd-rpc": "sqd",
   "rindexer-hypersync": "rindexer",

@@ -27,17 +27,12 @@ export const caseConfig: SvmCaseConfig = {
   // walk to the head.
   throughputEndBlock: START_SLOT + 100_000,
 
+  // Tools without a project directory here are simply not implemented yet and
+  // are left out of the run. This one is a fact about the tool: HyperIndex
+  // reads Solana instructions through HyperSync, and its RPC source has no
+  // instruction handlers at all.
   unsupported: {
     "envio-rpc": "HyperIndex indexes Solana instructions through HyperSync only",
-    "envio-subgraph": "the Graph's subgraph manifest has no Solana equivalent",
-    "envio-subgraph-rpc": "the Graph's subgraph manifest has no Solana equivalent",
-    ponder: "EVM only",
-    rindexer: "EVM only",
-    "rindexer-hypersync": "EVM only",
-    subgraph: "Graph Node does not index Solana",
-    subquery: "supports Solana, no implementation in this repository yet",
-    sqd: "supports Solana, no implementation in this repository yet",
-    "sqd-rpc": "SQD reads Solana through its Portal, not RPC",
   },
 
   entities: [

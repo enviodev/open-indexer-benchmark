@@ -83,9 +83,16 @@ async function assertSlotRetained(token: string, slot: number): Promise<void> {
  * `transferChecked` names its mint in account slot 1, so it is filtered
  * server-side. Plain `transfer` does not name a mint at all — its accounts are
  * (source, destination, authority) — so every one of them is read and then kept
- * only if the transaction's token balances show the source account holding
- * `mint`. That is the same resolution the indexers perform, and the only one
- * available: which token moved is simply not in the instruction.
+ * only if the transaction's token balances show one of its two token accounts
+ * holding `mint`. That is the same resolution the indexers perform, and the
+ * only one available: which token moved is simply not in the instruction.
+ *
+ * Either side answers it, because SPL Token rejects a transfer whose accounts
+ * hold different mints. Reading only the source would miss the transfers whose
+ * source is opened and closed inside the same transaction: such an account has
+ * no balance to report before or after, so it appears in no balance record at
+ * all. Over a 100-slot sample that is 538 of 4,266 unchecked transfers, 12 of
+ * which the destination rescues.
  */
 export async function fetchSplTransfers(opts: {
   token: string;
@@ -169,12 +176,12 @@ export async function fetchSplTransfers(opts: {
   for (const instruction of instructions) {
     const checked = instruction.data.startsWith("0c");
     const source = instruction.a0;
-    if (
-      !checked &&
-      !holdsMint.has(
-        `${instruction.slot}:${instruction.transaction_index}:${source}`
-      )
-    ) {
+    const destination = checked ? instruction.a2 : instruction.a1;
+    const inTransaction = (account: string) =>
+      holdsMint.has(
+        `${instruction.slot}:${instruction.transaction_index}:${account}`
+      );
+    if (!checked && !inTransaction(source) && !inTransaction(destination)) {
       continue;
     }
 
@@ -195,7 +202,7 @@ export async function fetchSplTransfers(opts: {
       // Both layouts put the amount straight after the one-byte tag.
       amount: u64At(instruction.data, 1),
       source,
-      destination: checked ? instruction.a2 : instruction.a1,
+      destination,
       signer: (checked ? instruction.a3 : instruction.a2) ?? "",
       checked,
     });
