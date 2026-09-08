@@ -53,12 +53,26 @@ than a heuristic every implementation would have to reproduce identically.
 - **Envio** — [envio/](./envio/) — also the reference the ground truth is
   snapshotted from
 - **Squid SDK** — [sqd/](./sqd/) — reads the SQD Portal
+- **Carbon** — [carbon/](./carbon/) — reads plain RPC, run locally
 
 A scenario runs the tools it has a project directory for. SubQuery also indexes
 Solana and has no implementation here yet; every other tool in the benchmark is
 EVM-only. The two RPC rows are listed as unsupported rather than missing:
 HyperIndex indexes Solana slots over RPC but not instructions, and SQD serves
 Solana only through its Portal.
+
+Carbon reads every block in the range over plain RPC, and there is no shared
+Solana endpoint here the way HyperRPC serves the EVM rows. Its row is therefore
+measured by hand against an archive node and committed, rather than published
+by CI:
+
+```bash
+ENVIO_API_TOKEN=your-token SOLANA_RPC_URL=https://your-archive-endpoint \
+  node scripts/run-local.ts solana-spl-transfers --commit
+```
+
+That runs every implementation the scenario has, renders the table with the
+same module CI uses, and writes it into the root README.
 
 ## Running the Benchmark
 

@@ -85,6 +85,7 @@ const LIB_MODULE_CASES: Record<string, string[]> = {
 const PIPELINE_SCRIPTS = new Set([
   "scripts/select-scope.ts",
   "scripts/build-tables.ts",
+  "scripts/case-indexers.ts",
 ]);
 
 /**
@@ -100,6 +101,7 @@ const LOCAL_SCRIPTS = new Set([
   "scripts/test-verification.ts",
   "scripts/run-benchmarks.ts",
   "scripts/generate-expected.ts",
+  "scripts/run-local.ts",
 ]);
 
 /** True for a file that cannot change what a benchmark run measures. */

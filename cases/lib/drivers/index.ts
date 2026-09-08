@@ -1,6 +1,7 @@
 // The indexers the benchmark knows how to drive, and how each is presented.
 
 import type { DriverFactory } from "./common.ts";
+import { carbonDriver } from "./carbon.ts";
 import { envioDriver } from "./envio.ts";
 import { envioSubgraphDriver } from "./envio-subgraph.ts";
 import { ponderDriver } from "./ponder.ts";
@@ -24,6 +25,7 @@ export const DRIVERS: Record<string, DriverFactory> = {
   subquery: subqueryDriver,
   sqd: sqdDriver("network"),
   "sqd-rpc": sqdDriver("rpc"),
+  carbon: carbonDriver,
 };
 
 export const INDEXERS = Object.keys(DRIVERS);
@@ -35,6 +37,9 @@ const ENVIO_SUBGRAPH_URL =
   "https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph";
 const SQD_SDK_URL = "https://sqd.dev/sdk/";
 const SQD_NETWORK_URL = "https://docs.sqd.dev/en/network/overview";
+/** Carbon's Solana row reads a plain archive node rather than a shared
+ *  endpoint of the benchmark's, so the source links to the RPC spec itself. */
+const SOLANA_RPC_URL = "https://solana.com/docs/rpc";
 
 /**
  * How each tool is presented: its display name, and which network it reads
@@ -126,6 +131,13 @@ export const TOOLS: Record<
     toolUrl: SQD_SDK_URL,
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
+    storage: "Postgres",
+  },
+  carbon: {
+    name: "Carbon",
+    toolUrl: "https://github.com/sevenlabs-hq/carbon",
+    source: "RPC",
+    sourceUrl: SOLANA_RPC_URL,
     storage: "Postgres",
   },
   subquery: {

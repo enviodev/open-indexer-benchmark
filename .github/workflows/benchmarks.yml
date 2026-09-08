@@ -71,7 +71,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ -z "$INDEXERS" ]; then
-            INDEXERS_JSON='["envio","envio-rpc","envio-subgraph","envio-subgraph-rpc","ponder","rindexer","rindexer-hypersync","subgraph","subquery","sqd","sqd-rpc"]'
+            # Every registered indexer, whether or not a scenario runs it: the
+            # per-scenario intersection below is what decides that, and a name
+            # missing from here would silently never get a job.
+            INDEXERS_JSON='["envio","envio-rpc","envio-subgraph","envio-subgraph-rpc","ponder","rindexer","rindexer-hypersync","subgraph","subquery","sqd","sqd-rpc","carbon"]'
           else
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi

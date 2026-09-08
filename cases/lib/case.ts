@@ -62,6 +62,13 @@ interface CommonCaseConfig {
    * should be visible in the table, not quietly absent from it.
    */
   unsupported?: Record<string, string>;
+  /**
+   * Tools this scenario runs only when it is run by hand. A row that needs an
+   * endpoint the project pays for by the request has no business in a run that
+   * fires on every push, so CI leaves these out and `scripts/run-local.ts`
+   * puts them back.
+   */
+  localOnly?: string[];
   /** Entities checked against the ground truth. */
   entities: EntitySpec[];
   /**
