@@ -122,6 +122,17 @@ What happens when you do not know the contracts up front? The indexer watches th
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
 
 
+### Solana Token Transfers
+
+Solana's busiest program, from the outside. Every USDC transfer runs through the SPL Token program — but the instruction most of them use is `transferChecked`, and the rest use `transfer`, which never says which token moved. Nearly half the transfers are only attributable by reading the transaction's token balances, and two thirds of them are inner instructions of a swap or a router, so an indexer watching only the top level misses most of the chain. The scenario follows StreamingFast's [SPL token Substreams](https://github.com/streamingfast/substreams-solana-spl-token).
+
+<!-- BENCHMARK:solana-spl-transfers:START -->
+_Not measured yet — the next run on `main` publishes the table here._
+<!-- BENCHMARK:solana-spl-transfers:END -->
+
+[How this case works, and how to run it →](./cases/solana-spl-transfers/README.md)
+
+
 ## Sentio Benchmark Cases, May 2025
 
 Six scenarios from the original 2025 research, kept here for reference. They are total sync times rather than throughput rates, and they predate the current methodology, so do not compare them with the tables above.

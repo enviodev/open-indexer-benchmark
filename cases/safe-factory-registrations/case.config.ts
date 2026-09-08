@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CaseConfig } from "../lib/case.ts";
+import type { EvmCaseConfig } from "../lib/case.ts";
 import {
   canonicalRow,
   encodeAddress,
@@ -225,7 +225,7 @@ function paymentEvent(key: string, label: string, table: string): EntitySpec {
   };
 }
 
-export const caseConfig: CaseConfig = {
+export const caseConfig: EvmCaseConfig = {
   name: "safe-factory-registrations",
   title: "Factory Contract Registration",
   dir: dirname(fileURLToPath(import.meta.url)),

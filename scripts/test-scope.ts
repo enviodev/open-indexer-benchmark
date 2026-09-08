@@ -21,6 +21,17 @@ const CASES = readdirSync(resolve(ROOT, "cases"))
   .sort();
 const INDEXERS = [...REGISTERED];
 
+/**
+ * Tools a scenario declares it cannot run. They have no project directory in
+ * it — that is what being unsupported means — so the registry pin below has
+ * nothing to look for and would otherwise report the absence as drift.
+ */
+const UNSUPPORTED: Record<string, Set<string>> = {};
+for (const benchCase of CASES) {
+  const mod = await import(resolve(ROOT, "cases", benchCase, "case.config.ts"));
+  UNSUPPORTED[benchCase] = new Set(Object.keys(mod.caseConfig.unsupported ?? {}));
+}
+
 /** The given indexers, in every scenario — what a repo-wide change selects. */
 const inEvery = (indexers: string[]) =>
   Object.fromEntries(CASES.map((c) => [c, indexers]));
@@ -96,6 +107,7 @@ function check(name: string, changed: string[], expected: Record<string, string[
 // select that indexer, in every scenario it exists in.
 for (const indexer of REGISTERED) {
   for (const benchCase of CASES) {
+    if (UNSUPPORTED[benchCase]!.has(indexer)) continue;
     const dirs = readdirSync(resolve(ROOT, "cases", benchCase));
     const dir = dirs.find((d) => {
       const picked =

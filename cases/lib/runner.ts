@@ -32,7 +32,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { fetchCaseLogs, type CaseConfig } from "./case.ts";
+import { buildGroundTruth, type CaseConfig } from "./case.ts";
 import type { Expected } from "./checksum.ts";
 import {
   DRIVERS,
@@ -451,8 +451,7 @@ async function benchmarkIndexer(
       ? {
           fetchExpectedRows: async () => {
             console.log("  Mismatch found — rebuilding ground truth to diff it...");
-            const logs = await fetchCaseLogs(config, apiToken);
-            return config.computeExpected(logs).entities;
+            return (await buildGroundTruth(config, apiToken)).entities;
           },
         }
       : {}
