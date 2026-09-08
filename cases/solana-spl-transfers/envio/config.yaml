@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=./node_modules/envio/svm.schema.json
+name: spl-token-transfers
+description: SPL Token transfers of a single mint
+ecosystem: svm
+chains:
+  - id: solana
+    start_block: 440000000
+    end_block: ${ENVIO_END_BLOCK:-440001999}
+    experimental:
+      programs:
+        - name: SplToken
+          program_id: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+          instructions:
+            # Layouts are the SPL Token program's own: a one-byte tag, then the
+            # Borsh arguments. `transferChecked` names the mint it moves;
+            # `transfer` does not, which is what the handler has to work around.
+            - name: transfer
+              discriminator: "0x03"
+              accounts: [source, destination, authority]
+              args:
+                - { name: amount, type: u64 }
+            - name: transferChecked
+              discriminator: "0x0c"
+              accounts: [source, mint, destination, authority]
+              args:
+                - { name: amount, type: u64 }
+                - { name: decimals, type: u8 }
