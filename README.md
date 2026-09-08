@@ -122,7 +122,7 @@ What happens when you do not know the contracts up front? The indexer watches th
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
 
 
-### Solana Token Transfers
+### Solana USDC Transfers
 
 Solana's busiest program, from the outside. Every USDC transfer runs through the SPL Token program — but the instruction most of them use is `transferChecked`, and the rest use `transfer`, which never says which token moved. Nearly half the transfers are only attributable by reading the transaction's token balances, and two thirds of them are inner instructions of a swap or a router, so an indexer watching only the top level misses most of the chain. The scenario follows StreamingFast's [SPL token Substreams](https://github.com/streamingfast/substreams-solana-spl-token).
 

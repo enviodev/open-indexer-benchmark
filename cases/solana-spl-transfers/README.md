@@ -1,4 +1,4 @@
-# Solana Token Transfers
+# Solana USDC Transfers
 
 Index every USDC transfer made through the SPL Token program on Solana from
 slot 440,000,000. Write one row per transfer.
@@ -13,6 +13,10 @@ holding the amount, the two token accounts and the signer.
 - **Program**: SPL Token (`TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`)
 - **Mint**: USD Coin (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`)
 - **Instructions Indexed**: `transfer` (`0x03`) and `transferChecked` (`0x0c`)
+  — every instruction that moves USDC between accounts. Issuance (`mintTo`) and
+  redemption (`burn`) change the supply rather than move a balance between
+  holders, and are out of scope; over a 200-slot sample they amount to one
+  instruction.
 - **Slot Range**: 440,000,000 to latest
 - **Verification Range**: 440,000,000 to 440,001,999 — 60,175 transfers
 - **Features**: `instruction decoding`, `inner instructions`, `transaction metadata join`
@@ -114,6 +118,12 @@ above is what rules the class out; the measurement is what confirmed it.
 Instructions from failed transactions never reach the indexers — a query
 filtered on `tx_success: false` returns nothing over this range — so no
 reverted transfer is counted.
+
+USDC lives entirely on the classic SPL Token program: across 200 slots no
+Token-2022 instruction names the mint, and every USDC token account reports
+`TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` as its owning program. So one
+program is the whole story for this token, which is not true of every mint on
+Solana.
 
 The slot range is pinned inside HyperSync's Solana retention window, which
 currently reaches back to slot 391,000,000 — a request below the floor is

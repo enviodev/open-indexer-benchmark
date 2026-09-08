@@ -14,7 +14,7 @@ const VERIFY_END_SLOT = 440_001_999;
 
 export const caseConfig: SvmCaseConfig = {
   name: "solana-spl-transfers",
-  title: "Solana Token Transfers",
+  title: "Solana USDC Transfers",
   dir: dirname(fileURLToPath(import.meta.url)),
   startBlock: START_SLOT,
   verifyEndBlock: VERIFY_END_SLOT,
