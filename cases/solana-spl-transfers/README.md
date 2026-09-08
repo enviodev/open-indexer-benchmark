@@ -48,12 +48,13 @@ than a heuristic every implementation would have to reproduce identically.
 
 - **Envio** — [envio/](./envio/) — also the reference the ground truth is
   snapshotted from
+- **Squid SDK** — [sqd/](./sqd/) — reads the SQD Portal
 
-A scenario runs the tools it has a project directory for, so the table holds
-one row until more land. SubQuery and the Squid SDK both index Solana; every
-other tool in the benchmark is EVM-only. HyperIndex's own RPC source is listed
-as unsupported rather than missing — it indexes Solana slots, not
-instructions.
+A scenario runs the tools it has a project directory for. SubQuery also indexes
+Solana and has no implementation here yet; every other tool in the benchmark is
+EVM-only. The two RPC rows are listed as unsupported rather than missing:
+HyperIndex indexes Solana slots over RPC but not instructions, and SQD serves
+Solana only through its Portal.
 
 ## Running the Benchmark
 

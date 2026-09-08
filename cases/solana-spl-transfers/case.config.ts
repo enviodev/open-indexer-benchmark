@@ -31,6 +31,7 @@ export const caseConfig: SvmCaseConfig = {
   // instruction handlers at all.
   unsupported: {
     "envio-rpc": "HyperIndex indexes Solana instructions through HyperSync only",
+    "sqd-rpc": "SQD serves Solana through its Portal, not RPC",
   },
 
   entities: [
