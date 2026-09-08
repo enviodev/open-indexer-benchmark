@@ -12,10 +12,18 @@ stayed on Carbon 1 and is not built in the Carbon 2 workspace.
 
 It fetches every block in the range whole, so unlike the other implementations
 of this scenario nothing about the mint narrows what arrives — that is the
-shape of RPC indexing, and it is what the row measures. Concurrency and the
-block interval are left at Carbon's defaults; the block config asks for base64
-encoding, no rewards, and version 0 support, which is what keeps the payload to
-what the decoder needs.
+shape of RPC indexing, and it is what the row measures. The block config asks
+for base64 encoding, no rewards, and version 0 support, which keeps the payload
+to what the decoder needs.
+
+**Concurrency is set to 50 `getBlock` calls in flight**, against Carbon's own
+default of 10. Ten is a client's conservative choice rather than a property of
+RPC: at ten this crawler managed 10 blocks/s — about a second per round trip —
+and the scenario's 4,000-slot range alone would take longer than the benchmark
+allows a verification run. Fifty is what a deployment against a dedicated node
+would reasonably ask for. It is the single number the row's rate is most
+sensitive to, so it is stated here and in `src/main.rs` rather than left to a
+default.
 
 ### Mint resolution
 
@@ -54,6 +62,15 @@ START_SLOT=440000000 END_SLOT=440001999 \
 The endpoint has to be an archive node: the range is roughly five million slots
 behind the head, which a default-retention node no longer holds. Keys usually
 live in the URL, so keep yours in `.env`, which is gitignored.
+
+### Measured
+
+Over the scenario's 4,000-slot verification range against an archive node:
+260.7s, 15.3 blocks/s, 457.1 events/s, all 119,152 transfers matching the
+ground truth. Concurrency is what that rate is most sensitive to and it is not
+the whole story — ten concurrent requests gave 10 blocks/s and fifty gave 15,
+so the endpoint rather than the client is the limit here. The range takes most
+of the benchmark's five-minute allowance for a verification run.
 
 ### Pins
 

@@ -17,7 +17,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildTable } from "../cases/lib/table.ts";
+import { buildTable, parsePublishedTable, rowKey } from "../cases/lib/table.ts";
 import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
 import { INDEXERS } from "../cases/lib/drivers/index.ts";
 import { INDEXER_DIRS } from "./select-scope.ts";
@@ -75,9 +75,19 @@ if (results.length === 0) {
   process.exit(1);
 }
 
-const table = buildTable(results.map(toTableRow));
 const readmePath = resolve(ROOT, "README.md");
 const readme = readFileSync(readmePath, "utf8");
+
+// Rows this run produced win; anything already published that it did not
+// re-measure is kept and marked stale. Rebuilding from fresh rows alone would
+// delete a tool's row whenever the run was narrowed to one indexer, or
+// whenever one of them failed.
+const rows = results.map(toTableRow);
+const fresh = new Set(rows.map(rowKey));
+for (const prior of parsePublishedTable(readme, benchCase)) {
+  if (!fresh.has(rowKey(prior))) rows.push({ ...prior, carriedOver: true });
+}
+const table = buildTable(rows);
 const start = `<!-- BENCHMARK:${benchCase}:START -->`;
 const end = `<!-- BENCHMARK:${benchCase}:END -->`;
 const from = readme.indexOf(start);

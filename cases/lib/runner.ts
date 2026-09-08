@@ -116,6 +116,8 @@ async function cleanup() {
 interface PhaseOutcome {
   blocks: number;
   events: number;
+  /** Rows committed, where the driver reports them apart from `events`. */
+  rows?: number;
   elapsedS: number;
   /** Reached the end block (or the expected event count) before running out of time. */
   completed: boolean;
@@ -155,7 +157,12 @@ async function runPhase(
    */
   const reachedTarget = (s: Snapshot) =>
     (s.blocks >= targetBlocks || s.events >= targetEvents) &&
-    (s.rows === undefined || s.rows >= targetEvents);
+    // The throughput window has no event target, so there is no row count to
+    // hold it to; requiring one would mean a window that reached its end block
+    // never counted as finished, and every sample from it was discarded.
+    (targetEvents === Number.POSITIVE_INFINITY ||
+      s.rows === undefined ||
+      s.rows >= targetEvents);
 
   // Progress is read as an absolute position, so anything left over from a
   // previous phase would be counted as work done in this one. Every driver is
@@ -249,7 +256,13 @@ async function runPhase(
   const elapsedS = (performance.now() - startedAt) / 1_000;
   const completed = reachedTarget(last);
 
-  return { blocks: last.blocks, events: last.events, elapsedS, completed };
+  return {
+    blocks: last.blocks,
+    events: last.events,
+    rows: last.rows,
+    elapsedS,
+    completed,
+  };
 }
 
 // ── Benchmark ──────────────────────────────────────────────────────────
@@ -266,11 +279,16 @@ async function runPhase(
  * case, and nothing is extrapolated from it.
  */
 function coverageOf(run: PhaseOutcome, expected: Expected) {
+  // Rows where a driver reports them: a run that timed out can have a progress
+  // counter ahead of what was committed, and both the share this reports and
+  // the database size scaled from it are about the rows that are actually
+  // there to verify.
+  const indexed = run.rows ?? run.events;
   const indexedShare =
-    expected.totalEvents > 0 ? Math.min(1, run.events / expected.totalEvents) : 0;
+    expected.totalEvents > 0 ? Math.min(1, indexed / expected.totalEvents) : 0;
   return {
     indexedShare,
-    indexedNothing: run.blocks <= 0 && run.events <= 0,
+    indexedNothing: run.blocks <= 0 && indexed <= 0,
   };
 }
 

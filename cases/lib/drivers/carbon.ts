@@ -1,6 +1,6 @@
 import { type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
-import { exec, kill, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -39,6 +39,8 @@ export const carbonDriver: DriverFactory = ({ config, endBlock }) => {
 
   let processor: ChildProcess | null = null;
   let done = false;
+  /** Only tear down a database this driver brought up. */
+  let startedContainer = false;
 
   // The row carries its own slot, so progress is read from the column rather
   // than parsed back out of the id.
@@ -52,10 +54,25 @@ export const carbonDriver: DriverFactory = ({ config, endBlock }) => {
       // measuring rustc's choices rather than Carbon's.
       await exec("cargo", ["build", "--release"], dir, env);
 
-      console.log("Starting PostgreSQL database...\n");
-      await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
-      await exec("docker", ["compose", "up", "-d"], dir, env);
-      await waitPg(CARBON_DB_URL, "SELECT 1");
+      // This row is measured by hand, so a Postgres already listening on the
+      // port is taken as one someone put there on purpose — a machine without a
+      // Docker daemon can still run the scenario. The table is dropped rather
+      // than the volume, which is what the container path achieves by recreating
+      // it; the indexer creates it again on startup.
+      const existing = await waitPg(CARBON_DB_URL, "SELECT 1", 2_000).then(
+        () => true,
+        () => false
+      );
+      if (existing) {
+        console.log("Using the PostgreSQL already listening on this port...\n");
+        await psql(CARBON_DB_URL, "DROP TABLE IF EXISTS transfer");
+      } else {
+        console.log("Starting PostgreSQL database...\n");
+        await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
+        await exec("docker", ["compose", "up", "-d"], dir, env);
+        await waitPg(CARBON_DB_URL, "SELECT 1");
+      }
+      startedContainer = !existing;
     },
     async launch() {
       // The binary creates its own table on startup, so there is no migration
@@ -78,6 +95,7 @@ export const carbonDriver: DriverFactory = ({ config, endBlock }) => {
       processor = null;
     },
     async cleanup() {
+      if (!startedContainer) return;
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
     },
     exited: () => done,

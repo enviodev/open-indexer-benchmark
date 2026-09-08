@@ -35,6 +35,34 @@ const BATCH_ROWS: usize = 500;
 /// is never left sitting in memory.
 const FLUSH_INTERVAL: Duration = Duration::from_millis(250);
 
+/// How many `getBlock` calls are in flight at once.
+///
+/// Carbon's own default is 10, which is a client's conservative choice rather
+/// than a property of RPC: at ten this crawler managed 10 blocks/s, about one
+/// second per round trip, and the scenario's range alone would then take longer
+/// than the benchmark allows a verification run. Fifty is what a production
+/// deployment against a dedicated node would reasonably ask for, and it is
+/// stated here rather than left implicit because the row's rate is a function
+/// of it.
+const MAX_CONCURRENT_REQUESTS: usize = 50;
+
+/// How much either of Carbon's two queues may hold: the crawler's own, between
+/// fetching a block and decoding it, and the pipeline's, between the datasource
+/// and the processors.
+///
+/// Both default to 1,000, sized for the default concurrency of 10. Raising the
+/// concurrency without raising them lets the fetcher outrun the processors: the
+/// queue fills, and the datasource logs
+/// `Error sending transaction update: "Full(..)"` and **drops the update**. It
+/// is not backpressure, it is silent data loss — at fifty concurrent requests
+/// and the defaults a run wrote 119,083 of 119,152 transfers — so concurrency
+/// and both buffers are set together and the run is verified against a
+/// checksum that would catch it either way.
+const CHANNEL_BUFFER: usize = 100_000;
+
+/// How many times a batch is retried before the run is failed.
+const WRITE_ATTEMPTS: usize = 3;
+
 #[derive(Debug)]
 struct Row {
     id: String,
@@ -107,14 +135,18 @@ async fn main() -> CarbonResult<()> {
             commitment: Some(CommitmentConfig::confirmed()),
             ..Default::default()
         },
-        None, // max concurrent requests: Carbon's default
-        None, // channel buffer: Carbon's default
+        Some(MAX_CONCURRENT_REQUESTS),
+        Some(CHANNEL_BUFFER),
     );
 
     Pipeline::builder()
         .datasource(datasource)
+        .channel_buffer_size(CHANNEL_BUFFER)
         .metrics(Arc::new(LogMetrics::new()))
-        .instruction(TokenProgramDecoder, TransferProcessor { sender })
+        .instruction(
+            TokenProgramDecoder,
+            TransferProcessor { sender, cached: None },
+        )
         .build()?
         .run()
         .await?;
@@ -127,6 +159,66 @@ async fn main() -> CarbonResult<()> {
 
 struct TransferProcessor {
     sender: mpsc::Sender<Row>,
+    /// The last transaction's resolved account keys and which of them hold the
+    /// tracked mint. Instructions arrive grouped by transaction, so one entry
+    /// answers nearly every lookup; without it each unchecked transfer walked
+    /// the whole account list and base58-encoded every key, which was slow
+    /// enough to back the crawler's channel up and make it drop blocks.
+    cached: Option<TransactionMints>,
+}
+
+struct TransactionMints {
+    key: (u64, u64),
+    accounts: Vec<[u8; 32]>,
+    holding: Vec<bool>,
+}
+
+impl TransactionMints {
+    fn of(metadata: &TransactionMetadata) -> Self {
+        let mut accounts: Vec<[u8; 32]> = metadata
+            .message
+            .static_account_keys()
+            .iter()
+            .map(|key| key.to_bytes())
+            .collect();
+        // Token balances index into the message's own keys followed by the
+        // writable and readonly addresses its lookup tables loaded. Without the
+        // second half a transfer whose account came from a lookup table would
+        // read as a transfer of some other token.
+        for key in &metadata.meta.loaded_addresses.writable {
+            accounts.push(key.to_bytes());
+        }
+        for key in &metadata.meta.loaded_addresses.readonly {
+            accounts.push(key.to_bytes());
+        }
+
+        let mut holding = vec![false; accounts.len()];
+        for balances in [&metadata.meta.pre_token_balances, &metadata.meta.post_token_balances]
+            .into_iter()
+            .flatten()
+        {
+            for balance in balances {
+                if balance.mint == MINT {
+                    if let Some(slot) = holding.get_mut(balance.account_index as usize) {
+                        *slot = true;
+                    }
+                }
+            }
+        }
+
+        Self {
+            key: (metadata.slot, metadata.index.unwrap_or_default()),
+            accounts,
+            holding,
+        }
+    }
+
+    fn holds(&self, account: &[u8; 32]) -> bool {
+        self.accounts
+            .iter()
+            .position(|key| key == account)
+            .is_some_and(|index| self.holding[index])
+    }
 }
 
 impl Processor<InstructionProcessorInputType<'_, TokenProgramInstruction>> for TransferProcessor {
@@ -157,8 +249,13 @@ impl Processor<InstructionProcessorInputType<'_, TokenProgramInstruction>> for T
             // source would lose the transfers whose source the transaction
             // itself opened — such an account has no balance before it.
             TokenProgramInstruction::Transfer { data, accounts, .. } => {
-                if !holds_mint(metadata, &accounts.source.to_string())
-                    && !holds_mint(metadata, &accounts.destination.to_string())
+                let key = (metadata.slot, metadata.index.unwrap_or_default());
+                if self.cached.as_ref().is_none_or(|cached| cached.key != key) {
+                    self.cached = Some(TransactionMints::of(metadata));
+                }
+                let mints = self.cached.as_ref().expect("just populated");
+                if !mints.holds(&accounts.source.to_bytes())
+                    && !mints.holds(&accounts.destination.to_bytes())
                 {
                     return Ok(());
                 }
@@ -183,8 +280,16 @@ impl Processor<InstructionProcessorInputType<'_, TokenProgramInstruction>> for T
 
         let row = Row {
             // Leading with the slot so progress can be read straight off the
-            // id, the way it is for every other scenario here.
-            id: format!("{}-{}-{}", metadata.slot, metadata.signature, path),
+            // id. Every implementation of this case keys rows the same way: the
+            // key is stored and indexed, so implementations that disagree about
+            // it make the storage column compare primary keys rather than
+            // indexers.
+            id: format!(
+                "{}-{}-{}",
+                metadata.slot,
+                metadata.index.unwrap_or_default(),
+                path
+            ),
             amount,
             source: source.to_string(),
             destination: destination.to_string(),
@@ -201,47 +306,6 @@ impl Processor<InstructionProcessorInputType<'_, TokenProgramInstruction>> for T
             .map_err(|e| carbon_core::error::Error::Custom(format!("row writer stopped: {e}")))?;
         Ok(())
     }
-}
-
-/// The transaction's account keys as text, in the order token balances index
-/// them: the message's own keys, then the writable and readonly addresses its
-/// lookup tables loaded. A transfer whose account comes from a lookup table is
-/// only findable because of the second half.
-fn account_keys(metadata: &TransactionMetadata) -> Vec<String> {
-    let mut keys: Vec<String> = metadata
-        .message
-        .static_account_keys()
-        .iter()
-        .map(|key| key.to_string())
-        .collect();
-    for key in &metadata.meta.loaded_addresses.writable {
-        keys.push(key.to_string());
-    }
-    for key in &metadata.meta.loaded_addresses.readonly {
-        keys.push(key.to_string());
-    }
-    keys
-}
-
-/// Whether `account` holds the tracked mint anywhere in the transaction's
-/// balances — before it, after it, or both.
-fn holds_mint(metadata: &TransactionMetadata, account: &str) -> bool {
-    let keys = account_keys(metadata);
-    let Some(index) = keys.iter().position(|key| key == account) else {
-        return false;
-    };
-
-    let matches = |balances: &Option<Vec<_>>| {
-        balances.as_ref().is_some_and(|balances: &Vec<_>| {
-            balances
-                .iter()
-                .any(|b: &solana_transaction_status::TransactionTokenBalance| {
-                    b.account_index as usize == index && b.mint == MINT
-                })
-        })
-    };
-
-    matches(&metadata.meta.pre_token_balances) || matches(&metadata.meta.post_token_balances)
 }
 
 async fn write_rows(pool: PgPool, mut receiver: mpsc::Receiver<Row>) {
@@ -274,6 +338,28 @@ async fn flush(pool: &PgPool, batch: &mut Vec<Row>) {
         return;
     }
 
+    // The batch is only dropped once it is in the database. Clearing it after a
+    // failed insert would lose those transfers silently, and the run would go on
+    // to report success over a table with holes in it.
+    for attempt in 1..=WRITE_ATTEMPTS {
+        match insert(pool, batch).await {
+            Ok(()) => {
+                batch.clear();
+                return;
+            }
+            Err(e) if attempt < WRITE_ATTEMPTS => {
+                log::warn!("write of {} rows failed ({e}); retrying", batch.len());
+                tokio::time::sleep(Duration::from_millis(250 * attempt as u64)).await;
+            }
+            Err(e) => panic!(
+                "failed to write {} rows after {WRITE_ATTEMPTS} attempts: {e}",
+                batch.len()
+            ),
+        }
+    }
+}
+
+async fn insert(pool: &PgPool, batch: &[Row]) -> Result<(), sqlx::Error> {
     let mut query = QueryBuilder::new(
         "INSERT INTO transfer \
          (id, amount, source, destination, signer, tx_signature, checked, slot, timestamp) ",
@@ -295,9 +381,5 @@ async fn flush(pool: &PgPool, batch: &mut Vec<Row>) {
     // An instruction can be delivered more than once across a restart; the id
     // is what makes that harmless.
     query.push(" ON CONFLICT (id) DO NOTHING");
-
-    if let Err(e) = query.build().execute(pool).await {
-        log::error!("failed to write {} rows: {e}", batch.len());
-    }
-    batch.clear();
+    query.build().execute(pool).await.map(|_| ())
 }

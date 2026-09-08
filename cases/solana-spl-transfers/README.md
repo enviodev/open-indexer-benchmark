@@ -53,7 +53,8 @@ than a heuristic every implementation would have to reproduce identically.
 - **Envio** — [envio/](./envio/) — also the reference the ground truth is
   snapshotted from
 - **Squid SDK** — [sqd/](./sqd/) — reads the SQD Portal
-- **Carbon** — [carbon/](./carbon/) — reads plain RPC, run locally
+- **Carbon** — [carbon/](./carbon/) — reads plain RPC at 50 concurrent
+  `getBlock` calls, run locally
 
 A scenario runs the tools it has a project directory for. SubQuery also indexes
 Solana and has no implementation here yet; every other tool in the benchmark is

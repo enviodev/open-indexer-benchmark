@@ -127,7 +127,9 @@ What happens when you do not know the contracts up front? The indexer watches th
 Solana's busiest program, from the outside. Every USDC transfer runs through the SPL Token program — but the instruction most of them use is `transferChecked`, and the rest use `transfer`, which never says which token moved. Nearly half the transfers are only attributable by reading the transaction's token balances, and two thirds of them are inner instructions of a swap or a router, so an indexer watching only the top level misses most of the chain. The scenario follows StreamingFast's [SPL token Substreams](https://github.com/streamingfast/substreams-solana-spl-token).
 
 <!-- BENCHMARK:solana-spl-transfers:START -->
-_Not measured yet — the next run on `main` publishes the table here._
+| tool | source | events/s | blocks/s | vs best | data | storage |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Carbon](https://github.com/sevenlabs-hq/carbon) | [RPC](https://solana.com/docs/rpc) | 457.1 | 15.3 | — | ✅ | Postgres 40.5 MB |
 <!-- BENCHMARK:solana-spl-transfers:END -->
 
 [How this case works, and how to run it →](./cases/solana-spl-transfers/README.md)

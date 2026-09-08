@@ -45,18 +45,18 @@ jobs:
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
-      # Only pull requests diff and run the filter; `main` and dispatch runs
-      # are always full, so they keep setup down to the one shell step.
+      # Needed on every event: the step below runs scripts/case-indexers.ts to
+      # work out which tools each scenario implements, whether or not the run
+      # is a pull request. Only the diff-based scope filter is pull-request
+      # only, and that is what the full history is for.
       - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request'
         with:
           # The pull request scope comes from `git diff` against the base
           # commit, which a shallow clone does not have.
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
           persist-credentials: false
 
       - uses: actions/setup-node@v4
-        if: github.event_name == 'pull_request'
         with:
           node-version: 24
 
