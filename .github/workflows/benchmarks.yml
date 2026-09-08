@@ -76,7 +76,12 @@ jobs:
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations","solana-spl-transfers"]'
+            # Narrowed to the Solana scenario while it is being brought up: the
+            # EVM scenarios are unaffected by that work and each full run is
+            # eleven long jobs against shared endpoints. Uncomment the first
+            # line and drop the second to benchmark everything again.
+            # CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations","solana-spl-transfers"]'
+            CASES_JSON='["solana-spl-transfers"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
