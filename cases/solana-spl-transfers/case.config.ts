@@ -1,11 +1,9 @@
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SvmCaseConfig } from "../lib/case.ts";
 import { canonicalRow, encodeAmount, encodeBase58, encodeSeconds } from "../lib/checksum.ts";
-import { fetchSplTransfers } from "../lib/hypersync-svm.ts";
-
-/** USD Coin. */
-const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+import { snapshotEnvioRows } from "../lib/envio-snapshot.ts";
+import { assertSlotRetained } from "../lib/hypersync-svm-retention.ts";
 
 const START_SLOT = 440_000_000;
 
@@ -54,36 +52,42 @@ export const caseConfig: SvmCaseConfig = {
     },
   ],
 
+  // The rows come from running the Envio project over the range — the case's
+  // reference implementation — rather than from a second reading of the chain.
+  // Which token a plain `transfer` moved is only knowable by joining the
+  // transaction's balances, and writing that twice would leave two answers to
+  // keep in step. What is committed is the snapshot; see ../lib/envio-snapshot.ts
+  // for what that does and does not prove.
   async buildGroundTruth(token, onProgress) {
-    const transfers = await fetchSplTransfers({
-      token,
-      mint: MINT,
-      fromSlot: START_SLOT,
-      toSlot: VERIFY_END_SLOT,
-      onProgress,
-    });
-    if (transfers.length === 0) {
+    await assertSlotRetained(token, START_SLOT);
+
+    const rows = await snapshotEnvioRows(
+      resolve(dirname(fileURLToPath(import.meta.url)), "envio"),
+      START_SLOT,
+      VERIFY_END_SLOT
+    );
+    if (rows.length === 0) {
       throw new Error(
-        `No ${MINT} transfers in slots ${START_SLOT}–${VERIFY_END_SLOT} — ` +
-          `check the mint and the slot range`
+        `the indexer produced no rows for slots ${START_SLOT}–${VERIFY_END_SLOT}`
       );
     }
-
-    const rows = transfers.map((transfer) =>
-      canonicalRow([
-        encodeBase58(transfer.source),
-        encodeBase58(transfer.destination),
-        encodeAmount(transfer.amount),
-        encodeBase58(transfer.signer),
-        encodeSeconds(transfer.timestamp),
-      ])
-    );
+    onProgress?.({ pass: "indexer", block: VERIFY_END_SLOT, logs: rows.length });
 
     return {
       totalEvents: rows.length,
-      entities: { transfer: rows },
-      lastEventBlock: transfers.reduce(
-        (highest, transfer) => (transfer.slot > highest ? transfer.slot : highest),
+      entities: {
+        transfer: rows.map((row) =>
+          canonicalRow([
+            encodeBase58(row.source as string),
+            encodeBase58(row.destination as string),
+            encodeAmount(BigInt(row.amount as string)),
+            encodeBase58(row.signer as string),
+            encodeSeconds(row.timestamp as number),
+          ])
+        ),
+      },
+      lastEventBlock: rows.reduce(
+        (highest, row) => Math.max(highest, row.slot as number),
         START_SLOT
       ),
     };

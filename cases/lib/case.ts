@@ -100,10 +100,9 @@ export interface EvmCaseConfig extends CommonCaseConfig {
 }
 
 /**
- * A case on a chain the log path cannot express, which reads its own ground
- * truth. Solana has no logs to replay — instruction calls carry positional
- * accounts and a Borsh payload — so the case owns the query as well as the
- * logic.
+ * A case the log path cannot express, which builds its own ground truth —
+ * from a second reading of the chain, or from a snapshot of its reference
+ * implementation where the logic is not replayable from raw data.
  */
 export interface SvmCaseConfig extends CommonCaseConfig {
   buildGroundTruth(

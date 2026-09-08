@@ -46,7 +46,8 @@ than a heuristic every implementation would have to reproduce identically.
 
 ## Implementations
 
-- **Envio** — [envio/](./envio/)
+- **Envio** — [envio/](./envio/) — also the reference the ground truth is
+  snapshotted from
 
 A scenario runs the tools it has a project directory for, so the table holds
 one row until more land. SubQuery and the Squid SDK both index Solana; every
@@ -67,8 +68,10 @@ Each indexer indexes the verification range to completion — its database is
 then checked against `expected.json` and measured — before re-running for the
 throughput window.
 
-Regenerate the ground truth after changing the mint, the slot range or the case
-logic:
+`expected.json` is a snapshot of what the Envio project produces over the
+verification range — the case's logic is written once, in the indexer, rather
+than once there and once in the harness. Regenerate it after changing the mint,
+the slot range or the case logic, and review the diff:
 
 ```bash
 ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts solana-spl-transfers
@@ -88,18 +91,24 @@ or created inside it:
   transfer whose two accounts hold different mints. Across 4,266 transfers the
   two never disagreed where both were present.
 - **Created inside it** — the same transaction carries the
-  `initializeAccount` that names its mint, necessarily before the transfer.
+  `initializeAccount` that names its mint, necessarily before the transfer, so
+  a transfer out of a brand-new account is still attributable.
 
-The two cases are exhaustive, so the only account invisible to both is one
+The two cases are exhaustive, so the only account both readings miss is one
 created *and* closed inside a single transaction: no balance either side, and
-nothing but its initialization to identify it. The ground truth reads those
-initializations too — not to attribute a transfer, but to refuse to guess. A
-transfer of the tracked mint between two such accounts aborts the generator
-rather than being silently dropped.
+nothing but its initialization to identify it.
 
-Over the verification range: 57,753 unchecked transfers, 28,361 of them USDC,
-2,320 USDC accounts created in range, and **zero** transfers that the balance
-records miss. The guard has never fired.
+Measured against an independent reading of HyperSync — instruction calls and
+account activity queried directly, decoded, and joined by the same rules — the
+verification range holds 57,753 unchecked transfers, 28,361 of them USDC, and
+2,320 USDC accounts created in range, with **zero** transfers that the balance
+records miss. That reading produced the same 60,175 rows and the same checksum
+as the snapshot committed here.
+
+Because the ground truth is now the indexer's own output, that comparison is a
+thing done once and recorded rather than a check the generator re-runs: a
+transfer this logic cannot see is a transfer neither side sees. The argument
+above is what rules the class out; the measurement is what confirmed it.
 
 Instructions from failed transactions never reach the indexers — a query
 filtered on `tx_success: false` returns nothing over this range — so no
