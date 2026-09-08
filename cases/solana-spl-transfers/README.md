@@ -27,9 +27,10 @@ For each **`transfer`**: the accounts are `(source, destination, authority)` and
 no mint appears anywhere in the instruction. Which token moved is only knowable
 from the transaction's token balances, so either token account's balance record
 is read: if one of them holds USDC, the transfer is stored, otherwise it is
-dropped. Either side answers it, because SPL Token rejects a transfer between
-different mints. Over a 100-slot sample this path carried 1,299 of 2,914
-transfers, so it is not a tail case — it is nearly half the scenario.
+dropped. Either account answers it, because SPL Token rejects a transfer
+between different mints. Over a 100-slot sample this path carried 1,299 of
+2,914 transfers, so it is not a tail case — it is nearly half the scenario.
+Why reading balances loses nothing is set out below.
 
 Both apply to inner instructions as well as top-level ones. 68% of USDC
 `transferChecked` calls are CPIs from a swap, a lending program or a router, so
@@ -40,8 +41,8 @@ an indexer that only sees top-level instructions misses most of them.
 The Substreams package resolves the unchecked case by asking whether *any*
 token balance in the transaction carries the mint. That over-matches every
 transaction touching two tokens — which is every swap. This case resolves the
-source account exactly, so the ground truth is a definite answer rather than a
-heuristic every implementation would have to reproduce identically.
+transfer's own two accounts, so the ground truth is a definite answer rather
+than a heuristic every implementation would have to reproduce identically.
 
 ## Implementations
 
@@ -73,16 +74,32 @@ logic:
 ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts solana-spl-transfers
 ```
 
-## Notes
+## Why no transfer is missed
 
-An account opened and closed inside the same transaction has no balance to
-report before or after it, so it appears in no balance record at all. Over a
-100-slot sample 538 of 4,266 unchecked transfers have no record for their
-source — reading the destination as well recovers all but 97, whose two token
-accounts are both ephemeral. Those are unattributable to a mint by any tool:
-the information is absent from Solana's transaction metadata, which is where
-every indexer here reads it from. `transferChecked` is unaffected, and so is
-every transfer touching an account that outlives its transaction.
+`transferChecked` names its own mint, so only the unchecked path has anything
+to prove. A token account is either older than the transaction it appears in,
+or created inside it:
+
+- **Older** — it has a balance to report, so the transaction's token balances
+  carry it and its mint. Reading only the source would still lose transfers,
+  because a *freshly created* source has no balance before the transaction:
+  over a 100-slot sample that is 538 of 4,266 unchecked transfers. Reading
+  either account closes that, and either is enough, because SPL Token rejects a
+  transfer whose two accounts hold different mints. Across 4,266 transfers the
+  two never disagreed where both were present.
+- **Created inside it** — the same transaction carries the
+  `initializeAccount` that names its mint, necessarily before the transfer.
+
+The two cases are exhaustive, so the only account invisible to both is one
+created *and* closed inside a single transaction: no balance either side, and
+nothing but its initialization to identify it. The ground truth reads those
+initializations too — not to attribute a transfer, but to refuse to guess. A
+transfer of the tracked mint between two such accounts aborts the generator
+rather than being silently dropped.
+
+Over the verification range: 57,753 unchecked transfers, 28,361 of them USDC,
+2,320 USDC accounts created in range, and **zero** transfers that the balance
+records miss. The guard has never fired.
 
 Instructions from failed transactions never reach the indexers — a query
 filtered on `tx_success: false` returns nothing over this range — so no

@@ -13,6 +13,9 @@ export const SPL_TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 /** One-byte SPL Token instruction tags. */
 export const TRANSFER_TAG = "0x03";
 export const TRANSFER_CHECKED_TAG = "0x0c";
+/** `initializeAccount`, `initializeAccount2`, `initializeAccount3`. All three
+ *  take the new account in slot 0 and its mint in slot 1. */
+const INITIALIZE_ACCOUNT_TAGS = ["0x01", "0x10", "0x12"];
 
 /** One decoded SPL Token transfer, in the shape the case logic reads. */
 export interface SplTransfer {
@@ -89,10 +92,19 @@ async function assertSlotRetained(token: string, slot: number): Promise<void> {
  *
  * Either side answers it, because SPL Token rejects a transfer whose accounts
  * hold different mints. Reading only the source would miss the transfers whose
- * source is opened and closed inside the same transaction: such an account has
- * no balance to report before or after, so it appears in no balance record at
- * all. Over a 100-slot sample that is 538 of 4,266 unchecked transfers, 12 of
- * which the destination rescues.
+ * source is opened inside the same transaction: an account with no balance
+ * before the transaction is absent from the balance records, and over a
+ * 100-slot sample that is 538 of 4,266 unchecked transfers.
+ *
+ * A token account is either older than its transaction, in which case it has a
+ * balance to report, or created inside it, in which case the transaction also
+ * carries the `initializeAccount` that names its mint. The two cases are
+ * exhaustive, so nothing of `mint` can move without leaving one of the two
+ * traces — except through an account both created and closed inside a single
+ * transaction, which reports no balance either side and is left holding only
+ * its initialization. Those are read too, not to attribute a transfer but to
+ * refuse to guess: finding one aborts the ground truth rather than silently
+ * dropping a transfer. Over the case's range there are none.
  */
 export async function fetchSplTransfers(opts: {
   token: string;
@@ -108,6 +120,8 @@ export async function fetchSplTransfers(opts: {
   const instructions: RawInstruction[] = [];
   /** `slot:txIndex:account` of every account holding `mint` in a transaction. */
   const holdsMint = new Set<string>();
+  /** The same key, for accounts a transaction opens on `mint`. */
+  const openedOnMint = new Set<string>();
   const signatures = new Map<string, string>();
   const blockTimes = new Map<number, number>();
 
@@ -124,6 +138,11 @@ export async function fetchSplTransfers(opts: {
           a1: [mint],
         },
         { program_id: [SPL_TOKEN_PROGRAM], d1: [TRANSFER_TAG] },
+        {
+          program_id: [SPL_TOKEN_PROGRAM],
+          d1: INITIALIZE_ACCOUNT_TAGS,
+          a1: [mint],
+        },
       ],
       account_activity: [{ mint: [mint] }],
       field_selection: {
@@ -143,7 +162,16 @@ export async function fetchSplTransfers(opts: {
     });
 
     for (const batch of response.instruction_calls ?? []) {
-      instructions.push(...batch);
+      for (const call of batch as RawInstruction[]) {
+        const tag = `0x${call.data.slice(0, 2)}`;
+        if (INITIALIZE_ACCOUNT_TAGS.includes(tag)) {
+          openedOnMint.add(
+            `${call.slot}:${call.transaction_index}:${call.a0}`
+          );
+        } else {
+          instructions.push(call);
+        }
+      }
     }
     for (const batch of response.account_activity ?? []) {
       for (const activity of batch) {
@@ -177,15 +205,24 @@ export async function fetchSplTransfers(opts: {
     const checked = instruction.data.startsWith("0c");
     const source = instruction.a0;
     const destination = checked ? instruction.a2 : instruction.a1;
-    const inTransaction = (account: string) =>
-      holdsMint.has(
-        `${instruction.slot}:${instruction.transaction_index}:${account}`
-      );
-    if (!checked && !inTransaction(source) && !inTransaction(destination)) {
+    const key = `${instruction.slot}:${instruction.transaction_index}`;
+    if (!checked && !holdsMint.has(`${key}:${source}`) && !holdsMint.has(`${key}:${destination}`)) {
+      // No balance either side means both accounts are younger than the
+      // transaction. If one of them was opened on this mint, the transfer is
+      // ours and the balance records cannot show it — the case's stateless
+      // resolution would drop a real transfer, and an indexer implementing the
+      // documented logic would drop it too, so the disagreement to fix is in
+      // the case rather than in anyone's implementation.
+      if (openedOnMint.has(`${key}:${source}`) || openedOnMint.has(`${key}:${destination}`)) {
+        throw new Error(
+          `transfer at ${key} moves ${mint} between accounts that live and die inside ` +
+            `their transaction, so no balance record can attribute it — the case's mint ` +
+            `resolution needs the initialization lookup before this range can be used`
+        );
+      }
       continue;
     }
 
-    const key = `${instruction.slot}:${instruction.transaction_index}`;
     const signature = signatures.get(key);
     const timestamp = blockTimes.get(instruction.slot);
     if (signature === undefined || timestamp === undefined) {
