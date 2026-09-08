@@ -7,10 +7,11 @@ import { assertSlotRetained } from "../lib/hypersync-svm-retention.ts";
 
 const START_SLOT = 440_000_000;
 
-// 2,000 slots of USDC is roughly 58,000 transfers — enough that the rate is
-// measuring indexing rather than the cost of opening a connection, and close
-// enough in size to the EVM scenarios that the two read alike.
-const VERIFY_END_SLOT = 440_001_999;
+// 4,000 slots of USDC is roughly 120,000 transfers. Sized by how long the
+// fastest indexer takes rather than by row count: at 2,000 slots HyperIndex was
+// through the range in 13 seconds, which is short enough that setup and the
+// last commit dominate what the verification run reports.
+const VERIFY_END_SLOT = 440_003_999;
 
 export const caseConfig: SvmCaseConfig = {
   name: "solana-spl-transfers",

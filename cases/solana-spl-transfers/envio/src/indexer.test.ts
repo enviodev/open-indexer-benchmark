@@ -23,7 +23,7 @@ describe("SPL Token transfers", () => {
 
     for (const transfer of transfers) {
       expect(transfer).toMatchObject({
-        id: expect.stringMatching(/^[1-9A-HJ-NP-Za-km-z]+:\d+(\.\d+)*$/),
+        id: expect.stringMatching(/^\d+-\d+-\d+(\.\d+)*$/),
         amount: expect.any(BigInt),
         source: expect.any(String),
         destination: expect.any(String),

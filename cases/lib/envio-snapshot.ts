@@ -33,7 +33,14 @@ export async function snapshotEnvioRows(
   endBlock: number
 ): Promise<Record<string, unknown>[]> {
   const dir = resolve(project);
-  const env = { ...process.env, ENVIO_TUI: "false" };
+  // Passed rather than left to the project's default: the config caps the test
+  // indexer at its own end block, and a stale default there would quietly
+  // truncate the snapshot instead of failing.
+  const env = {
+    ...process.env,
+    ENVIO_TUI: "false",
+    ENVIO_END_BLOCK: String(endBlock),
+  };
 
   await exec("pnpm", ["install", "--frozen-lockfile"], dir, env);
   await exec("pnpm", ["envio", "codegen"], dir, env);

@@ -113,11 +113,11 @@ for (const benchCase of cases) {
   const carried: string[] = [];
   for (const prior of parsePublishedTable(readme, benchCase)) {
     if (fresh.has(rowKey(prior))) continue;
-    rows.push({ ...prior, carriedOver: true });
-    // A local-only row has no job to have failed, so it is carried silently.
-    if (!localOnly.has(rowKey(prior))) {
-      carried.push(`${prior.name} via ${prior.cells.source}`);
-    }
+    // A local-only row is carried by design — it has no job that could have
+    // failed — so it is marked stale in the table rather than warned about.
+    const isLocal = localOnly.has(rowKey(prior));
+    rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
+    if (!isLocal) carried.push(`${prior.name} via ${prior.cells.source}`);
   }
   // A run scoped to part of the matrix — a pull request — carries most rows
   // forward by design, so annotating those as failures would cry wolf on

@@ -18,7 +18,7 @@ holding the amount, the two token accounts and the signer.
   holders, and are out of scope; over a 200-slot sample they amount to one
   instruction.
 - **Slot Range**: 440,000,000 to latest
-- **Verification Range**: 440,000,000 to 440,001,999 — 60,175 transfers
+- **Verification Range**: 440,000,000 to 440,003,999 — 119,152 transfers
 - **Features**: `instruction decoding`, `inner instructions`, `transaction metadata join`
 
 ## Case Logic
@@ -87,6 +87,12 @@ Each indexer indexes the verification range to completion — its database is
 then checked against `expected.json` and measured — before re-running for the
 throughput window.
 
+Every implementation writes the same row, keyed the same way
+(`slot-transactionIndex-instructionPath`). The key is not part of what the
+ground truth checks, but it is stored and indexed, so a scenario whose
+implementations disagree about it publishes a storage column that compares
+primary keys rather than indexers.
+
 `expected.json` is a snapshot of what the Envio project produces over the
 verification range — the case's logic is written once, in the indexer, rather
 than once there and once in the harness. Regenerate it after changing the mint,
@@ -119,10 +125,10 @@ nothing but its initialization to identify it.
 
 Measured against an independent reading of HyperSync — instruction calls and
 account activity queried directly, decoded, and joined by the same rules — the
-verification range holds 57,753 unchecked transfers, 28,361 of them USDC, and
-2,320 USDC accounts created in range, with **zero** transfers that the balance
-records miss. That reading produced the same 60,175 rows and the same checksum
-as the snapshot committed here.
+first 2,000 slots of the range held 57,753 unchecked transfers, 28,361 of them
+USDC, and 2,320 USDC accounts created in range, with **zero** transfers that
+the balance records miss. That reading produced the same rows and the same
+checksum as the snapshot then committed.
 
 Because the ground truth is now the indexer's own output, that comparison is a
 thing done once and recorded rather than a check the generator re-runs: a

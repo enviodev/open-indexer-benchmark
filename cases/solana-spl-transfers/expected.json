@@ -1,13 +1,13 @@
 {
   "startBlock": 440000000,
-  "endBlock": 440001999,
-  "generatedAt": "2026-09-08T13:40:50.877Z",
-  "totalEvents": 60175,
-  "lastEventBlock": 440001999,
+  "endBlock": 440003999,
+  "generatedAt": "2026-09-08T15:05:57.068Z",
+  "totalEvents": 119152,
+  "lastEventBlock": 440003999,
   "entities": {
     "transfer": {
-      "rowCount": 60175,
-      "checksum": "34703904315162361522502"
+      "rowCount": 119152,
+      "checksum": "68865089554339052106339"
     }
   }
 }

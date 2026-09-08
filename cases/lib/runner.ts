@@ -146,6 +146,17 @@ async function runPhase(
 
   let last: Snapshot = { blocks: 0, events: 0 };
 
+  /**
+   * Whether a reading means the phase is done. A driver that reports rows
+   * apart from events has told us its progress counter can run ahead of what
+   * is committed, so the range is only finished once the rows are there too —
+   * otherwise the phase ends while the last batch is still being written and
+   * verification reads a table that is still filling.
+   */
+  const reachedTarget = (s: Snapshot) =>
+    (s.blocks >= targetBlocks || s.events >= targetEvents) &&
+    (s.rows === undefined || s.rows >= targetEvents);
+
   // Progress is read as an absolute position, so anything left over from a
   // previous phase would be counted as work done in this one. Every driver is
   // supposed to start from an empty database; say so loudly if one does not,
@@ -168,11 +179,7 @@ async function runPhase(
     // Exiting is a reason to stop waiting, not evidence of success: an indexer
     // that crashed on startup exits too. Completion is decided below, from the
     // progress actually recorded.
-    if (
-      last.blocks >= targetBlocks ||
-      last.events >= targetEvents ||
-      driver.exited()
-    ) {
+    if (reachedTarget(last) || driver.exited()) {
       break;
     }
     const remaining = Math.max(0, targetBlocks - last.blocks) / targetBlocks;
@@ -193,7 +200,10 @@ async function runPhase(
   // genuinely done this costs one extra reading, and on one that is not it is
   // the difference between verifying complete data and reporting a hole in it
   // as a data mismatch.
-  const metTarget = last.blocks >= targetBlocks || last.events >= targetEvents;
+  // Leaving the loop before the deadline means something broke out of it — a
+  // target met, or the indexer exiting — and both are worth settling on. A
+  // phase that ran out of time has nothing left to wait for.
+  const metTarget = performance.now() < deadline;
   for (let settle = 0; metTarget && settle < SETTLE_READS; settle++) {
     if (performance.now() >= deadline) break;
     await sleep(SETTLE_MS);
@@ -203,7 +213,10 @@ async function runPhase(
     } catch {
       break;
     }
-    const moved = next.events > last.events || next.blocks > last.blocks;
+    const moved =
+      next.events > last.events ||
+      next.blocks > last.blocks ||
+      (next.rows ?? 0) > (last.rows ?? 0);
     last = next;
     if (!moved) break;
   }
@@ -234,7 +247,7 @@ async function runPhase(
     }
   }
   const elapsedS = (performance.now() - startedAt) / 1_000;
-  const completed = last.blocks >= targetBlocks || last.events >= targetEvents;
+  const completed = reachedTarget(last);
 
   return { blocks: last.blocks, events: last.events, elapsedS, completed };
 }

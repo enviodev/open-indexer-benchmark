@@ -5,7 +5,7 @@ ecosystem: svm
 chains:
   - id: solana
     start_block: 440000000
-    end_block: ${ENVIO_END_BLOCK:-440001999}
+    end_block: ${ENVIO_END_BLOCK:-440003999}
     experimental:
       programs:
         - name: SplToken
