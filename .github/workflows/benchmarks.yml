@@ -35,26 +35,31 @@ jobs:
       case2: ${{ steps.set-matrix.outputs.case2 }}
       case3: ${{ steps.set-matrix.outputs.case3 }}
       case4: ${{ steps.set-matrix.outputs.case4 }}
+      case5: ${{ steps.set-matrix.outputs.case5 }}
       indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
       indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
       indexers3: ${{ steps.set-matrix.outputs.indexers3 }}
       indexers4: ${{ steps.set-matrix.outputs.indexers4 }}
+      indexers5: ${{ steps.set-matrix.outputs.indexers5 }}
       partial: ${{ steps.set-matrix.outputs.partial }}
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
     steps:
-      # Only pull requests diff and run the filter; `main` and dispatch runs
-      # are always full, so they keep setup down to the one shell step.
+      # Needed on every event: the step below runs scripts/case-indexers.ts to
+      # work out which tools each scenario implements, whether or not the run
+      # is a pull request. Only the diff-based scope filter is pull-request
+      # only, and that is what the full history is for.
       - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request'
         with:
           # The pull request scope comes from `git diff` against the base
-          # commit, which a shallow clone does not have.
+          # commit, which a shallow clone does not have. Unconditional, and not
+          # `event_name == 'pull_request' && 0 || 1`: that reads as "full
+          # history on a pull request" and yields 1 on every event, because 0
+          # is falsy to a GitHub expression.
           fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-node@v4
-        if: github.event_name == 'pull_request'
         with:
           node-version: 24
 
@@ -69,12 +74,15 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ -z "$INDEXERS" ]; then
-            INDEXERS_JSON='["envio","envio-rpc","envio-subgraph","envio-subgraph-rpc","ponder","rindexer","rindexer-hypersync","subgraph","subquery","sqd","sqd-rpc"]'
+            # Every registered indexer, whether or not a scenario runs it: the
+            # per-scenario intersection below is what decides that, and a name
+            # missing from here would silently never get a job.
+            INDEXERS_JSON='["envio","envio-rpc","envio-subgraph","envio-subgraph-rpc","ponder","rindexer","rindexer-hypersync","subgraph","subquery","sqd","sqd-rpc","carbon","substreams"]'
           else
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations"]'
+            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations","solana-spl-transfers"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
@@ -91,11 +99,11 @@ jobs:
 
           # Scenarios run one after another, which needs one `needs`-chained job
           # per scenario below — GitHub cannot order a matrix. That makes the
-          # number of scenario slots fixed: adding a fifth scenario means adding
-          # a fifth `scenario-N` job here. Fail loudly rather than silently
+          # number of scenario slots fixed: adding a sixth scenario means adding
+          # a sixth `scenario-N` job here. Fail loudly rather than silently
           # dropping the extra scenario from the run and from the table.
-          if [ "$COUNT" -gt 4 ]; then
-            echo "Only 4 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
+          if [ "$COUNT" -gt 5 ]; then
+            echo "Only 5 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
             exit 1
           fi
 
@@ -120,21 +128,49 @@ jobs:
             # event's base sha can lag the merge base it actually used, in
             # which case files from the base branch leak into the diff — that
             # only ever widens the selection, never narrows it.
-            CHANGED_FILES=$(git diff --name-only "$BASE_SHA" HEAD)
-            echo "Changed files:"
-            echo "$CHANGED_FILES" | sed 's/^/  /'
+            #
+            # A base commit the clone does not have — the base branch was
+            # force-pushed after the event fired — leaves nothing to diff, and
+            # an empty file list would read as "nothing changed" and skip the
+            # run. The filter only ever narrows, so an unknown base leaves the
+            # run unscoped instead.
+            if git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              CHANGED_FILES=$(git diff --name-only "$BASE_SHA" HEAD)
+              echo "Changed files:"
+              echo "$CHANGED_FILES" | sed 's/^/  /'
 
-            SCOPE=$(CHANGED_FILES="$CHANGED_FILES" ALL_CASES="$CASES_JSON" \
-              ALL_INDEXERS="$INDEXERS_JSON" node scripts/select-scope.ts)
-            echo "Scope: $SCOPE"
+              SCOPE=$(CHANGED_FILES="$CHANGED_FILES" ALL_CASES="$CASES_JSON" \
+                ALL_INDEXERS="$INDEXERS_JSON" node scripts/select-scope.ts)
+              echo "Scope: $SCOPE"
 
-            CASES_JSON=$(echo "$SCOPE" | jq -c '.cases')
-            SELECTED=$(echo "$SCOPE" | jq -c '.indexers')
-            [ "$(echo "$SCOPE" | jq '.full')" = "true" ] || PARTIAL=1
+              CASES_JSON=$(echo "$SCOPE" | jq -c '.cases')
+              SELECTED=$(echo "$SCOPE" | jq -c '.indexers')
+              [ "$(echo "$SCOPE" | jq '.full')" = "true" ] || PARTIAL=1
 
-            if [ "$CASES_JSON" = "[]" ]; then
-              echo "Nothing benchmark-related changed; skipping the benchmark run."
+              if [ "$CASES_JSON" = "[]" ]; then
+                echo "Nothing benchmark-related changed; skipping the benchmark run."
+              fi
+            else
+              echo "Base commit $BASE_SHA is not in this clone; running unscoped." >&2
             fi
+          fi
+
+          # A scenario only runs the tools it has a project for. Without this a
+          # scenario no one has ported yet spawns a job per tool that fails on
+          # a missing directory, which reads as a broken benchmark rather than
+          # as an implementation nobody has written.
+          AVAILABLE=$(ALL_CASES="$CASES_JSON" ALL_INDEXERS="$INDEXERS_JSON" \
+            node scripts/case-indexers.ts)
+          echo "Available per scenario: $AVAILABLE"
+
+          # The summary reads SELECTED to tell a job that failed apart from one
+          # this run never asked for, so it has to be narrowed the same way the
+          # matrix is — otherwise a tool a scenario does not implement is
+          # reported as a job that produced nothing.
+          if [ -n "$SELECTED" ]; then
+            SELECTED=$(jq -cn --argjson sel "$SELECTED" --argjson avail "$AVAILABLE" \
+              'reduce ($sel | keys_unsorted[]) as $k ({};
+                 .[$k] = ($sel[$k] - ($sel[$k] - ($avail[$k] // []))))')
           fi
 
           echo "cases=$CASES_JSON" >> "$GITHUB_OUTPUT"
@@ -144,13 +180,17 @@ jobs:
           # One scenario slot per `scenario-N` job below. A slot with no case
           # is skipped by that job's `if`, so the loop covers a run with fewer
           # scenarios than slots without special-casing it.
-          for N in 1 2 3 4; do
+          for N in 1 2 3 4 5; do
             CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
             if [ -n "$SCOPE" ]; then
               INDEXERS_N=$(echo "$SCOPE" | jq -c --arg c "$CASE_N" '.indexers[$c] // []')
             else
               INDEXERS_N="$INDEXERS_JSON"
             fi
+            # Intersect with what the scenario implements, keeping order.
+            INDEXERS_N=$(jq -cn --argjson want "$INDEXERS_N" \
+              --argjson have "$(echo "$AVAILABLE" | jq -c --arg c "$CASE_N" '.[$c] // []')" \
+              '$want - ($want - $have)')
             echo "case$N=$CASE_N" >> "$GITHUB_OUTPUT"
             echo "indexers$N=$INDEXERS_N" >> "$GITHUB_OUTPUT"
           done
@@ -217,9 +257,20 @@ jobs:
       duration: ${{ needs.setup.outputs.duration }}
     secrets: inherit
 
+  scenario-5:
+    name: ${{ needs.setup.outputs.case5 }}
+    needs: [setup, scenario-1, scenario-2, scenario-3, scenario-4]
+    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case5 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ needs.setup.outputs.case5 }}
+      indexers: ${{ needs.setup.outputs.indexers5 }}
+      duration: ${{ needs.setup.outputs.duration }}
+    secrets: inherit
+
   summary:
     name: Summary
-    needs: [setup, scenario-1, scenario-2, scenario-3, scenario-4]
+    needs: [setup, scenario-1, scenario-2, scenario-3, scenario-4, scenario-5]
     # A pull request that changed nothing benchmark-related runs no scenario,
     # so there is nothing to tabulate — and an empty table reads as "measured,
     # found nothing" rather than "not measured".
@@ -321,7 +372,8 @@ jobs:
         run: |
           CHANGED=0
           for CASE in $(echo "$CASES" | jq -r '.[]'); do
-            TABLE="/tmp/benchmark-table-${CASE}.md"
+            # The README variant, without this run's carried-forward marks.
+            TABLE="/tmp/benchmark-readme-${CASE}.md"
             [ -f "$TABLE" ] || continue
 
             # Replace content between this case's markers with the new table

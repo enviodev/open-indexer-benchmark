@@ -35,7 +35,7 @@ export const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${PG_PORT}/
 export function createEnvioSnapshot(config: CaseConfig): () => Promise<Snapshot> {
   // Furthest this phase has been seen to get. A driver is built per phase, so
   // this starts empty for each one and never carries a previous phase's work.
-  let highWater: Snapshot = { events: 0, blocks: 0 };
+  let highWater: Snapshot = { events: 0, blocks: 0, rows: 0 };
   const readEvents = createProgressReader(ENVIO_DB_URL, config);
 
   return async () => {
@@ -53,6 +53,11 @@ export function createEnvioSnapshot(config: CaseConfig): () => Promise<Snapshot>
         highWater.blocks,
         blocksIndexed(config, parseInt(blockStr, 10) || 0)
       ),
+      // Reported apart from `events`, which is the higher of the progress row
+      // and this count: `events_processed` reaches the end of the range before
+      // the last batch is committed, and a phase that stopped there would be
+      // verified against a table still being written to.
+      rows: Math.max(highWater.rows ?? 0, rows.events),
     };
     return highWater;
   };

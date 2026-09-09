@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CaseConfig } from "../lib/case.ts";
+import type { EvmCaseConfig } from "../lib/case.ts";
 import {
   canonicalRow,
   encodeAddress,
@@ -16,7 +16,7 @@ const START_BLOCK = 18_600_000;
 // broken batch or an off-by-one block boundary shows up in the checksum.
 const VERIFY_END_BLOCK = 18_600_999;
 
-export const caseConfig: CaseConfig = {
+export const caseConfig: EvmCaseConfig = {
   name: "erc20-transfer-events",
   title: "Decoded Event Stream",
   dir: dirname(fileURLToPath(import.meta.url)),
@@ -24,6 +24,12 @@ export const caseConfig: CaseConfig = {
   startBlock: START_BLOCK,
   verifyEndBlock: VERIFY_END_BLOCK,
   topics: [TRANSFER_TOPIC],
+
+  // Substreams reads through StreamingFast, which bills by the request and
+  // needs an API key; there is no shared endpoint for it the way HyperRPC
+  // serves the RPC rows. Its row is produced by `scripts/run-local.ts` and
+  // committed, the way Carbon's is on the Solana scenario.
+  localOnly: ["substreams"],
 
   entities: [
     {

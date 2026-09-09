@@ -1,0 +1,23 @@
+syntax = "proto3";
+package evm.balances.v1;
+
+message Events {
+  repeated TransferEvent transfers = 1;
+  repeated ApprovalEvent approvals = 2;
+}
+
+message TransferEvent {
+  string id = 1;
+  string amount = 2;
+  string from_address = 3;
+  string to_address = 4;
+  int64 block_timestamp = 5;
+}
+
+message ApprovalEvent {
+  string id = 1;
+  string amount = 2;
+  string owner_address = 3;
+  string spender_address = 4;
+  int64 block_timestamp = 5;
+}

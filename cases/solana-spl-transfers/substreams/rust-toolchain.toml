@@ -1,0 +1,5 @@
+# A transitive dependency of spl-token needs edition 2024, which 1.80 — the
+# channel the upstream package pins — cannot parse.
+[toolchain]
+channel = "stable"
+targets = ["wasm32-unknown-unknown"]

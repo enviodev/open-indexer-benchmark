@@ -1,0 +1,29 @@
+[package]
+name = "carbon-solana-spl-transfers"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Pinned exactly, and Cargo.lock is committed: a benchmark row names the
+# version it measured.
+[dependencies]
+carbon-core = { version = "=2.0.0", features = ["postgres"] }
+carbon-log-metrics = "=2.0.0"
+carbon-rpc-block-crawler-datasource = "=2.0.0"
+carbon-token-program-decoder = "=2.0.0"
+
+dotenv = "0.15"
+env_logger = "0.11"
+log = "0.4"
+# Pinned to the versions Carbon's block crawler builds `RpcBlockConfig` from.
+# Carbon's own crates span two generations of the solana types — the crawler is
+# on 4.x while carbon-core's transaction metadata is on 2.x — so anything this
+# crate names has to match the half it is handed to, and everything else is
+# compared as text rather than imported twice.
+solana-commitment-config = "=3.1.1"
+solana-transaction-status = "=4.2.2"
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-native-tls", "bigdecimal"] }
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+debug = false

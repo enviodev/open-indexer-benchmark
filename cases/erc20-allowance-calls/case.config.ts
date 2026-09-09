@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CaseConfig } from "../lib/case.ts";
+import type { EvmCaseConfig } from "../lib/case.ts";
 import {
   canonicalRow,
   encodeAddress,
@@ -103,7 +103,7 @@ function answerCall(call: EthCall): string | null {
   return `0x${allowance.toString(16).padStart(64, "0")}`;
 }
 
-export const caseConfig: CaseConfig = {
+export const caseConfig: EvmCaseConfig = {
   name: "erc20-allowance-calls",
   title: "External Contract Calls",
   dir: dirname(fileURLToPath(import.meta.url)),
@@ -120,6 +120,15 @@ export const caseConfig: CaseConfig = {
     // decision and nothing else's.
     latencyMs: 200,
     answer: answerCall,
+  },
+
+  // Substreams can make contract calls — `substreams-ethereum` exposes an
+  // eth_call extern — but only against the node its own server runs. This case
+  // is about calling an endpoint the benchmark provides, at a latency it fixes
+  // so every tool waits the same; a row measured against StreamingFast's own
+  // archive node instead would be answering a different question.
+  unsupported: {
+    substreams: "its contract calls run against the Substreams server's own node, not a given endpoint",
   },
 
   entities: [

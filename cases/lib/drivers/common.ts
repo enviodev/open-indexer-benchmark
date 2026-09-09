@@ -17,6 +17,18 @@ export interface Snapshot {
   /** Blocks indexed past the case's start block. */
   blocks: number;
   events: number;
+  /**
+   * Rows committed to the scenario's own tables, where the driver can tell
+   * that apart from `events`.
+   *
+   * For most drivers the two are the same reading — `events` is a count of
+   * those rows. A driver that reads a progress counter the indexer maintains
+   * has to report both, because that counter says how much work was done and
+   * not how much of it is durable: it can reach the end of the range while the
+   * last batch of rows is still being written, and the run would then be
+   * verified against a table that is still filling.
+   */
+  rows?: number;
 }
 
 export interface Driver {

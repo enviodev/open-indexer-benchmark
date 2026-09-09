@@ -44,7 +44,7 @@
  * variants have no directory of their own at all — they run the Subgraph tool's
  * `subgraph/` project unchanged, so a change to it re-runs them too.
  */
-const INDEXER_DIRS: Record<string, string> = {
+export const INDEXER_DIRS: Record<string, string> = {
   "envio-rpc": "envio",
   "sqd-rpc": "sqd",
   "rindexer-hypersync": "rindexer",
@@ -88,6 +88,7 @@ const LIB_MODULE_CASES: Record<string, string[]> = {
 const PIPELINE_SCRIPTS = new Set([
   "scripts/select-scope.ts",
   "scripts/build-tables.ts",
+  "scripts/case-indexers.ts",
 ]);
 
 /**
@@ -106,6 +107,7 @@ const LOCAL_SCRIPTS = new Set([
   "scripts/test-verification.ts",
   "scripts/run-benchmarks.ts",
   "scripts/generate-expected.ts",
+  "scripts/run-local.ts",
 ]);
 
 /**
