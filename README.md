@@ -34,6 +34,7 @@ How well does an indexer cope with data it has to read back? Every rETH transfer
 | [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 184.4 | 1,224.7 | 20.3x slower | ✅ | Postgres 5.2 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 51.3 | 675.7 | 72.8x slower | ✅ | Postgres 3.3 MB |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 42.7 | 477.6 | 87.5x slower | ✅ | Postgres 2.2 MB |
+| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 28.7 | 377.8 | 130.2x slower | ✅ | Postgres 2.2 MB |
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 26.8 | 353.4 | 139.4x slower | ✅ | Postgres 6.9 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 25.3 | 332.5 | 147.7x slower | ❓ (1) | Postgres ~4.4 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 11.4 | 132.4 | 327.7x slower | ❓ (2) | Postgres ~2.5 MB |
