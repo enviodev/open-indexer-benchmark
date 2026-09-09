@@ -23,6 +23,14 @@ fn map_transfers(
     let timestamp = clock.timestamp.as_ref().map(|t| t.seconds).unwrap_or_default();
 
     let mut data: Vec<Transfer> = Vec::new();
+    // The source module hands over only the transactions that touch the Token
+    // program, so this counts within those rather than within the block. Every
+    // implementation of this scenario keys its rows
+    // `slot-transactionIndex-instructionPath`, and the other three can say
+    // where a transaction sat in its block; asking the server for whole blocks
+    // to match them would give up the filter that is the point of Substreams,
+    // to agree on a field the ground truth does not check. The key keeps its
+    // shape and its length, which is what the storage column compares.
     for (transaction_index, trx) in trxs.transactions.iter().enumerate() {
         let Some(meta) = trx.meta.as_ref() else { continue };
         // A failed transaction's instructions never happened; no implementation
