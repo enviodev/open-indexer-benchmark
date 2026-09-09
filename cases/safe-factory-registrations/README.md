@@ -89,6 +89,16 @@ Every implementation here is written the way that tool's own documentation recom
 - **Squid SDK** — [sqd/](./sqd/)
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
+- **Substreams** — [substreams/](./substreams/), run locally
+
+Substreams reads through StreamingFast, which bills by the request and needs an
+API key, so unlike the rows above it is measured by hand rather than on every
+push:
+
+```bash
+ENVIO_API_TOKEN=your-token SUBSTREAMS_API_KEY=your-key \
+  node scripts/run-local.ts safe-factory-registrations --commit
+```
 
 ## Running the Benchmark
 

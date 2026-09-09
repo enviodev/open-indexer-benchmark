@@ -122,6 +122,15 @@ export const caseConfig: EvmCaseConfig = {
     answer: answerCall,
   },
 
+  // Substreams can make contract calls — `substreams-ethereum` exposes an
+  // eth_call extern — but only against the node its own server runs. This case
+  // is about calling an endpoint the benchmark provides, at a latency it fixes
+  // so every tool waits the same; a row measured against StreamingFast's own
+  // archive node instead would be answering a different question.
+  unsupported: {
+    substreams: "its contract calls run against the Substreams server's own node, not a given endpoint",
+  },
+
   entities: [
     {
       key: "approvalEvent",

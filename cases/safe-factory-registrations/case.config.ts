@@ -235,6 +235,12 @@ export const caseConfig: EvmCaseConfig = {
   throughputEndBlock: END_BLOCK,
   topics: [PROXY_CREATION_TOPIC],
 
+  // Substreams reads through StreamingFast, which bills by the request and
+  // needs an API key; there is no shared endpoint for it the way HyperRPC
+  // serves the RPC rows. Its row is produced by `scripts/run-local.ts` and
+  // committed, the way Carbon's is on the Solana scenario.
+  localOnly: ["substreams"],
+
   child: {
     topics: Object.values(CHILD_TOPICS),
     childOf: proxyOf,

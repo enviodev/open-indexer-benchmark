@@ -139,6 +139,13 @@ alike.
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
+Substreams has no row here. It can call a contract — `substreams-ethereum`
+exposes an `eth_call` extern — but the call runs on the Substreams server
+against the node it operates, and this case is about calling an endpoint the
+benchmark provides at a latency it fixes so every tool waits the same. A row
+measured against StreamingFast's own archive node would be answering a
+different question.
+
 ## Running the Benchmark
 
 Requires Node 23.6+, Docker, a Rust toolchain (for the rindexer implementation),
