@@ -37,27 +37,29 @@ const FLUSH_INTERVAL: Duration = Duration::from_millis(250);
 
 /// How many `getBlock` calls are in flight at once.
 ///
-/// Carbon's own default is 10, which is a client's conservative choice rather
-/// than a property of RPC: at ten this crawler managed 10 blocks/s, about one
-/// second per round trip, and the scenario's range alone would then take longer
-/// than the benchmark allows a verification run. Fifty is what a production
-/// deployment against a dedicated node would reasonably ask for, and it is
-/// stated here rather than left implicit because the row's rate is a function
-/// of it.
-const MAX_CONCURRENT_REQUESTS: usize = 50;
+/// This is Carbon's own default, stated here rather than left implicit because
+/// the row's rate is a function of it. Raising it is a pessimisation, which is
+/// worth recording because the opposite is the natural guess: over the
+/// scenario's range ten took 210s and fifty took 269s. The endpoint rather than
+/// the client is the limit, so asking for more at once only makes the arrivals
+/// burstier.
+const MAX_CONCURRENT_REQUESTS: usize = 10;
 
 /// How much either of Carbon's two queues may hold: the crawler's own, between
 /// fetching a block and decoding it, and the pipeline's, between the datasource
 /// and the processors.
 ///
-/// Both default to 1,000, sized for the default concurrency of 10. Raising the
-/// concurrency without raising them lets the fetcher outrun the processors: the
-/// queue fills, and the datasource logs
-/// `Error sending transaction update: "Full(..)"` and **drops the update**. It
-/// is not backpressure, it is silent data loss — at fifty concurrent requests
-/// and the defaults a run wrote 119,083 of 119,152 transfers — so concurrency
-/// and both buffers are set together and the run is verified against a
-/// checksum that would catch it either way.
+/// Both default to 1,000, and the datasource does not wait when one is full —
+/// it `try_send`s, and on `Full` logs
+/// `Error sending transaction update: "Full(..)"` and abandons the rest of that
+/// block's transactions. There is no backpressure, so a queue that fills is
+/// data quietly missing from the table.
+///
+/// A thousand is marginal even at the default concurrency: over this range one
+/// run came through clean and the next dropped a block. This is what stops it,
+/// not the concurrency — at fifty the defaults lost 107 transfers, and at ten
+/// they lost 32 on the second of two runs. With the queues raised, ten and
+/// fifty both come out exact.
 const CHANNEL_BUFFER: usize = 100_000;
 
 /// How many times a batch is retried before the run is failed.

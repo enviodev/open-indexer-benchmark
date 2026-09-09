@@ -16,14 +16,31 @@ shape of RPC indexing, and it is what the row measures. The block config asks
 for base64 encoding, no rewards, and version 0 support, which keeps the payload
 to what the decoder needs.
 
-**Concurrency is set to 50 `getBlock` calls in flight**, against Carbon's own
-default of 10. Ten is a client's conservative choice rather than a property of
-RPC: at ten this crawler managed 10 blocks/s — about a second per round trip —
-and the scenario's 4,000-slot range alone would take longer than the benchmark
-allows a verification run. Fifty is what a deployment against a dedicated node
-would reasonably ask for. It is the single number the row's rate is most
-sensitive to, so it is stated here and in `src/main.rs` rather than left to a
-default.
+**Concurrency is Carbon's default of 10**, set explicitly so the row does not
+move if that default does. Raising it is a pessimisation here, which is worth
+recording because the opposite is the natural guess: over the 4,000-slot range
+ten took 210s and fifty took 269s. The endpoint rather than the client is the
+limit, so asking for more at once buys nothing and only makes the arrivals
+burstier.
+
+**Both of Carbon's queues are raised to 100,000**, from a default of 1,000. The
+datasource does not wait when a queue is full — it `try_send`s, and on `Full`
+logs `Error sending transaction update: "Full(..)"` and abandons the rest of
+that block's transactions. There is no backpressure, so a full queue is data
+quietly missing from the table. A thousand is marginal even at the default
+concurrency: of two runs over this range one came through clean and the next
+dropped a block. Measured over the range:
+
+| concurrency | queues | time | dropped | transfers |
+| --- | --- | --- | --- | --- |
+| 10 | 100,000 | 210s | none | 119,152 ✅ |
+| 10 | 1,000 (default) | 207s / 212s | none, then 1 | 119,152, then 119,120 |
+| 50 | 100,000 | 269s | none | 119,152 ✅ |
+| 50 | 1,000 (default) | 215s | 5 | 119,045 |
+
+The scenario verifies against a checksum, so a run that drops fails rather than
+publishing a number quietly measured over less work — which is what the two
+faster-looking rows above are.
 
 ### Mint resolution
 
