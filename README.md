@@ -109,17 +109,16 @@ What happens when you do not know the contracts up front? The indexer watches th
 | [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4,093.5 | 1,445.1 | 1.8x slower | ✅ | Postgres 14.0 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 3,784.4 | 1,353.9 | 2x slower | ❌ (1) | Postgres 13.8 MB |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 3,009.1 | 1,062.3 | 2.5x slower | ✅ | Postgres 14.0 MB |
+| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 437.9 | 154.6 | 17.2x slower | ✅ | Postgres 14.5 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 327.4 | 115.6 | 23x slower | ❌ (2) | Postgres 13.8 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 292.9 | 103.4 | 25.7x slower | ✅ | Postgres 25.3 MB |
-| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 266.7 | 66.5 | 28.2x slower | ❓ (3) | Postgres ~14.5 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 49.9 | 20.3 | 150.9x slower | ❓ (4) | Postgres ~34.8 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (5) | — |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 49.9 | 20.3 | 150.9x slower | ❓ (3) | Postgres ~34.8 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (4) | — |
 
 > **(1)** Squid SDK — 921 of 927 safe setups missing; 10 of 11 fallback handler changes missing; 211 of 293 module enables missing
 > **(2)** Squid SDK — 921 of 927 safe setups missing; 10 of 11 fallback handler changes missing; 211 of 293 module enables missing
-> **(3)** Substreams — missing 5.6% of the data: the verification range was not finished within 300s
-> **(4)** Subgraph — missing 82% of the data: the verification range was not finished within 300s
-> **(5)** SubQuery — indexed nothing in 300s, so there was no data to verify
+> **(3)** Subgraph — missing 82% of the data: the verification range was not finished within 300s
+> **(4)** SubQuery — indexed nothing in 300s, so there was no data to verify
 <!-- BENCHMARK:safe-factory-registrations:END -->
 
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
