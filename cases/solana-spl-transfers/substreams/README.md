@@ -53,10 +53,16 @@ pending when it reaches a stop block**, so a bounded run loses its tail. Over
 this scenario's 4,000-slot range that was 29,723 of 119,152 transfers; over a
 100-block range it wrote 25 rows of 2,914, having flushed only the first block.
 
-`--batch-block-flush-interval 1` is what makes a bounded run complete, so that
-is what the driver passes and what this row measures. A production Substreams
-deployment follows the chain head rather than a fixed range, where the default
-batching costs nothing.
+A backfill is a bounded run, so this is the mode the benchmark measures rather
+than an edge case of it. `--batch-block-flush-interval 1` is what makes it
+complete, and it is what the driver passes.
+
+It is not what makes the row slow. Normalised by the rows actually written,
+over 2,000 slots: interval 1 wrote 60,175 rows in 18.1s (3,331 rows/s),
+interval 100 wrote 56,441 in 13.8s (4,082 rows/s), and interval 1,000 wrote
+30,928 in 9.2s (3,358 rows/s). The wall-clock differences are the incomplete
+runs writing less, and what is left is run-to-run variance on a remote stream.
+The bottleneck is upstream of the writes.
 
 ### Run
 

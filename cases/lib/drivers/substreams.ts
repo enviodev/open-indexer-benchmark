@@ -112,11 +112,15 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
           "0",
           "--final-blocks-only",
           // The sink batches 1,000 blocks by default and drops whatever is
-          // pending when it reaches a stop block, so a bounded run loses its
+          // pending when it reaches a stop block, so a bounded run — which is
+          // what a backfill is, and what this benchmark measures — loses its
           // tail: over this scenario's range that was 29,723 of 119,152
           // transfers, and over a 100-block range it wrote 25 rows of 2,914.
-          // Flushing every block is what makes a bounded run complete, and it
-          // is the write pattern this row therefore measures.
+          // Flushing every block is what makes it complete, and it is not what
+          // makes the row slow: normalised by rows actually written, 1, 100 and
+          // 1,000 come out at 3,331, 4,082 and 3,358 rows/s over 2,000 slots,
+          // which is noise rather than a trend. The bottleneck is upstream of
+          // the writes.
           "--batch-block-flush-interval",
           "1",
         ],
