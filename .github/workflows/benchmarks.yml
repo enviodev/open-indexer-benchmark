@@ -82,7 +82,12 @@ jobs:
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations","solana-spl-transfers"]'
+            # Narrowed to the Solana scenario while the Substreams row is being
+            # brought up: the EVM scenarios are untouched by that work and each
+            # full run is eleven long jobs against shared endpoints. Restore the
+            # first line and drop the second before merging.
+            # CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations","solana-spl-transfers"]'
+            CASES_JSON='["solana-spl-transfers"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
