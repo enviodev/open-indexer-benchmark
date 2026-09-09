@@ -129,11 +129,14 @@ Every USDC transfer on Solana, through the chain's busiest program. Solana makes
 <!-- BENCHMARK:solana-spl-transfers:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 16,314.0 | 248.1 | — | ✅ | Postgres 37.8 MB |
-| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 7,537.2 | 239.6 | 2.2x slower | ✅ | Postgres 37.7 MB |
+| [Envio Indexer](https://envio.dev) ⚠️ | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 16,314.0 | 248.1 | — | ✅ | Postgres 37.8 MB |
+| [Squid SDK](https://sqd.dev/sdk/) ⚠️ | [SQD Network](https://docs.sqd.dev/en/network/overview) | 7,537.2 | 239.6 | 2.2x slower | ✅ | Postgres 37.7 MB |
+| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 1,137.5 | 38.2 | 14.3x slower | ❓ (1) | Postgres ~62.5 MB |
 | [Carbon](https://github.com/sevenlabs-hq/carbon) ⚠️ | [RPC](https://solana.com/docs/rpc) | 563.2 | 18.9 | 29x slower | ✅ | Postgres 40.4 MB |
 
-> ⚠️ Carbon — measured by hand rather than in CI, so these numbers are from the last local run rather than from this one.
+> **(1)** Substreams — missing 25% of the data: the indexer exited after 79s without finishing the verification range
+
+> ⚠️ Envio Indexer, Squid SDK, Carbon — carried forward from a previous run; the latest run produced no fresh result.
 <!-- BENCHMARK:solana-spl-transfers:END -->
 
 [How this case works, and how to run it →](./cases/solana-spl-transfers/README.md)

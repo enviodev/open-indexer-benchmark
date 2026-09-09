@@ -111,6 +111,14 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
           "--undo-buffer-size",
           "0",
           "--final-blocks-only",
+          // The sink batches 1,000 blocks by default and drops whatever is
+          // pending when it reaches a stop block, so a bounded run loses its
+          // tail: over this scenario's range that was 29,723 of 119,152
+          // transfers, and over a 100-block range it wrote 25 rows of 2,914.
+          // Flushing every block is what makes a bounded run complete, and it
+          // is the write pattern this row therefore measures.
+          "--batch-block-flush-interval",
+          "1",
         ],
         dir,
         env
