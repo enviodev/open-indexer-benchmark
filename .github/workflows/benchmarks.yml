@@ -372,7 +372,8 @@ jobs:
         run: |
           CHANGED=0
           for CASE in $(echo "$CASES" | jq -r '.[]'); do
-            TABLE="/tmp/benchmark-table-${CASE}.md"
+            # The README variant, without this run's carried-forward marks.
+            TABLE="/tmp/benchmark-readme-${CASE}.md"
             [ -f "$TABLE" ] || continue
 
             # Replace content between this case's markers with the new table

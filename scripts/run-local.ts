@@ -101,7 +101,11 @@ for (const prior of parsePublishedTable(readme, benchCase)) {
   const isLocal = localOnlyRows.has(rowKey(prior));
   rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
 }
-const table = buildTable(rows);
+// The README publishes results, so it carries no mark for which rows this run
+// re-measured — see scripts/build-tables.ts, which does the same for CI.
+const table = buildTable(
+  rows.map((row) => ({ ...row, carriedOver: false, localOnly: false }))
+);
 const start = `<!-- BENCHMARK:${benchCase}:START -->`;
 const end = `<!-- BENCHMARK:${benchCase}:END -->`;
 const from = readme.indexOf(start);
