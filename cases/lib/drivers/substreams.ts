@@ -18,10 +18,10 @@ export const SUBSTREAMS_DB_URL = `postgres://postgres:postgres@localhost:${PG_PO
 const BIN = ".bin";
 
 /**
- * Substreams reads Solana through StreamingFast, which bills by the request
- * and needs an API key, so there is no shared endpoint the way HyperRPC serves
- * the EVM rows. Like Carbon, this row is measured by hand rather than on every
- * push, and the scenario lists it under `localOnly`.
+ * Substreams reads through StreamingFast, which bills by the request and needs
+ * an API key, so there is no shared endpoint the way HyperRPC serves the RPC
+ * rows. Like Carbon, these rows are measured by hand rather than on every push,
+ * and each scenario lists the tool under `localOnly`.
  */
 export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
   const dir = resolve(config.dir, "substreams");
@@ -32,8 +32,15 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
         "exchanges it for a JWT and Substreams serves nothing without one"
     );
   }
+  // An EVM case declares the contract it indexes; a Solana one builds its own
+  // ground truth and has none. That is what picks the chain's endpoint, so a
+  // scenario does not have to restate it.
+  const isEvm = "contract" in config;
   const endpoint =
-    process.env.SUBSTREAMS_ENDPOINT ?? "mainnet.sol.streamingfast.io:443";
+    process.env.SUBSTREAMS_ENDPOINT ??
+    (isEvm
+      ? "mainnet.eth.streamingfast.io:443"
+      : "mainnet.sol.streamingfast.io:443");
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -47,10 +54,16 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
   /** Only tear down a database this driver brought up. */
   let startedContainer = false;
 
-  // The row carries its own slot, so progress is read from the column rather
-  // than parsed back out of the id — which here is a signature, and says
-  // nothing about position.
-  const readProgress = createProgressReader(SUBSTREAMS_DB_URL, config, "slot");
+  // Solana rows carry their slot as a column and are keyed on a signature,
+  // which says nothing about position. EVM rows are keyed `block-logIndex`
+  // like every other implementation of those scenarios, so the block is read
+  // back out of the key rather than stored a second time — a column the others
+  // do not have would show up in the storage comparison.
+  const readProgress = createProgressReader(
+    SUBSTREAMS_DB_URL,
+    config,
+    isEvm ? "split_part(id, '-', 1)::bigint" : "slot"
+  );
 
   const sinkBin = resolve(dir, BIN, "substreams-sink-sql");
 
