@@ -82,12 +82,11 @@ live in the URL, so keep yours in `.env`, which is gitignored.
 
 ### Measured
 
-Over the scenario's 4,000-slot verification range against an archive node:
-260.7s, 15.3 blocks/s, 457.1 events/s, all 119,152 transfers matching the
-ground truth. Concurrency is what that rate is most sensitive to and it is not
-the whole story — ten concurrent requests gave 10 blocks/s and fifty gave 15,
-so the endpoint rather than the client is the limit here. The range takes most
-of the benchmark's five-minute allowance for a verification run.
+Over the scenario's 4,000-slot verification range against an archive node, at
+the concurrency and queue sizes above: 211.6s, 18.9 blocks/s, 563.2 events/s,
+all 119,152 transfers matching the ground truth. That is the row the root
+README publishes. The range takes most of the benchmark's five-minute
+allowance for a verification run.
 
 ### Pins
 
