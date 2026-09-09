@@ -99,7 +99,7 @@ signature and the instruction's path within it. The key is not part of what the
 ground truth checks — the checksum covers the source, destination, amount,
 signer and timestamp — but it is stored and indexed, so it shows up in the
 storage column, and Substreams' row is the larger for it: a base58 signature is
-88 characters against roughly 17, which is 62.8 MB against 37.7 to 40.4 for the
+88 characters against roughly 17, which is 62.7 MB against 37.7 to 40.4 for the
 same 119,152 rows.
 
 That is not a quirk of this implementation, it is what the ecosystem does. The
