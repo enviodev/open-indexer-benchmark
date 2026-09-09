@@ -113,17 +113,18 @@ What happens when you do not know the contracts up front? The indexer watches th
 | [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4,352.2 | 1,536.4 | 1.9x slower | ✅ | Postgres 14.0 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 4,079.2 | 1,459.4 | 2.1x slower | ❌ (1) | Postgres 13.8 MB |
 | [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4,062.3 | 1,434.1 | 2.1x slower | ✅ | Postgres 11.3 MB |
-| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 437.9 | 154.6 | 19.2x slower | ✅ | Postgres 14.5 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 277.1 | 88.1 | 30.4x slower | ❓ (2) | Postgres ~14.0 MB |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 265.6 | 59.2 | 31.7x slower | ❓ (3) | Postgres ~25.3 MB |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 45.0 | 16.1 | 187.1x slower | ❓ (4) | Postgres ~35.9 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (5) | — |
+| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 266.7 | 66.5 | 31.6x slower | ❓ (3) | Postgres ~14.5 MB |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 265.6 | 59.2 | 31.7x slower | ❓ (4) | Postgres ~25.3 MB |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 45.0 | 16.1 | 187.1x slower | ❓ (5) | Postgres ~35.9 MB |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (6) | — |
 
 > **(1)** Squid SDK — 921 of 927 safe setups missing; 10 of 11 fallback handler changes missing; 211 of 293 module enables missing
 > **(2)** Squid SDK — missing 1.8% of the data: the verification range was not finished within 300s
-> **(3)** Ponder — missing 6.1% of the data: the verification range was not finished within 300s
-> **(4)** Subgraph — missing 84% of the data: the verification range was not finished within 300s
-> **(5)** SubQuery — indexed nothing in 300s, so there was no data to verify
+> **(3)** Substreams — missing 5.6% of the data: the verification range was not finished within 300s
+> **(4)** Ponder — missing 6.1% of the data: the verification range was not finished within 300s
+> **(5)** Subgraph — missing 84% of the data: the verification range was not finished within 300s
+> **(6)** SubQuery — indexed nothing in 300s, so there was no data to verify
 <!-- BENCHMARK:safe-factory-registrations:END -->
 
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
