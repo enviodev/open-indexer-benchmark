@@ -20,11 +20,11 @@ transaction carries the mint, which over-matches every swap that touches two
 tokens. This implementation resolves the transfer's own two accounts; the case
 README records the difference.
 
-Instruction layouts are written out in `config.yaml` rather than taken from an
-IDL. `envio@3.11.0` reads Codama IDLs, so SPL Token's published one would now
-work; the two instructions this case needs are four lines each, and writing
-them out keeps the discriminators visible next to the handler that dispatches
-on them.
+Instruction layouts come from SPL Token's published Codama IDL, vendored as
+`token.idl.json` so a run does not depend on fetching it. Codegen reports two
+instructions it cannot index from that IDL — `batch` and `uiAmountToAmount`,
+both of whose argument types Borsh cannot size — and neither is one this case
+reads.
 
 ### Run
 
