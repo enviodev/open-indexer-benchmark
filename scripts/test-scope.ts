@@ -61,6 +61,23 @@ let failures = 0;
       console.log(`ok workflow: all ${REGISTERED.length} indexers get a job`);
     }
   }
+
+  // The scope below diffs against the pull request's base commit, which a
+  // shallow clone does not contain. Pinned to the literal 0 rather than an
+  // expression: `github.event_name == 'pull_request' && 0 || 1` reads as
+  // "full history on a pull request" and evaluates to 1 on every event,
+  // because 0 is falsy, so the checkout is shallow and the diff dies on a
+  // bad object.
+  const depth = workflow.match(/fetch-depth:(.*)/);
+  if (depth?.[1].trim() !== "0") {
+    console.error(
+      `FAIL workflow: the setup job's checkout must be fetch-depth: 0, got ` +
+        `${depth ? depth[1].trim() : "no fetch-depth at all"}`
+    );
+    failures++;
+  } else {
+    console.log("ok workflow: the scope diff has the base commit to diff against");
+  }
 }
 
 function check(name: string, changed: string[], expected: Record<string, string[]>) {
