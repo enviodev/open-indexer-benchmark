@@ -25,7 +25,7 @@ pnpm codegen
 pnpm build
 docker compose up -d
 npx squid-typeorm-migration generate && npx squid-typeorm-migration apply
-SQD_END_BLOCK=440001999 pnpm process
+SQD_END_BLOCK=440003999 pnpm process
 ```
 
 Needs `SQD_API_KEY` from [portal.sqd.dev](https://portal.sqd.dev) in `.env`.

@@ -72,7 +72,7 @@ cargo build --release
 docker compose up -d
 SOLANA_RPC_URL=https://your-archive-endpoint \
 DATABASE_URL=postgres://postgres:postgres@localhost:25432/carbon \
-START_SLOT=440000000 END_SLOT=440001999 \
+START_SLOT=440000000 END_SLOT=440003999 \
   ./target/release/carbon-solana-spl-transfers
 ```
 
