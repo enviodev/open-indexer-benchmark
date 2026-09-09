@@ -19,7 +19,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildTable, parsePublishedTable, rowKey } from "../cases/lib/table.ts";
 import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
-import { INDEXERS } from "../cases/lib/drivers/index.ts";
+import { INDEXERS, TOOLS } from "../cases/lib/drivers/index.ts";
 import { INDEXER_DIRS } from "./select-scope.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -82,10 +82,24 @@ const readme = readFileSync(readmePath, "utf8");
 // re-measure is kept and marked stale. Rebuilding from fresh rows alone would
 // delete a tool's row whenever the run was narrowed to one indexer, or
 // whenever one of them failed.
+//
+// A tool the scenario keeps local-only is carried the same way but says so
+// differently: its numbers are as real as any other row's, just from whenever
+// someone last ran it, so it must not read as a job that produced nothing.
+// This is the marking scripts/build-tables.ts applies for the CI summary, and
+// the two have to agree or the same row reads one way on a push and another
+// after a local run.
+const localOnlyRows = new Set(
+  ((caseConfig.localOnly as string[] | undefined) ?? [])
+    .filter((indexer) => TOOLS[indexer])
+    .map((indexer) => `${TOOLS[indexer].name}|${TOOLS[indexer].source}`)
+);
 const rows = results.map(toTableRow);
 const fresh = new Set(rows.map(rowKey));
 for (const prior of parsePublishedTable(readme, benchCase)) {
-  if (!fresh.has(rowKey(prior))) rows.push({ ...prior, carriedOver: true });
+  if (fresh.has(rowKey(prior))) continue;
+  const isLocal = localOnlyRows.has(rowKey(prior));
+  rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
 }
 const table = buildTable(rows);
 const start = `<!-- BENCHMARK:${benchCase}:START -->`;

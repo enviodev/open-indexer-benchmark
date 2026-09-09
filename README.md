@@ -131,9 +131,10 @@ Every USDC transfer on Solana, through the chain's busiest program. Solana makes
 | --- | --- | --- | --- | --- | --- | --- |
 | [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 12,934.8 | 201.7 | — | ✅ | Postgres 37.8 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 8,828.6 | 276.8 | 1.5x slower | ✅ | Postgres 37.7 MB |
+| [Substreams](https://substreams.dev) ⚠️ | [StreamingFast](https://docs.substreams.dev) | 3,856.5 | 126.9 | 3.4x slower | ✅ | Postgres 62.7 MB |
 | [Carbon](https://github.com/sevenlabs-hq/carbon) ⚠️ | [RPC](https://solana.com/docs/rpc) | 563.2 | 18.9 | 23x slower | ✅ | Postgres 40.4 MB |
 
-> ⚠️ Carbon — measured by hand rather than in CI, so these numbers are from the last local run rather than from this one.
+> ⚠️ Substreams, Carbon — measured by hand rather than in CI, so these numbers are from the last local run rather than from this one.
 <!-- BENCHMARK:solana-spl-transfers:END -->
 
 [How this case works, and how to run it →](./cases/solana-spl-transfers/README.md)

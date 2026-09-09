@@ -55,6 +55,8 @@ than a heuristic every implementation would have to reproduce identically.
 - **Squid SDK** — [sqd/](./sqd/) — reads the SQD Portal
 - **Carbon** — [carbon/](./carbon/) — reads plain RPC at Carbon's default 10
   concurrent `getBlock` calls, run locally
+- **Substreams** — [substreams/](./substreams/) — reads StreamingFast, sunk to
+  Postgres by `substreams-sink-sql`, run locally
 
 A scenario runs the tools it has a project directory for. SubQuery also indexes
 Solana and has no implementation here yet; every other tool in the benchmark is
@@ -62,13 +64,16 @@ EVM-only. The two RPC rows are listed as unsupported rather than missing:
 HyperIndex indexes Solana slots over RPC but not instructions, and SQD serves
 Solana only through its Portal.
 
-Carbon reads every block in the range over plain RPC, and there is no shared
-Solana endpoint here the way HyperRPC serves the EVM rows. Its row is therefore
-measured by hand against an archive node and committed, rather than published
-by CI:
+Carbon reads every block in the range over plain RPC, and Substreams reads
+StreamingFast, which bills by the request; there is no shared Solana endpoint
+here the way HyperRPC serves the EVM rows. Both rows are therefore measured by
+hand against credentials of your own and committed, rather than published by
+CI:
 
 ```bash
-ENVIO_API_TOKEN=your-token SOLANA_RPC_URL=https://your-archive-endpoint \
+ENVIO_API_TOKEN=your-token \
+SOLANA_RPC_URL=https://your-archive-endpoint \
+SUBSTREAMS_API_KEY=your-key \
   node scripts/run-local.ts solana-spl-transfers --commit
 ```
 
@@ -88,11 +93,24 @@ Each indexer indexes the verification range to completion — its database is
 then checked against `expected.json` and measured — before re-running for the
 throughput window.
 
-Every implementation writes the same row, keyed the same way
-(`slot-transactionIndex-instructionPath`). The key is not part of what the
-ground truth checks, but it is stored and indexed, so a scenario whose
-implementations disagree about it publishes a storage column that compares
-primary keys rather than indexers.
+Every implementation writes the same row. Three of them key it the same way,
+`slot-transactionIndex-instructionPath`; Substreams keys on the transaction's
+signature and the instruction's path within it. The key is not part of what the
+ground truth checks — the checksum covers the source, destination, amount,
+signer and timestamp — but it is stored and indexed, so it shows up in the
+storage column, and Substreams' row is the larger for it: a base58 signature is
+88 characters against roughly 17, which is 62.7 MB against 37.7 to 40.4 for the
+same 119,152 rows.
+
+That is not a quirk of this implementation, it is what the ecosystem does. The
+upstream package keys on `(evt_tx, evt_instruction_index)`, and `solana-common`'s
+own instruction stream carries `tx_hash` and no index at all, because a
+signature travels with the transaction while a position within a block does
+not. Substreams filters server-side to the transactions that touch the Token
+program — which is the point of it — and those arrive without the block they
+came from. Computing the index the other three use would mean asking for whole
+blocks and counting, giving up that filter to match a field the ground truth
+never reads.
 
 `expected.json` is a snapshot of what the Envio project produces over the
 verification range — the case's logic is written once, in the indexer, rather

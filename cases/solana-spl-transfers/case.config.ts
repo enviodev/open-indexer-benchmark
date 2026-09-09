@@ -35,10 +35,11 @@ export const caseConfig: SvmCaseConfig = {
     "sqd-rpc": "SQD serves Solana through its Portal, not RPC",
   },
 
-  // Carbon reads every block in the range over plain RPC, and there is no
-  // shared endpoint for Solana the way HyperRPC serves the EVM rows. Its row is
-  // produced by `scripts/run-local.ts` against an archive node and committed.
-  localOnly: ["carbon"],
+  // Carbon reads every block in the range over plain RPC and Substreams reads
+  // StreamingFast, which bills by the request; there is no shared endpoint for
+  // Solana the way HyperRPC serves the EVM rows. Both rows are produced by
+  // `scripts/run-local.ts` against credentials of your own and committed.
+  localOnly: ["carbon", "substreams"],
 
   entities: [
     {

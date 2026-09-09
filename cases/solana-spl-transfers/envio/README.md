@@ -17,12 +17,14 @@ Two instructions move tokens, and they need different treatment:
 
 The upstream package instead asks whether *any* token balance in the
 transaction carries the mint, which over-matches every swap that touches two
-tokens. This implementation resolves the source account exactly; the case
+tokens. This implementation resolves the transfer's own two accounts; the case
 README records the difference.
 
-Instruction layouts are written out in `config.yaml` rather than taken from an
-IDL: SPL Token's published IDL is Codama-shaped, and `envio@3.10.0` parses
-Anchor IDLs only.
+Instruction layouts come from SPL Token's published Codama IDL, vendored as
+`token.idl.json` so a run does not depend on fetching it. Codegen reports two
+instructions it cannot index from that IDL — `batch` and `uiAmountToAmount`,
+both of whose argument types Borsh cannot size — and neither is one this case
+reads.
 
 ### Run
 

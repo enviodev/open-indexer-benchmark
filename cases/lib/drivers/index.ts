@@ -2,6 +2,7 @@
 
 import type { DriverFactory } from "./common.ts";
 import { carbonDriver } from "./carbon.ts";
+import { substreamsDriver } from "./substreams.ts";
 import { envioDriver } from "./envio.ts";
 import { envioSubgraphDriver } from "./envio-subgraph.ts";
 import { ponderDriver } from "./ponder.ts";
@@ -26,6 +27,7 @@ export const DRIVERS: Record<string, DriverFactory> = {
   sqd: sqdDriver("network"),
   "sqd-rpc": sqdDriver("rpc"),
   carbon: carbonDriver,
+  substreams: substreamsDriver,
 };
 
 export const INDEXERS = Object.keys(DRIVERS);
@@ -138,6 +140,13 @@ export const TOOLS: Record<
     toolUrl: "https://github.com/sevenlabs-hq/carbon",
     source: "RPC",
     sourceUrl: SOLANA_RPC_URL,
+    storage: "Postgres",
+  },
+  substreams: {
+    name: "Substreams",
+    toolUrl: "https://substreams.dev",
+    source: "StreamingFast",
+    sourceUrl: "https://docs.substreams.dev",
     storage: "Postgres",
   },
   subquery: {
