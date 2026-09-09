@@ -17,12 +17,14 @@ Two instructions move tokens, and they need different treatment:
 
 The upstream package instead asks whether *any* token balance in the
 transaction carries the mint, which over-matches every swap that touches two
-tokens. This implementation resolves the source account exactly; the case
+tokens. This implementation resolves the transfer's own two accounts; the case
 README records the difference.
 
 Instruction layouts are written out in `config.yaml` rather than taken from an
-IDL: SPL Token's published IDL is Codama-shaped, and `envio@3.10.0` parses
-Anchor IDLs only.
+IDL. `envio@3.11.0` reads Codama IDLs, so SPL Token's published one would now
+work; the two instructions this case needs are four lines each, and writing
+them out keeps the discriminators visible next to the handler that dispatches
+on them.
 
 ### Run
 
