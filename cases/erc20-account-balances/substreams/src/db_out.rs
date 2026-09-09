@@ -32,27 +32,44 @@ fn db_out(
             .set("block_timestamp", approval.block_timestamp);
     }
 
-    // A store delta carries the value the key now holds, so the aggregate rows
-    // are written as upserts of that value rather than read back and adjusted.
+    // A store delta says both what the key now holds and whether this is the
+    // first time it held anything. The sink turns a create into an INSERT and
+    // an update into an UPDATE, so an aggregate has to follow the delta: every
+    // row created would collide on the second change, and every row updated
+    // would never be inserted at all.
     for delta in balances.deltas.iter() {
-        if delta.operation == Operation::Delete {
-            continue;
+        let value = delta.new_value.to_string();
+        match delta.operation {
+            Operation::Create => {
+                tables.create_row("account", delta.key.clone()).set("balance", value);
+            }
+            Operation::Update => {
+                tables.update_row("account", delta.key.clone()).set("balance", value);
+            }
+            _ => continue,
         }
-        tables
-            .update_row("account", delta.key.clone())
-            .set("balance", delta.new_value.to_string());
     }
 
     for delta in allowances.deltas.iter() {
-        if delta.operation == Operation::Delete {
-            continue;
-        }
         let (owner, spender) = delta.key.split_once(':').unwrap_or((&delta.key, ""));
-        tables
-            .update_row("allowance", delta.key.clone())
-            .set("owner_address", owner)
-            .set("spender_address", spender)
-            .set("amount", delta.new_value.to_string());
+        let value = delta.new_value.to_string();
+        match delta.operation {
+            Operation::Create => {
+                tables
+                    .create_row("allowance", delta.key.clone())
+                    .set("owner_address", owner)
+                    .set("spender_address", spender)
+                    .set("amount", value);
+            }
+            Operation::Update => {
+                tables
+                    .update_row("allowance", delta.key.clone())
+                    .set("owner_address", owner)
+                    .set("spender_address", spender)
+                    .set("amount", value);
+            }
+            _ => continue,
+        }
     }
 
     Ok(tables.to_database_changes())
