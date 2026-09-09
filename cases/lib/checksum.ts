@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 /** Number of md5 hex characters folded into each row hash (60 bits). */
 const HASH_HEX_CHARS = 15;
 
-export type FieldKind = "address" | "amount" | "seconds";
+export type FieldKind = "address" | "base58" | "amount" | "seconds";
 
 export interface FieldSpec {
   /** Stable name used in messages and in the canonical field ordering. */
@@ -85,6 +85,11 @@ export interface Expected {
 
 export function encodeAddress(value: string): string {
   return value.toLowerCase();
+}
+
+/** Base58 is case-significant, so a Solana address is its own encoding. */
+export function encodeBase58(value: string): string {
+  return value;
 }
 
 export function encodeAmount(value: bigint): string {

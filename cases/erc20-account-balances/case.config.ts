@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CaseConfig } from "../lib/case.ts";
+import type { EvmCaseConfig } from "../lib/case.ts";
 import {
   canonicalRow,
   encodeAddress,
@@ -16,7 +16,7 @@ const START_BLOCK = 18_600_000;
 // slowest indexer within the phase timeout.
 const VERIFY_END_BLOCK = 18_699_999;
 
-export const caseConfig: CaseConfig = {
+export const caseConfig: EvmCaseConfig = {
   name: "erc20-account-balances",
   title: "State Aggregation",
   dir: dirname(fileURLToPath(import.meta.url)),

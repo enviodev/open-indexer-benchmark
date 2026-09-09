@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CaseConfig } from "../lib/case.ts";
+import type { EvmCaseConfig } from "../lib/case.ts";
 import {
   canonicalRow,
   encodeAddress,
@@ -103,7 +103,7 @@ function answerCall(call: EthCall): string | null {
   return `0x${allowance.toString(16).padStart(64, "0")}`;
 }
 
-export const caseConfig: CaseConfig = {
+export const caseConfig: EvmCaseConfig = {
   name: "erc20-allowance-calls",
   title: "External Contract Calls",
   dir: dirname(fileURLToPath(import.meta.url)),

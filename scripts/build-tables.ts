@@ -11,6 +11,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildTable, parsePublishedTable, rowKey, type TableRow } from "../cases/lib/table.ts";
 import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
+import { TOOLS } from "../cases/lib/drivers/index.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RESULTS_DIR = process.env.RESULTS_DIR ?? "results";
@@ -36,6 +37,25 @@ const selected: Record<string, string[]> | null = process.env.SELECTED_INDEXERS
  * the PR comment cannot drift apart. Falling back to the slug keeps a new case
  * publishing results even before it has a config to import.
  */
+/**
+ * Rows a scenario publishes but never runs here: a tool it keeps local-only is
+ * measured by hand and committed, so its row is carried forward on every run
+ * by design. Warning about those would cry wolf on every push.
+ */
+async function localOnlyRowKeys(name: string): Promise<Set<string>> {
+  try {
+    const mod = await import(resolve(ROOT, "cases", name, "case.config.ts"));
+    const localOnly: string[] = mod.caseConfig?.localOnly ?? [];
+    return new Set(
+      localOnly
+        .filter((indexer) => TOOLS[indexer])
+        .map((indexer) => `${TOOLS[indexer].name}|${TOOLS[indexer].source}`)
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 async function caseTitle(name: string): Promise<string> {
   try {
     const mod = await import(resolve(ROOT, "cases", name, "case.config.ts"));
@@ -89,11 +109,15 @@ for (const benchCase of cases) {
   // from successful jobs alone would silently drop its row, which reads as
   // "no longer benchmarked" rather than "this job failed".
   const fresh = new Set(rows.map(rowKey));
+  const localOnly = await localOnlyRowKeys(benchCase);
   const carried: string[] = [];
   for (const prior of parsePublishedTable(readme, benchCase)) {
     if (fresh.has(rowKey(prior))) continue;
-    rows.push({ ...prior, carriedOver: true });
-    carried.push(`${prior.name} via ${prior.cells.source}`);
+    // A local-only row is carried by design — it has no job that could have
+    // failed — so it is marked stale in the table rather than warned about.
+    const isLocal = localOnly.has(rowKey(prior));
+    rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
+    if (!isLocal) carried.push(`${prior.name} via ${prior.cells.source}`);
   }
   // A run scoped to part of the matrix — a pull request — carries most rows
   // forward by design, so annotating those as failures would cry wolf on
