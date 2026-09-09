@@ -1,0 +1,67 @@
+specVersion: v0.1.0
+package:
+  name: 'safe_factory_registrations'
+  version: v0.1.0
+
+imports:
+  # substreams-sink-sql resolves the sink type from this spkg — it does not
+  # bundle the descriptors. The `substreams` CLI does bundle them, so with this
+  # import present its own commands (`run`, `protogen`) fail on an ambiguous
+  # sf.substreams.sink.sql.v1.Service; comment it out for those, and see the
+  # README.
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.7/substreams-sink-sql-protodefs-v1.0.7.spkg
+  database: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.3.1/substreams-database-change-v1.3.1.spkg
+
+protobuf:
+  files:
+    - evm/safes.proto
+  importPaths:
+    - ./proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/substreams_safe_factory_registrations.wasm
+
+modules:
+  - name: map_proxies
+    kind: map
+    initialBlock: 24600000
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:evm.safes.v1.Proxies
+
+  - name: store_proxies
+    kind: store
+    updatePolicy: set
+    valueType: int64
+    initialBlock: 24600000
+    inputs:
+      - map: map_proxies
+
+  - name: map_events
+    kind: map
+    initialBlock: 24600000
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: store_proxies
+    output:
+      type: proto:evm.safes.v1.Events
+
+  - name: db_out
+    kind: map
+    initialBlock: 24600000
+    inputs:
+      - map: map_proxies
+      - map: map_events
+    output:
+      type: proto:sf.substreams.sink.database.v1.DatabaseChanges
+
+network: mainnet
+sink:
+  module: db_out
+  type: sf.substreams.sink.sql.v1.Service
+  config:
+    schema: "./schema.sql"
+    engine: postgres
