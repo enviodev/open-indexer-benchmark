@@ -77,6 +77,18 @@ export SUBSTREAMS_API_KEY=your-key
 
 The key is a credential: keep it in `.env`, which is gitignored.
 
+### Regenerating the protobuf bindings
+
+```bash
+substreams protogen ./substreams.yaml \
+  --exclude-paths="sf/substreams,google,sf/solana/type,sf/firehose"
+```
+
+`sf/solana/type` is excluded because `buf.gen.yaml` maps it to
+`::substreams_solana::pb::...`, so the crate's own Solana types are used rather
+than a second copy; `sf/firehose` because nothing here reads it. Both need the
+sink import commented out — see below.
+
 ### A note on the two CLIs
 
 `substreams.yaml` imports the sink-sql protodefs spkg, because
