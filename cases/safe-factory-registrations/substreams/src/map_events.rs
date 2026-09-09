@@ -60,12 +60,13 @@ fn map_events(block: Block, proxies: StoreGetInt64) -> Result<Events, substreams
     for log in block.logs() {
         let log = log.log;
         let safe = format!("0x{}", Hex(&log.address));
-        // Only a proxy one of these factories announced counts as a child. The
-        // store is written by a module that runs before this one on the same
-        // block, so a proxy is known here even when its own SafeSetup sits one
-        // log index *below* the ProxyCreation that announced it — which is the
-        // case this scenario exists to make visible.
-        if proxies.get_at(0, &safe).is_none() {
+        // Only a proxy one of these factories announced counts as a child.
+        // `get_last` rather than `get_at(0, ..)`: the latter reads the store as
+        // it stood before this block's writes, so a proxy created in this very
+        // block would not be known yet — and a Safe emits its own SafeSetup one
+        // log index *below* the ProxyCreation announcing it, which is the case
+        // this scenario exists to make visible.
+        if proxies.get_last(&safe).is_none() {
             continue;
         }
         let Some(topic0) = log.topics.first() else {

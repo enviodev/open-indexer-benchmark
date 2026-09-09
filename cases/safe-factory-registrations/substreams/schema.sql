@@ -14,11 +14,11 @@ CREATE TABLE IF NOT EXISTS safe_received (
 
 CREATE TABLE IF NOT EXISTS safe_module_transaction (
     "id" TEXT PRIMARY KEY, "safe" TEXT NOT NULL, "module" TEXT NOT NULL,
-    "to_address" TEXT NOT NULL, "value" NUMERIC NOT NULL,
+    "to" TEXT NOT NULL, "value" NUMERIC NOT NULL,
     "operation" NUMERIC NOT NULL, "block_timestamp" BIGINT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS safe_multi_sig_transaction (
-    "id" TEXT PRIMARY KEY, "safe" TEXT NOT NULL, "to_address" TEXT NOT NULL,
+    "id" TEXT PRIMARY KEY, "safe" TEXT NOT NULL, "to" TEXT NOT NULL,
     "value" NUMERIC NOT NULL, "operation" NUMERIC NOT NULL,
     "block_timestamp" BIGINT NOT NULL);
 

@@ -42,7 +42,7 @@ fn db_out(
             .create_row("safe_module_transaction", tx.id)
             .set("safe", tx.safe)
             .set("module", tx.module)
-            .set("to_address", tx.to)
+            .set("to", tx.to)
             .set("value", tx.value)
             .set("operation", tx.operation)
             .set("block_timestamp", tx.block_timestamp);
@@ -52,7 +52,7 @@ fn db_out(
         tables
             .create_row("safe_multi_sig_transaction", tx.id)
             .set("safe", tx.safe)
-            .set("to_address", tx.to)
+            .set("to", tx.to)
             .set("value", tx.value)
             .set("operation", tx.operation)
             .set("block_timestamp", tx.block_timestamp);
