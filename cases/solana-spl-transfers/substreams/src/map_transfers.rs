@@ -23,15 +23,17 @@ fn map_transfers(
     let timestamp = clock.timestamp.as_ref().map(|t| t.seconds).unwrap_or_default();
 
     let mut data: Vec<Transfer> = Vec::new();
-    // The source module hands over only the transactions that touch the Token
-    // program, so this counts within those rather than within the block. Every
-    // implementation of this scenario keys its rows
-    // `slot-transactionIndex-instructionPath`, and the other three can say
-    // where a transaction sat in its block; asking the server for whole blocks
-    // to match them would give up the filter that is the point of Substreams,
-    // to agree on a field the ground truth does not check. The key keeps its
-    // shape and its length, which is what the storage column compares.
-    for (transaction_index, trx) in trxs.transactions.iter().enumerate() {
+    // Rows are keyed on the transaction's signature and the instruction's path
+    // within it, which is what the upstream package and solana-common's own
+    // instruction stream both do — the latter carries `tx_hash` and no index at
+    // all. A signature travels with the transaction, so it survives the
+    // server-side filter; the position within a block does not, because the
+    // block is what the filter exists to avoid downloading. The other three
+    // implementations of this scenario key on `slot-transactionIndex-path`
+    // instead, and the storage column shows the difference: a base58 signature
+    // is 88 characters against roughly 17. That is the cost of not asking for
+    // whole blocks, and the case README says so under the table.
+    for trx in trxs.transactions.iter() {
         let Some(meta) = trx.meta.as_ref() else { continue };
         // A failed transaction's instructions never happened; no implementation
         // of this scenario counts them.
@@ -55,7 +57,7 @@ fn map_transfers(
                 &mint,
             ) {
                 data.push(transfer.into_row(
-                    format!("{}-{}-{}", slot, transaction_index, top_index),
+                    format!("{}-{}", signature, top_index),
                     signature.clone(),
                     slot,
                     timestamp,
@@ -104,7 +106,7 @@ fn map_transfers(
                     .collect::<Vec<_>>()
                     .join(".");
                 data.push(transfer.into_row(
-                    format!("{}-{}-{}.{}", slot, transaction_index, top_index, path),
+                    format!("{}-{}.{}", signature, top_index, path),
                     signature.clone(),
                     slot,
                     timestamp,

@@ -4,9 +4,12 @@ package:
   version: v0.1.0
 
 imports:
-  # The sink-sql protodefs spkg is deliberately not imported: the CLI carries
-  # its own copy, and having both makes sf.substreams.sink.sql.v1.Service
-  # ambiguous, which fails every command that resolves the manifest.
+  # substreams-sink-sql resolves the sink type from this spkg — it does not
+  # bundle the descriptors. The `substreams` CLI does bundle them, so with this
+  # import present its own commands (`run`, `protogen`) fail on an ambiguous
+  # sf.substreams.sink.sql.v1.Service; comment it out for those, and see the
+  # README.
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.7/substreams-sink-sql-protodefs-v1.0.7.spkg
   database: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.3.1/substreams-database-change-v1.3.1.spkg
   solana: https://spkg.io/streamingfast/solana-common-v0.3.0.spkg
 
