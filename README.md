@@ -58,6 +58,7 @@ How fast can an indexer write? Every USDC transfer is stored once, with nothing 
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 38,223.2 | 4,143.1 | 2.7x slower | ✅ | Postgres 1.4 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 16,535.7 | 1,920.3 | 6.3x slower | ✅ | Postgres 1.4 MB |
 | [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4,277.5 | 537.4 | 24.3x slower | ✅ | Postgres 3.4 MB |
+| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 2,653.1 | 310.7 | 39.1x slower | ✅ | Postgres 1.4 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1,588.2 | 200.2 | 65.4x slower | ✅ | Postgres 1.4 MB |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1,314.5 | 167.2 | 79x slower | ✅ | Postgres 1.4 MB |
 | [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 441.4 | 63.4 | 235.2x slower | ✅ | Postgres 1.4 MB |
