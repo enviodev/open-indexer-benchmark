@@ -27,7 +27,7 @@
 
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
-import { TRANSFER_TOPIC } from "./hypersync.ts";
+import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
 
 /**
  * Port the mock chain listens on by default. Distinct from the contract-call
@@ -97,6 +97,19 @@ export interface ChainSpec {
   calls?: Record<string, string | null>;
   /** Override the listening port, so two chains can run side by side. */
   port?: number;
+  /**
+   * A stretch of blocks that carry no logs at all, inclusive. A tool whose
+   * progress is only ever the last row it wrote appears to stall here, which
+   * is the point: an indexer has to be able to say where it is in a range that
+   * gave it nothing to do.
+   */
+  emptyRange?: { from: number; to: number };
+  /**
+   * Overrides the amount a log carries, for the values a schema is most likely
+   * to be wrong about. Returning null leaves the derived amount alone, so a
+   * scenario can single out one block without flattening the rest.
+   */
+  amountOf?: (block: number, index: number) => bigint | null;
 }
 
 /** `symbol()`, `name()`, `decimals()`, `totalSupply()`. */
@@ -191,10 +204,48 @@ export interface ChainControl {
   };
   /** The block at a height on the current chain, or null if it is not there. */
   blockAt(height: number): MockBlock | null;
+  /**
+   * Every log the chain currently holds, oldest first — the ground truth a
+   * scenario compares an indexer's tables against.
+   *
+   * Derived from the chain as it stands right now, which is the only reading
+   * that means anything after a reorg: rows discarded by one are not in here,
+   * and a tool still holding them is holding rows that are not on the chain.
+   */
+  rows(upToHeight?: number): ChainRow[];
   /** Break the endpoint. Call with null to heal it. */
   fail(fault: Fault | null): void;
+  /**
+   * Change the provider's caps while a tool is running, so a scenario can see
+   * whether one that narrowed its queries under a cap ever widens them again.
+   * An undefined field clears that cap.
+   */
+  setLimits(limits: { maxBlockRange?: number; maxLogsPerResponse?: number }): void;
+  /**
+   * Answer from `blocks` behind the real head, the way one node of a
+   * load-balanced endpoint does. Blocks above the lagging head are reported as
+   * missing too, because a replica that has not seen them does not have them.
+   * Zero restores the truth.
+   */
+  setHeadLag(blocks: number): void;
+  /**
+   * Serve every log twice in the same response. A chain cannot do this; a
+   * provider stitching two backends together can, and an indexer that writes
+   * what it is given ends up with each transfer stored twice.
+   */
+  setDuplicateLogs(on: boolean): void;
   stats(): ChainStats;
   reset(): void;
+}
+
+/** One log, in the shape the scenarios compare an indexer's table against. */
+export interface ChainRow {
+  block: number;
+  logIndex: number;
+  amount: bigint;
+  /** Lowercase, `0x`-prefixed — the form every comparison normalises to. */
+  from: string;
+  to: string;
 }
 
 export interface ChainMock {
@@ -208,6 +259,11 @@ export interface ChainMock {
 
 export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   const firstLogIndex = spec.firstLogIndex ?? 0;
+  // Mutable copies of the caps, so a scenario can lift them mid-run.
+  let maxBlockRange = spec.maxBlockRange;
+  let maxLogsPerResponse = spec.maxLogsPerResponse;
+  let headLag = 0;
+  let duplicateLogs = false;
   /** The canonical chain, oldest first. Index 0 is `spec.startBlock`. */
   const chain: MockBlock[] = [];
   let stats = emptyStats();
@@ -223,10 +279,11 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     const block: MockBlock = {
       number,
       hash: hex32("block", number, epoch),
-      // The genesis of this mock is the first block it serves; its parent is a
-      // hash nothing will ever ask about, which is fine — no indexer walks
-      // below its own start block.
-      parentHash: parent?.hash ?? hex32("parent", number, epoch),
+      // Below the start block the chain continues into derived ancestors, so
+      // the first served block's parent is a hash that can actually be
+      // fetched. A tool that walks back one block from its start block finds a
+      // chain rather than a dead end.
+      parentHash: parent?.hash ?? hex32("ancestor", number - 1),
       timestamp: 1_700_000_000 + (number - spec.startBlock) * spec.blockTimeS,
       epoch,
       logs,
@@ -245,10 +302,14 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
    */
   function logsOf(block: MockBlock) {
     if (!block.logs) return [];
+    const empty = spec.emptyRange;
+    if (empty && block.number >= empty.from && block.number <= empty.to) return [];
     return Array.from({ length: spec.logsPerBlock }, (_, i) => {
       const from = hex20("from", block.number, i);
       const to = hex20("to", block.number, i);
-      const amount = BigInt(block.number) * 1_000n + BigInt(block.epoch * 7 + i);
+      const amount =
+        spec.amountOf?.(block.number, i) ??
+        BigInt(block.number) * 1_000n + BigInt(block.epoch * 7 + i);
       return {
         address: spec.contract,
         topics: [TRANSFER_TOPIC, `0x${word(from)}`, `0x${word(to)}`],
@@ -265,8 +326,41 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     });
   }
 
+  /**
+   * A block below the chain's start block.
+   *
+   * Nothing is indexed down here, but tools ask: a chain head tracker walking
+   * back for a parent, a client checking the network by reading an early
+   * block. Answering null would be a hole in a chain that is supposed to be
+   * ordinary everywhere except where a scenario made it strange, so ancestors
+   * are derived on demand — hashes that chain together, no logs, no branch.
+   */
+  function ancestorAt(height: number): MockBlock {
+    return {
+      number: height,
+      hash: hex32("ancestor", height),
+      parentHash: hex32("ancestor", height - 1),
+      timestamp: 1_700_000_000 - (spec.startBlock - height) * spec.blockTimeS,
+      epoch: 0,
+      logs: false,
+      publishedAtMs: 0,
+    };
+  }
+
   function blockAt(height: number): MockBlock | null {
+    if (height < spec.startBlock) return height >= 0 ? ancestorAt(height) : null;
+    // A lagging replica does not have the blocks it has not seen. Hiding them
+    // as well as the head keeps the lie self-consistent: a tool that asks for
+    // a block the head does not cover gets the same answer a real replica
+    // would give it, rather than a block from a future it denies having.
+    if (headLag > 0 && height > servedHead()) return null;
     return chain[height - spec.startBlock] ?? null;
+  }
+
+  /** The head as the endpoint currently admits to, which may be behind. */
+  function servedHead(): number {
+    const real = chain[chain.length - 1]?.number ?? spec.startBlock;
+    return Math.max(spec.startBlock, real - headLag);
   }
 
   function serializeBlock(block: MockBlock, fullTx: boolean) {
@@ -319,12 +413,11 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   function blockRef(ref: unknown): number | null {
     if (typeof ref === "number") return ref;
     if (typeof ref !== "string") return null;
-    const head = chain[chain.length - 1];
     // "safe" and "finalized" are deliberately the head too. A scenario that
     // wanted a finality lag would have to say so; making one up here would
     // silently change what every reorg scenario is testing.
     if (["latest", "pending", "safe", "finalized"].includes(ref)) {
-      return head ? head.number : spec.startBlock;
+      return servedHead();
     }
     if (ref === "earliest") return spec.startBlock;
     const parsed = Number.parseInt(ref, 16);
@@ -340,28 +433,24 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       if (!block) throw rpcFault(-32_000, "unknown block");
       return filterLogs(logsOf(block), filter);
     }
-    const head = chain[chain.length - 1]?.number ?? spec.startBlock;
+    const head = servedHead();
     const from = Math.max(blockRef(filter?.fromBlock ?? "earliest") ?? spec.startBlock, spec.startBlock);
     const to = Math.min(blockRef(filter?.toBlock ?? "latest") ?? head, head);
     stats.widestRange = Math.max(stats.widestRange, to - from + 1);
-    if (spec.maxBlockRange && to - from + 1 > spec.maxBlockRange) {
-      throw rpcFault(
-        -32_600,
-        `query exceeds max block range ${spec.maxBlockRange}`
-      );
+    if (maxBlockRange && to - from + 1 > maxBlockRange) {
+      throw rpcFault(-32_600, `query exceeds max block range ${maxBlockRange}`);
     }
     const out: ReturnType<typeof logsOf> = [];
     for (let height = from; height <= to; height++) {
       const block = blockAt(height);
       if (block) out.push(...filterLogs(logsOf(block), filter));
     }
-    if (spec.maxLogsPerResponse && out.length > spec.maxLogsPerResponse) {
-      throw rpcFault(
-        -32_005,
-        `query returned more than ${spec.maxLogsPerResponse} results`
-      );
+    if (maxLogsPerResponse && out.length > maxLogsPerResponse) {
+      throw rpcFault(-32_005, `query returned more than ${maxLogsPerResponse} results`);
     }
-    return out;
+    // Doubling happens last, so it is the response that is wrong rather than
+    // the chain: the same log, twice, with the same block, hash and index.
+    return duplicateLogs ? out.flatMap((log) => [log, log]) : out;
   }
 
   function filterLogs(logs: ReturnType<typeof logsOf>, filter: Record<string, unknown>) {
@@ -398,7 +487,6 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
 
   function handle(req: { method?: string; params?: unknown[] }): unknown {
     const params = req.params ?? [];
-    const head = chain[chain.length - 1];
     switch (req.method) {
       case "eth_chainId":
         return quantity(spec.chainId);
@@ -409,7 +497,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       case "eth_syncing":
         return false;
       case "eth_blockNumber":
-        return quantity(head?.number ?? spec.startBlock);
+        return quantity(servedHead());
       case "eth_gasPrice":
       case "eth_maxPriorityFeePerGas":
         return "0x7";
@@ -425,7 +513,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         return block ? serializeBlock(block, params[1] === true) : null;
       }
       case "eth_getBlockByHash": {
-        const block = chain.find((b) => b.hash === params[0]);
+        const block = chain.find(
+          (b) => b.hash === params[0] && b.number <= servedHead()
+        );
         return block ? serializeBlock(block, params[1] === true) : null;
       }
       case "eth_getLogs":
@@ -580,8 +670,34 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       return { from, to: chain[chain.length - 1].number };
     },
     blockAt,
+    rows(upToHeight) {
+      const out: ChainRow[] = [];
+      for (const block of chain) {
+        if (upToHeight !== undefined && block.number > upToHeight) break;
+        for (const log of logsOf(block)) {
+          out.push({
+            block: block.number,
+            logIndex: Number(BigInt(log.logIndex)),
+            amount: BigInt(log.data),
+            from: `0x${log.topics[1].slice(-40)}`,
+            to: `0x${log.topics[2].slice(-40)}`,
+          });
+        }
+      }
+      return out;
+    },
     fail(next) {
       fault = next;
+    },
+    setLimits(limits) {
+      maxBlockRange = limits.maxBlockRange;
+      maxLogsPerResponse = limits.maxLogsPerResponse;
+    },
+    setHeadLag(blocks) {
+      headLag = Math.max(0, blocks);
+    },
+    setDuplicateLogs(on) {
+      duplicateLogs = on;
     },
     stats: () => ({ ...stats, methods: { ...stats.methods } }),
     reset() {

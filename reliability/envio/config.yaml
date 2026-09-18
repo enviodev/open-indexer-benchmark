@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: reliability-indexer
+description: The project the reliability scenarios index, over a generated chain
+contracts:
+  - name: ERC20
+    events:
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+chains:
+  # The generated chain answers as mainnet: several tools treat an unknown
+  # chain id as a configuration error rather than as a chain.
+  - id: 1
+    start_block: 1000000
+    end_block: ${ENVIO_END_BLOCK}
+    rpc:
+      url: ${ENVIO_RPC_URL}
+      for: ${ENVIO_RPC_FOR:-sync}
+    contracts:
+      - name: ERC20
+        address: 0x00000000000000000000000000000000000c0ffee

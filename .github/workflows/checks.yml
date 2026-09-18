@@ -1,10 +1,14 @@
 name: Checks
 
-# The harness's own tests, for the parts that need no credentials and no
+# The harness's own tests, for the parts that need no credentials and no real
 # indexer: the pull request scope filter, the result tables and their parser,
-# the mock chain the reliability scenarios serve, and the reliability catalog
-# and scoring. All four run in a second or two, so they run on every push
-# rather than being remembered before a release.
+# the mock chain the reliability scenarios serve, the reliability catalog and
+# scoring, and the reliability harness itself — which is driven against an
+# indexer with deliberate defects and has to catch each one.
+#
+# The first four run in a second or two. The last needs a PostgreSQL, which is
+# why this job has one, and takes a few minutes; its slower scenarios are left
+# out unless it is run with --full.
 #
 # The tests that are still deliberately absent — scripts/test-verification.ts
 # and scripts/test-rpc-mock.ts — need a live HyperSync token, which forks do
@@ -21,6 +25,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,7 +47,15 @@ jobs:
       - run: node scripts/test-scope.ts
       - run: node scripts/test-tables.ts
       - run: node scripts/test-chain-mock.ts
-      # Also fails when cases/reliability/README.md has fallen behind the
+      # Also fails when reliability/README.md has fallen behind the
       # catalog, so a score can never link to an explanation of a check that
       # has since been rewritten.
       - run: node scripts/test-reliability.ts
+      # The harness's own test: it drives every scenario against an indexer
+      # with known defects and asserts that the checks catch them. Without it,
+      # a published pass is only a claim that nothing was noticed. It needs a
+      # database it may create databases on, and nothing else — the chain is
+      # generated and the indexer under test is in this repository.
+      - run: node scripts/test-reliability-harness.ts
+        env:
+          RELIABILITY_TEST_DB: postgresql://postgres:postgres@127.0.0.1:5432/postgres

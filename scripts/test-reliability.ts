@@ -14,18 +14,26 @@
 // hand, which is the point — the scoring has to be checkable without a run.
 
 import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  AWAITING_PROJECT,
+  RELIABILITY_TOOLS,
+  unaccountedDrivers,
+} from "../reliability/lib/tools.ts";
 import {
   CANDIDATES,
   GROUPS,
   SCENARIOS,
   checkCount,
-} from "../cases/lib/reliability/scenarios.ts";
+} from "../reliability/lib/scenarios.ts";
 import {
   measuresOf,
   scoreTool,
   tallyRank,
+  type ScenarioRun,
   type ToolReliability,
-} from "../cases/lib/reliability/score.ts";
+} from "../reliability/lib/score.ts";
 import {
   buildReliabilityTable,
   parsePublishedReliability,
@@ -33,7 +41,20 @@ import {
   toReliabilityRow,
   RELIABILITY_END,
   RELIABILITY_START,
-} from "../cases/lib/reliability/table.ts";
+} from "../reliability/lib/table.ts";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * Drivers whose project directory is not named after them, the same handful
+ * the throughput suite has: both Envio rows share one directory, and the Envio
+ * Subgraph row runs the Subgraph tool's project unchanged.
+ */
+const PROJECT_DIRS: Record<string, string> = {
+  "envio-rpc": "envio",
+  "sqd-rpc": "sqd",
+  "envio-subgraph-rpc": "subgraph",
+};
 
 let failures = 0;
 
@@ -115,6 +136,37 @@ check(
       ).length <= 1
   )
 );
+
+// ── Which tools the suite covers ───────────────────────────────────────
+//
+// A tool is measured only if the mock chain can serve it and this repository
+// holds an implementation of the reliability case for it. Both halves are
+// pinned: a registry that claims a tool it has no project for produces a job
+// that fails at `pnpm install`, and a to-do entry left behind after the
+// project lands hides a row that exists.
+
+check(
+  "every registered driver is either run or explained",
+  unaccountedDrivers().length === 0,
+  unaccountedDrivers().join(", ")
+);
+for (const tool of RELIABILITY_TOOLS) {
+  const directory = PROJECT_DIRS[tool] ?? tool;
+  check(
+    `${tool} has a reliability project to run`,
+    existsSync(resolve(ROOT, "reliability", directory, "package.json")),
+    `reliability/${directory} has no package.json`
+  );
+}
+for (const [tool, reason] of Object.entries(AWAITING_PROJECT)) {
+  const directory = PROJECT_DIRS[tool] ?? tool;
+  check(
+    `${tool} is still waiting on its project`,
+    !existsSync(resolve(ROOT, "reliability", directory, "package.json")),
+    `reliability/${directory} exists now — move ${tool} from AWAITING_PROJECT into ` +
+      `RELIABILITY_TOOLS in reliability/lib/tools.ts (its note reads "${reason}")`
+  );
+}
 
 // ── Scoring ────────────────────────────────────────────────────────────
 
@@ -236,21 +288,30 @@ const crashed: ToolReliability = {
   toolUrl: "https://example.test",
   source: "RPC",
   sourceUrl: "https://rpc.test",
-  runs: SCENARIOS.map((scenario) => ({
-    scenario: scenario.id,
-    checks: Object.fromEntries(
-      scenario.checks.map((c) => [
-        c.id,
-        scenario.group === "crash-recovery" ? fail("exited when Postgres went away") : pass,
-      ])
-    ),
-    measures:
-      scenario.id === "db-restart"
-        ? { "manual-restarts": 2, "resume-seconds": 41 }
-        : scenario.id === "block-to-row"
-          ? { "p50-ms": 640, "p99-ms": 4_200, "max-lag-blocks": 3 }
-          : undefined,
-  })),
+  runs: SCENARIOS.map((scenario): ScenarioRun => {
+    const measures: Record<string, number> = {};
+    if (scenario.id === "db-restart") {
+      measures["manual-restarts"] = 2;
+      measures["resume-seconds"] = 41;
+    }
+    if (scenario.id === "block-to-row") {
+      measures["p50-ms"] = 640;
+      measures["p99-ms"] = 4_200;
+      measures["max-lag-blocks"] = 3;
+    }
+    return {
+      scenario: scenario.id,
+      checks: Object.fromEntries(
+        scenario.checks.map((c) => [
+          c.id,
+          scenario.group === "crash-recovery"
+            ? fail("exited when Postgres went away")
+            : pass,
+        ])
+      ),
+      measures,
+    };
+  }),
 };
 
 const rows = [perfect("Perfect Indexer"), crashed].map((tool) => {

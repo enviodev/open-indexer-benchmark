@@ -1,6 +1,7 @@
 // The reliability table, and reading it back.
 //
-// Same shape and the same rules as the throughput tables in ../table.ts — rows
+// Same shape and the same rules as the throughput tables in
+// ../../cases/lib/table.ts — rows
 // are tools, a tool appears once per source, a run that produced no fresh
 // result keeps its last published row rather than vanishing — because the two
 // tables sit on the same page and a reader should not have to learn them
@@ -18,7 +19,7 @@ import { GROUPS, SCENARIOS } from "./scenarios.ts";
 import { tallyRank, type Tally, type ToolScore } from "./score.ts";
 
 /** Where a score links to, relative to the repository README. */
-export const DETAIL_PAGE = "./cases/reliability/README.md";
+export const DETAIL_PAGE = "./reliability/README.md";
 
 const NO_VALUE = "—";
 

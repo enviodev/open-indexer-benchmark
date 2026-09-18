@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec, kill, psql, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg, signalGroup } from "../process.ts";
 import {
   BENCHMARK_PORT,
   blocksIndexed,
@@ -186,6 +186,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     // Reaching the manifest's endBlock stops the deployment but leaves the
     // process running, so completion is decided by the runner's progress
     // targets rather than here.
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

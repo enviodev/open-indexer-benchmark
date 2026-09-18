@@ -189,6 +189,11 @@ function fieldExpr(field: FieldSpec, col: ColumnInfo): string {
       return type.startsWith("timestamp") || type === "date"
         ? `(extract(epoch from ${ident})::bigint)::text`
         : `(${ident}::bigint)::text`;
+    case "text":
+      // Cast rather than trusted: an indexer may store a string field as
+      // varchar, text, or one of the enum-ish domain types a generated schema
+      // produces, and concat_ws would render each of them differently.
+      return `(${ident}::text)`;
   }
 }
 

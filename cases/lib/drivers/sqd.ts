@@ -1,7 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { exec, kill, start, waitPg } from "../process.ts";
+import { exec, kill, start, waitPg, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -107,6 +107,7 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
     async cleanup() {
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
     },
+    signal: (signal) => signalGroup(processor, signal),
     exited: () => done,
   };
 };

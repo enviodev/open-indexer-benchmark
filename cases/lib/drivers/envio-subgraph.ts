@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec, kill, psql, start } from "../process.ts";
+import { exec, kill, psql, start, signalGroup } from "../process.ts";
 import { type DriverFactory } from "./common.ts";
 import { createEnvioSnapshot, ENVIO_DB_URL } from "./envio.ts";
 
@@ -86,6 +86,7 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
     // envio manages its own Postgres container and the next phase drops the
     // schema anyway, so there is nothing to tear down here.
     async cleanup() {},
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

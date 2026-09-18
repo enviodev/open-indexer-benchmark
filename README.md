@@ -41,11 +41,21 @@ how many times a tool had to be restarted by hand to get through the database
 restart, and the median gap between a block being published and its rows being
 readable. A dash is not `0 / n` — it means the run could not ask.
 
+Every scenario runs three times against a fresh chain and a fresh database, and
+a check passes only if it passed every one: an indexer that survives a database
+restart unless the restart lands mid-batch has not survived it.
+
 There is no passing mark, and a full column is a smaller claim than it looks:
 it means the tool survived the situations someone thought to write down. What
-is not yet asked is published too, at the end of the same page.
+is not yet asked is published too, at the end of the same page, along with
+which tools are measured and why the others are not.
 
-[Every check, and what is still missing →](./cases/reliability/README.md)
+[Every check, and what is still missing →](./reliability/README.md)
+
+```bash
+node reliability/run.ts                 # every tool, every scenario, three runs each
+node reliability/run.ts ponder --repeats=5
+```
 
 
 ## Scenarios

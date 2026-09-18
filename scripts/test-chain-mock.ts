@@ -18,7 +18,7 @@ import {
   SELECTORS,
   startChainMock,
   type ChainMock,
-} from "../cases/lib/chain-mock.ts";
+} from "../reliability/lib/chain-mock.ts";
 
 let failures = 0;
 

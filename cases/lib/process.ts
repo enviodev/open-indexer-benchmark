@@ -73,6 +73,32 @@ export function kill(proc: ChildProcess | null): Promise<void> {
   });
 }
 
+/**
+ * Send a signal to a process and its group, without waiting for it to die.
+ *
+ * `kill` above is the orderly stop every phase ends with. This is for the
+ * reliability scenarios that are about how an indexer dies: SIGKILL with no
+ * chance to flush, or SIGTERM with the harness watching whether it takes it.
+ * Returns false when there is nothing running to signal.
+ */
+export function signalGroup(
+  proc: ChildProcess | null,
+  signal: NodeJS.Signals
+): boolean {
+  if (!proc?.pid || proc.exitCode !== null || proc.signalCode !== null) return false;
+  try {
+    process.kill(-proc.pid, signal);
+    return true;
+  } catch {
+    try {
+      proc.kill(signal);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 /** Run a SQL query via psql and return the trimmed stdout. */
 export function psql(connStr: string, query: string): Promise<string> {
   return new Promise((res, rej) => {

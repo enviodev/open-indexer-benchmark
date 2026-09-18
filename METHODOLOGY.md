@@ -40,8 +40,20 @@ suite makes up a chain that does all three identically every run. The cost is
 that every tool is measured on its RPC ingestion path, whatever it reads in
 production; the source column says so.
 
+Every scenario runs more than once, three times by default, against a fresh
+chain and a fresh database each time, and a check passes only if it passed
+every run. A check is a claim rather than a measurement: one that holds two
+times in three is not a weaker claim but a worse one, so a check that failed
+once is published as a failure with the count in its note. The measures beside
+the scores are measurements, so those are the median of the runs.
+
+Only tools that read plain RPC can be measured this way, since the benchmark
+cannot make HyperSync or SQD Network reorg on request; a tool with its own
+network is measured on its RPC row instead, and the page below lists every
+tool and says which of the two it is.
+
 Each scenario, each check and what a pass means is in
-[cases/reliability/README.md](./cases/reliability/README.md), which is generated
+[reliability/README.md](./reliability/README.md), which is generated
 from the same catalog the scores are computed from — so what a number means and
 how it was reached cannot drift apart. That page ends with the failures the
 suite does not yet provoke and what each would take to build, because a full

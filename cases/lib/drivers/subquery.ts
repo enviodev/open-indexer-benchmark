@@ -15,6 +15,9 @@ export const SUBQUERY_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PO
 /** Matches `--db-schema` in each case's docker-compose.yml. */
 const DB_SCHEMA = "app";
 
+/** The compose service running the node, as every case's compose file names it. */
+const INDEXER_SERVICE = "subquery-node";
+
 export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const dir = resolve(config.dir, "subquery");
   const env = {
@@ -97,6 +100,20 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     },
     async cleanup() {
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
+    },
+    // The only indexer here that runs inside a container, so the signal has to
+    // reach the container rather than the foreground `compose up` that started
+    // it: SIGKILLing that process would leave the node indexing away inside a
+    // container the harness had already written off as dead. Killing the
+    // service brings `compose up` down with it, which is what marks the
+    // indexer exited.
+    async signal(signal) {
+      try {
+        await exec("docker", ["compose", "kill", "-s", signal, INDEXER_SERVICE], dir, env);
+        return true;
+      } catch {
+        return false;
+      }
     },
     exited: () => done,
   };

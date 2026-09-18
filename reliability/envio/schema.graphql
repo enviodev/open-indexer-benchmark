@@ -1,0 +1,21 @@
+type Transfer {
+  id: ID!
+  blockNumber: BigInt!
+  "Near the top of an unsigned 32-bit integer in one scenario, so never an Int."
+  logIndex: BigInt!
+  from: String!
+  to: String!
+  amount: BigInt!
+}
+
+type Account {
+  id: ID!
+  balance: BigInt!
+}
+
+"Written from a contract read whose answers are deliberately awkward."
+type Token {
+  id: ID!
+  symbol: String
+  name: String
+}

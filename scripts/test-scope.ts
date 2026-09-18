@@ -293,28 +293,28 @@ check("selections merge across files, in canonical order", [
 check("an unknown case directory is ignored", ["cases/erc20-approvals/run.ts"], {});
 
 // The reliability suite runs nothing in the throughput matrix, which is only
-// safe while no benchmark job can reach it. The filter cannot check that for
-// itself, so the pin is here: if a case config, a driver or the runner ever
-// imports the mock chain or the scoring catalog, the suite is on a benchmark
-// job's execution path and a change to it has to re-measure those rows.
-check("the mock chain runs no throughput job", ["cases/lib/chain-mock.ts"], {});
-check("the reliability catalog runs no throughput job", [
-  "cases/lib/reliability/scenarios.ts",
+// safe while the dependency stays one-way: reliability/ imports the drivers it
+// needs from cases/, and nothing in cases/ imports reliability/. The filter
+// cannot check a direction for itself, so the pin is here — if a case config,
+// a driver or the throughput runner ever reaches into the suite, it is on a
+// benchmark job's execution path and a change to it has to re-measure those
+// rows.
+check("the reliability suite runs no throughput job", [
+  "reliability/lib/scenarios.ts",
+  "reliability/ponder/ponder.config.ts",
+  "reliability/run.ts",
 ], {});
 {
-  const reliability = /from\s+"[^"]*(chain-mock|reliability\/)/;
+  const reliability = /from\s+"[^"]*(\.\.\/reliability\/|chain-mock)/;
   const offenders: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = resolve(dir, entry.name);
-      // The suite is allowed to import itself.
-      if (path === resolve(ROOT, "cases", "lib", "reliability")) continue;
       if (entry.isDirectory()) {
         if (entry.name !== "node_modules") walk(path);
         continue;
       }
       if (!entry.name.endsWith(".ts")) continue;
-      if (path === resolve(ROOT, "cases", "lib", "chain-mock.ts")) continue;
       if (reliability.test(readFileSync(path, "utf8"))) {
         offenders.push(path.slice(ROOT.length + 1));
       }

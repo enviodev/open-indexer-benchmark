@@ -22,8 +22,21 @@ question with an observable answer.
 
 The indexer under test is otherwise run exactly as the throughput scenarios run
 it: the tool's own production command, its own database, no benchmark-specific
-configuration. What the harness does is start the chain, provoke it, and read
-the tool's tables directly.
+configuration. Each tool implements the same small project — a transfer per
+log, a running balance, and one row written from a contract read — under
+[`reliability/`](.), started by the same drivers the throughput suite uses.
+What the harness does is start the chain, provoke it, and read the tool's
+tables directly.
+
+**Every scenario runs more than once**, three times by default, against a fresh
+chain and a fresh database each time, and a check passes only if it passed
+every run. This is not noise reduction. A measurement is allowed to be noisy; a
+check is a claim that a tool does something, and one that holds two times in
+three is not a weaker claim but a worse one — an indexer that survives a
+database restart unless the restart lands mid-batch has not survived it. A
+check that failed once in three is published as a failure, with the count in
+the note. The measures beside the scores are measurements, so those are the
+median of the runs, and the spread is printed in the run log.
 
 **What this cannot tell you.** A mocked chain is an RPC endpoint, so every tool
 is measured on its RPC ingestion path. A tool that reads its own network in
@@ -76,6 +89,30 @@ write down, which is not the same as a reliable tool — see
   - [Legal values that break things](#awkward-values)
 - [**head latency**](#head-latency) — How long after a block is published its rows are readable, and whether that holds up while the chain misbehaves.
   - [From block to row](#block-to-row)
+
+<a id="coverage"></a>
+
+## Which tools are measured
+
+| tool | source | status |
+| --- | --- | --- |
+| Envio Indexer | RPC | measured |
+| Ponder | RPC | measured |
+| envio-subgraph-rpc | RPC | not yet: the reliability case has no subgraph/ project yet, which is what this row would run on HyperIndex |
+| rindexer | RPC | not yet: the reliability case has no rindexer/ project yet |
+| sqd-rpc | RPC | not yet: the reliability case has no sqd/ project yet |
+| subgraph | RPC | not yet: the reliability case has no subgraph/ project yet |
+| subquery | RPC | not yet: the reliability case has no subquery/ project yet |
+| envio | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Indexer's RPC row is measured instead |
+| envio-subgraph | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Subgraph's RPC row is measured instead |
+| rindexer-hypersync | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; Rindexer's RPC row is measured instead |
+| sqd | — | reads SQD Network, which the benchmark cannot make reorg or fail on demand; the Squid SDK's RPC row is measured instead |
+
+A tool needs two things to appear in the results: an RPC path the generated
+chain can serve, and an implementation of the case above for its framework.
+The rows marked *not yet* are waiting only on the second, and adding one is
+the whole of what it takes — the drivers, the scenarios, the scoring and the
+table are already common to every tool.
 
 <a id="crash-recovery"></a>
 
@@ -288,7 +325,7 @@ than left in an issue tracker, because a tool that passes every check above has
 passed every check above, and that is a smaller claim than "reliable".
 
 Suggestions are welcome, and so are pull requests: adding one is a matter of
-moving its entry up into [`cases/lib/reliability/scenarios.ts`](../lib/reliability/scenarios.ts)
+moving its entry up into [`reliability/lib/scenarios.ts`](./lib/scenarios.ts)
 and teaching the harness to provoke it.
 
 | candidate | column it would join | why it matters | what it would take |
@@ -304,6 +341,6 @@ and teaching the harness to provoke it.
 
 ---
 
-_This page is generated from [`cases/lib/reliability/scenarios.ts`](../lib/reliability/scenarios.ts)
+_This page is generated from [`reliability/lib/scenarios.ts`](./lib/scenarios.ts)
 by `node scripts/build-reliability-doc.ts`. Edit the catalog, not this file: it is the same
 source the scores are computed from, so what a check is worth and what it means cannot drift apart._

@@ -9,7 +9,7 @@
 // that has since drifted from the code.
 //
 // So the page is generated rather than written. The catalog in
-// cases/lib/reliability/scenarios.ts is the source for both, which makes the
+// reliability/lib/scenarios.ts is the source for both, which makes the
 // explanation and the arithmetic the same artefact: a check cannot be scored
 // without appearing here, and cannot be described here in terms other than the
 // ones it is scored by.
@@ -25,10 +25,16 @@ import {
   GROUPS,
   SCENARIOS,
   checkCount,
-} from "../cases/lib/reliability/scenarios.ts";
+} from "../reliability/lib/scenarios.ts";
+import {
+  AWAITING_PROJECT,
+  NOT_RUN,
+  RELIABILITY_TOOLS,
+  presentation,
+} from "../reliability/lib/tools.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const DOC_PATH = resolve(ROOT, "cases", "reliability", "README.md");
+export const DOC_PATH = resolve(ROOT, "reliability", "README.md");
 
 const PREAMBLE = `# Reliability Scenarios
 
@@ -54,8 +60,21 @@ question with an observable answer.
 
 The indexer under test is otherwise run exactly as the throughput scenarios run
 it: the tool's own production command, its own database, no benchmark-specific
-configuration. What the harness does is start the chain, provoke it, and read
-the tool's tables directly.
+configuration. Each tool implements the same small project — a transfer per
+log, a running balance, and one row written from a contract read — under
+[\`reliability/\`](.), started by the same drivers the throughput suite uses.
+What the harness does is start the chain, provoke it, and read the tool's
+tables directly.
+
+**Every scenario runs more than once**, three times by default, against a fresh
+chain and a fresh database each time, and a check passes only if it passed
+every run. This is not noise reduction. A measurement is allowed to be noisy; a
+check is a claim that a tool does something, and one that holds two times in
+three is not a weaker claim but a worse one — an indexer that survives a
+database restart unless the restart lands mid-batch has not survived it. A
+check that failed once in three is published as a failure, with the count in
+the note. The measures beside the scores are measurements, so those are the
+median of the runs, and the spread is printed in the run log.
 
 **What this cannot tell you.** A mocked chain is an RPC endpoint, so every tool
 is measured on its RPC ingestion path. A tool that reads its own network in
@@ -109,6 +128,32 @@ for (const group of GROUPS) {
   );
 }
 lines.push("");
+
+// Which tools are measured, and why the others are not — generated from the
+// registry, so the page cannot claim a coverage the suite does not have.
+lines.push(
+  anchor("coverage"),
+  "",
+  "## Which tools are measured",
+  "",
+  "| tool | source | status |",
+  "| --- | --- | --- |",
+  ...RELIABILITY_TOOLS.map((tool) => {
+    const { name, source } = presentation(tool);
+    return `| ${name} | ${source} | measured |`;
+  }),
+  ...Object.entries(AWAITING_PROJECT).map(
+    ([tool, reason]) => `| ${tool} | RPC | not yet: ${reason} |`
+  ),
+  ...Object.entries(NOT_RUN).map(([tool, reason]) => `| ${tool} | — | ${reason} |`),
+  "",
+  "A tool needs two things to appear in the results: an RPC path the generated",
+  "chain can serve, and an implementation of the case above for its framework.",
+  "The rows marked *not yet* are waiting only on the second, and adding one is",
+  "the whole of what it takes — the drivers, the scenarios, the scoring and the",
+  "table are already common to every tool.",
+  ""
+);
 
 for (const group of GROUPS) {
   const scenarios = SCENARIOS.filter((scenario) => scenario.group === group.id);
@@ -172,7 +217,7 @@ lines.push(
   "passed every check above, and that is a smaller claim than \"reliable\".",
   "",
   "Suggestions are welcome, and so are pull requests: adding one is a matter of",
-  "moving its entry up into [`cases/lib/reliability/scenarios.ts`](../lib/reliability/scenarios.ts)",
+  "moving its entry up into [`reliability/lib/scenarios.ts`](./lib/scenarios.ts)",
   "and teaching the harness to provoke it.",
   "",
   "| candidate | column it would join | why it matters | what it would take |",
@@ -185,7 +230,7 @@ lines.push(
   "",
   "---",
   "",
-  "_This page is generated from [`cases/lib/reliability/scenarios.ts`](../lib/reliability/scenarios.ts)",
+  "_This page is generated from [`reliability/lib/scenarios.ts`](./lib/scenarios.ts)",
   "by `node scripts/build-reliability-doc.ts`. Edit the catalog, not this file: it is the same",
   "source the scores are computed from, so what a check is worth and what it means cannot drift apart._",
   ""
