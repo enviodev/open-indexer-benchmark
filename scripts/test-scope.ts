@@ -312,6 +312,47 @@ check("selections merge across files, in canonical order", [
 
 check("an unknown case directory is ignored", ["cases/erc20-approvals/run.ts"], {});
 
+// The reliability suite runs nothing in the throughput matrix, which is only
+// safe while the dependency stays one-way: reliability/ imports the drivers it
+// needs from cases/, and nothing in cases/ imports reliability/. The filter
+// cannot check a direction for itself, so the pin is here — if a case config,
+// a driver or the throughput runner ever reaches into the suite, it is on a
+// benchmark job's execution path and a change to it has to re-measure those
+// rows.
+check("the reliability suite runs no throughput job", [
+  "reliability/lib/scenarios.ts",
+  "reliability/ponder/ponder.config.ts",
+  "reliability/run.ts",
+], {});
+{
+  const reliability = /from\s+"[^"]*(\.\.\/reliability\/|chain-mock)/;
+  const offenders: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules") walk(path);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts")) continue;
+      if (reliability.test(readFileSync(path, "utf8"))) {
+        offenders.push(path.slice(ROOT.length + 1));
+      }
+    }
+  };
+  walk(resolve(ROOT, "cases"));
+  if (offenders.length > 0) {
+    console.error(
+      `FAIL reliability isolation: ${offenders.join(", ")} import the reliability ` +
+        `suite, so a benchmark job now executes it — remove isReliabilityOnly from ` +
+        `select-scope.ts's isInert, or drop the import`
+    );
+    failures++;
+  } else {
+    console.log("ok reliability isolation: no benchmark job executes the reliability suite");
+  }
+}
+
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed`);
   process.exit(1);

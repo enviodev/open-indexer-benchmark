@@ -1,0 +1,905 @@
+// What the harness does to an indexer, scenario by scenario.
+//
+// Each function here is one entry in the catalog, and returns one outcome per
+// check that entry declares. The catalog says what is asked and what a pass
+// means; this says how the question is put. They are meant to be read side by
+// side, and scripts/test-reliability.ts fails if one of them grows a check the
+// other does not have.
+//
+// Three rules the scenarios all follow.
+//
+// A check reports on the tool, never on the harness. Anything the scenario
+// could not arrange — a database that is not in a container, a tool that never
+// started — is "na" with the reason, so a run that could not ask a question
+// says so instead of answering it badly.
+//
+// Nothing is concluded from a tool being slow. Every wait has a generous
+// timeout and the check is on what is true when it expires, so a tool that
+// needed ninety seconds to reconcile a reorg passes the reorg check and its
+// ninety seconds show up in the measure beside it.
+//
+// The comparison is always against the chain as it stands now. Not against
+// what it served earlier, and not against a recording of what the tool was
+// sent: an indexer's job is to agree with the chain it is looking at, and
+// after a reorg those are different claims.
+
+import type { Driver, Snapshot } from "../../cases/lib/drivers/index.ts";
+import { sleep } from "../../cases/lib/process.ts";
+import type { ChainControl, ChainRow } from "./chain-mock.ts";
+import { LOGS_PER_BLOCK, START_BLOCK } from "./case.ts";
+import {
+  balancesOf,
+  diffBalances,
+  diffRows,
+  type Observer,
+  type StoredRow,
+} from "./observe.ts";
+import type { Outcome } from "./score.ts";
+
+// ── Timings ────────────────────────────────────────────────────────────
+
+/**
+ * How long a tool is given before a wait is called off.
+ *
+ * Both are deliberately generous: nothing here is a speed measurement, and a
+ * tool that reconciles a reorg in ninety seconds passes the reorg check with
+ * its ninety seconds recorded beside it.
+ *
+ * Carried on the context rather than read from the environment. An
+ * environment variable that changes a published score is a quiet way to
+ * publish a different benchmark under the same name; a parameter has to be
+ * passed by whoever wanted it. The suite's own tests are the only thing that
+ * passes anything else, because the indexer they drive answers in
+ * milliseconds and waiting three minutes to conclude that a deliberate defect
+ * is a defect would make them useless.
+ */
+export interface Patience {
+  /** Catching up with the chain. */
+  syncMs: number;
+  /** Showing any sign of life after a shove. */
+  reactMs: number;
+}
+
+export const DEFAULT_PATIENCE: Patience = { syncMs: 180_000, reactMs: 120_000 };
+/** How long the database stays down when it is taken away. */
+const DB_DOWN_MS = 10_000;
+
+/** The NUL the token's name carries, which Postgres will not store in text. */
+const NUL = String.fromCharCode(0);
+
+export interface ScenarioResult {
+  checks: Record<string, Outcome>;
+  measures: Record<string, number>;
+}
+
+/** What a scenario can do to the tool and the chain it reads. */
+export interface Ctx {
+  tool: string;
+  chain: ChainControl;
+  driver: Driver;
+  observe: Observer;
+  log(message: string): void;
+
+  /** Start the indexer. The first call in every scenario. */
+  launch(): Promise<void>;
+  /** Stop it, without counting that against the tool. */
+  stopTool(): Promise<void>;
+  /**
+   * Start it again after it gave up, counting one restart an operator would
+   * have had to perform. The count is what the db-restart scenario publishes.
+   */
+  manualRestart(reason: string): Promise<void>;
+  /** Send a signal straight to the indexer. False when the driver cannot. */
+  signal(signal: NodeJS.Signals): Promise<boolean>;
+  /** False once the indexer has exited on its own. */
+  alive(): boolean;
+  restarts(): number;
+
+  /** How long this run waits for things. */
+  patience: Patience;
+
+  progress(): Promise<Snapshot | null>;
+  /** Poll until the predicate holds. False on timeout — never throws. */
+  waitFor(label: string, holds: () => Promise<boolean>, timeoutMs: number): Promise<boolean>;
+  /** Restart the tool's database container. Throws when there is none. */
+  restartDb(downMs: number): Promise<void>;
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────
+
+const pass: Outcome = { status: "pass" };
+const fail = (detail: string): Outcome => ({ status: "fail", detail });
+const na = (detail: string): Outcome => ({ status: "na", detail });
+
+/** A pass when the condition holds, and a failure carrying the reason when not. */
+const verdict = (ok: boolean, detail: string): Outcome => (ok ? pass : fail(detail));
+
+interface Comparison {
+  missing: string[];
+  wrong: string[];
+  extra: string[];
+  duplicates: number;
+  balances: string[] | null;
+  clean: boolean;
+  summary: string;
+}
+
+/**
+ * How the tool's tables compare with the chain, up to the head.
+ *
+ * Balances are compared as well as rows, and separately: a tool can hold every
+ * transfer the chain holds and still have applied one of them twice, and that
+ * is the failure the aggregate exists to catch.
+ */
+async function compare(ctx: Ctx, upTo?: number): Promise<Comparison> {
+  const head = upTo ?? ctx.chain.head();
+  const chainRows = ctx.chain.rows(head);
+  const stored = await ctx.observe.rows();
+  const rows = diffRows(stored, chainRows, head);
+  const storedBalances = await ctx.observe.balances();
+  const balances = storedBalances
+    ? diffBalances(storedBalances, balancesOf(chainRows))
+    : null;
+
+  const clean =
+    rows.missing.length === 0 &&
+    rows.wrong.length === 0 &&
+    rows.extra.length === 0 &&
+    rows.duplicates === 0 &&
+    (balances === null || balances.length === 0);
+
+  const parts = [
+    rows.missing.length > 0 ? `${rows.missing.length} missing` : "",
+    rows.wrong.length > 0 ? `${rows.wrong.length} with the wrong amount` : "",
+    rows.extra.length > 0 ? `${rows.extra.length} the chain does not have` : "",
+    rows.duplicates > 0 ? `${rows.duplicates} stored twice` : "",
+    balances && balances.length > 0 ? `${balances.length} balances wrong` : "",
+  ].filter(Boolean);
+
+  return {
+    ...rows,
+    balances,
+    clean,
+    summary: clean
+      ? `matches the chain at block ${head}`
+      : `${parts.join(", ")} at block ${head}` +
+        (rows.wrong[0] ? ` (e.g. ${rows.wrong[0]})` : "") +
+        (balances?.[0] ? ` (e.g. ${balances[0]})` : ""),
+  };
+}
+
+/** Wait until the tool holds every row the chain holds. */
+async function synced(ctx: Ctx, timeoutMs = ctx.patience.syncMs): Promise<boolean> {
+  return ctx.waitFor(
+    "catching up with the chain",
+    async () => (await compare(ctx)).clean,
+    timeoutMs
+  );
+}
+
+/** Wait for the tool to hold at least this many transfers. */
+async function reaches(ctx: Ctx, transfers: number, timeoutMs = ctx.patience.syncMs) {
+  return ctx.waitFor(
+    `indexing ${transfers} transfers`,
+    async () => (await ctx.observe.count().catch(() => 0)) >= transfers,
+    timeoutMs
+  );
+}
+
+/** Produce blocks at a fixed interval, the way a live chain does. */
+async function produce(ctx: Ctx, blocks: number, everyMs: number) {
+  for (let i = 0; i < blocks; i++) {
+    ctx.chain.advance(1);
+    await sleep(everyMs);
+  }
+}
+
+/**
+ * Bring the tool back if it has exited, so a later check in the same scenario
+ * asks its question of a running indexer. Returns whether it had to.
+ */
+async function reviveIfNeeded(ctx: Ctx, reason: string): Promise<boolean> {
+  if (ctx.alive()) return false;
+  await ctx.manualRestart(reason);
+  return true;
+}
+
+// ── Crash recovery ─────────────────────────────────────────────────────
+
+export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+  const measures: Record<string, number> = {};
+
+  // Enough blocks that the tool is still working when the database is taken
+  // away. This matters more than it looks: an indexer only meets a failed
+  // query if it is issuing queries, and one that had already finished would
+  // sit out the outage and pass a check it was never asked.
+  ctx.chain.advance(900);
+  await ctx.launch();
+  if (!(await reaches(ctx, 400))) {
+    return {
+      checks: { "survives-backfill": na("the tool indexed nothing to restart under") },
+      measures,
+    };
+  }
+
+  // ── Mid-backfill, with the chain still moving ──
+  //
+  // The chain keeps producing across the outage rather than standing still,
+  // because an indexer only meets a failed query if it is issuing queries. A
+  // tool that had caught up would sit the outage out and pass a check it was
+  // never really asked — which is how an indexer that exits on its first
+  // failed query was, at one point, scored as having survived one.
+  const before = await ctx.observe.count();
+  const producingThrough = produce(ctx, 30, 500);
+  try {
+    await ctx.restartDb(DB_DOWN_MS);
+  } catch (err) {
+    await producingThrough;
+    return { checks: { "survives-backfill": na(String((err as Error).message)) }, measures };
+  }
+  await producingThrough;
+  // There has to be work left for "it started indexing again" to mean
+  // anything. A tool fast enough to have finished the four hundred blocks
+  // before the database went away would otherwise be failed for having
+  // nothing to do, which is the opposite of the finding.
+  ctx.chain.advance(50);
+  const backAt = performance.now();
+  const movedOn = await ctx.waitFor(
+    "indexing again after the database came back",
+    async () => (await ctx.observe.count().catch(() => 0)) > before,
+    ctx.patience.reactMs
+  );
+  measures["resume-seconds"] = Math.round((performance.now() - backAt) / 1_000);
+  checks["survives-backfill"] = verdict(
+    ctx.alive() && movedOn,
+    ctx.alive()
+      ? `stayed up but indexed nothing for ${Math.round(ctx.patience.reactMs / 1_000)}s ` +
+        `after the database came back`
+      : "exited when the database went away"
+  );
+  await reviveIfNeeded(ctx, "exited when the database went away");
+
+  // ── At the head ──
+  await synced(ctx);
+  const headBefore = await ctx.observe.count();
+  // The chain keeps producing across the second restart, so the tool has both
+  // something to miss and something to come back to.
+  const producing = produce(ctx, 20, 2_000);
+  try {
+    await ctx.restartDb(DB_DOWN_MS);
+    const survivedHead = await ctx.waitFor(
+      "indexing again at the head",
+      async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
+      ctx.patience.reactMs
+    );
+    checks["survives-head"] = verdict(
+      ctx.alive() && survivedHead,
+      ctx.alive()
+        ? "stayed up but stopped following the head after the database came back"
+        : "exited when the database went away while tracking the head"
+    );
+  } catch (err) {
+    checks["survives-head"] = na(String((err as Error).message));
+  }
+  await producing;
+  await reviveIfNeeded(ctx, "exited during the second database restart");
+
+  // ── What it holds once it is allowed to finish ──
+  ctx.chain.advance(20);
+  const caughtUp = await synced(ctx);
+  const result = await compare(ctx);
+  checks["no-loss"] = verdict(
+    result.missing.length === 0 && result.wrong.length === 0,
+    caughtUp ? result.summary : `never caught up: ${result.summary}`
+  );
+  checks["no-duplicates"] = verdict(
+    result.duplicates === 0 &&
+      result.extra.length === 0 &&
+      (result.balances === null || result.balances.length === 0),
+    result.summary
+  );
+  measures["manual-restarts"] = ctx.restarts();
+  return { checks, measures };
+}
+
+export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+  const measures: Record<string, number> = {};
+
+  ctx.chain.advance(900);
+  await ctx.launch();
+
+  // Killed three times, at increasing depths into the range, because the
+  // interesting kill is the one that lands while a batch is being committed
+  // and no amount of looking from outside can tell when that is. Three tries
+  // at unrelated moments is how the harness gets one, and a tool that only
+  // loses data on the unlucky kill has still lost data.
+  const stops = [200, 700, 1200];
+  let torn: Comparison | null = null;
+  let discarded = 0;
+
+  for (const [attempt, transfers] of stops.entries()) {
+    if (!(await reaches(ctx, transfers))) break;
+    const highestBefore = await ctx.observe.highestBlock().catch(() => 0);
+    if (!(await ctx.signal("SIGKILL"))) {
+      return {
+        checks: { resumes: na(`the ${ctx.tool} driver cannot signal its indexer directly`) },
+        measures,
+      };
+    }
+    // The process is gone; its rows are not. Whatever is readable right now is
+    // what a reader querying the indexer during a crash would have seen, and
+    // the first kill is the one that reading is taken from — later ones follow
+    // a restart, so a mixture would say less.
+    await sleep(1_000);
+    if (attempt === 0) torn = await compare(ctx);
+
+    await ctx.manualRestart(`killed by the scenario (${transfers} transfers in)`);
+    if (
+      !(await ctx.waitFor(
+        "writing again after the restart",
+        async () => (await ctx.observe.count().catch(() => 0)) > 0,
+        ctx.patience.reactMs
+      ))
+    ) {
+      break;
+    }
+    // Sampled as soon as it is writing again: a tool that discarded rows to
+    // get back to a checkpoint has fewer than it did, and the gap is what a
+    // restart costs it. A tool that discards nothing reports zero.
+    const highestAfter = await ctx.observe.highestBlock().catch(() => 0);
+    discarded = Math.max(discarded, highestBefore - highestAfter);
+  }
+
+  if (!torn) {
+    return {
+      checks: { resumes: na("the tool indexed nothing to kill it mid-way") },
+      measures,
+    };
+  }
+  measures["reindexed-blocks"] = Math.max(0, discarded);
+  checks["atomic-batch"] = verdict(
+    torn.wrong.length === 0 && torn.duplicates === 0 && torn.extra.length === 0,
+    `rows visible immediately after the kill are not all rows the chain holds: ${torn.summary}`
+  );
+
+  ctx.chain.advance(20);
+  const caughtUp = await synced(ctx);
+  const result = await compare(ctx);
+  checks["resumes"] = verdict(
+    caughtUp,
+    ctx.alive()
+      ? `did not catch up after being restarted: ${result.summary}`
+      : "did not stay up after being restarted"
+  );
+  checks["no-gap"] = verdict(
+    result.missing.length === 0,
+    `${result.missing.length} transfers missing after the restarts, around block ` +
+      `${result.missing[0]?.split(":")[0] ?? "?"}`
+  );
+  checks["no-double-apply"] = verdict(
+    result.duplicates === 0 &&
+      result.extra.length === 0 &&
+      (result.balances === null || result.balances.length === 0),
+    result.balances && result.balances.length > 0
+      ? `${result.balances.length} balances wrong after the restarts (e.g. ${result.balances[0]})`
+      : result.summary
+  );
+  return { checks, measures };
+}
+
+export async function gracefulShutdown(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+
+  ctx.chain.advance(400);
+  await ctx.launch();
+  if (!(await reaches(ctx, 40))) {
+    return { checks: { "exits-clean": na("the tool indexed nothing to stop") }, measures: {} };
+  }
+
+  const sent = await ctx.signal("SIGTERM");
+  if (!sent) {
+    return {
+      checks: { "exits-clean": na(`the ${ctx.tool} driver cannot signal its indexer directly`) },
+      measures: {},
+    };
+  }
+  const exited = await ctx.waitFor("exiting on SIGTERM", async () => !ctx.alive(), 15_000);
+  checks["exits-clean"] = verdict(
+    exited,
+    "still running fifteen seconds after SIGTERM, so its orchestrator would kill it"
+  );
+
+  // Whatever it wrote has to be consistent with the chain, whether it stopped
+  // on the signal or had to be killed: the next start reads this state.
+  await ctx.stopTool();
+  const result = await compare(ctx);
+  checks["flushes"] = verdict(
+    result.wrong.length === 0 &&
+      result.duplicates === 0 &&
+      result.extra.length === 0 &&
+      (result.balances === null || result.balances.length === 0),
+    `the state left behind does not match the chain: ${result.summary}`
+  );
+  return { checks, measures: {} };
+}
+
+// ── Reorgs ─────────────────────────────────────────────────────────────
+
+export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+  const recoveries: number[] = [];
+
+  /** Rewrite the chain, let it settle, and report whether the tool agrees. */
+  async function reconciles(
+    label: string,
+    rewrite: () => void,
+    extend = 3
+  ): Promise<Outcome> {
+    rewrite();
+    if (extend > 0) ctx.chain.advance(extend);
+    const startedAt = performance.now();
+    const agreed = await synced(ctx);
+    if (agreed) recoveries.push((performance.now() - startedAt) / 1_000);
+    const result = await compare(ctx);
+    ctx.log(`  ${label}: ${result.summary}`);
+    return verdict(result.clean, result.summary);
+  }
+
+  ctx.chain.advance(200);
+  await ctx.launch();
+  if (!(await synced(ctx))) {
+    return {
+      checks: { shallow: na("the tool never caught up, so there was nothing to reorg under it") },
+      measures: {},
+    };
+  }
+
+  checks["shallow"] = await reconciles("one-block reorg", () =>
+    ctx.chain.reorg({ depth: 1, logs: "changed" })
+  );
+  checks["removes-event"] = await reconciles("reorg that drops the events", () =>
+    ctx.chain.reorg({ depth: 3, logs: "dropped" })
+  );
+
+  // A reorg the tool can only see by noticing that a block it already stored
+  // is no longer on the chain, since it was not watching when it happened.
+  await ctx.stopTool();
+  ctx.chain.reorg({ depth: 5, logs: "changed" });
+  await ctx.launch();
+  checks["while-down"] = await reconciles("reorg while the indexer was down", () => {});
+
+  // Three rewrites inside the window a tool needs for one, so the second lands
+  // while the first is still being unwound. They are deliberately not waited
+  // on individually: the point is that they overlap whatever it is doing.
+  ctx.chain.reorg({ depth: 3, logs: "changed" });
+  await sleep(4_000);
+  ctx.chain.reorg({ depth: 4, logs: "dropped" });
+  await sleep(4_000);
+  checks["storm"] = await reconciles("three reorgs in twelve seconds", () =>
+    ctx.chain.reorg({ depth: 2, logs: "changed" })
+  );
+
+  // Deeper than any tool's rollback window. Being unable to handle it is
+  // acceptable; carrying on as though nothing happened is not.
+  const deep = await reconciles("sixty-block reorg", () =>
+    ctx.chain.reorg({ depth: 60, logs: "changed" })
+  );
+  if (deep.status === "pass") {
+    checks["deep"] = deep;
+  } else if (!ctx.alive()) {
+    // It stopped rather than going on with data it could not reconcile, which
+    // is the honest answer to a reorg past what it can undo.
+    checks["deep"] = pass;
+    ctx.log("  sixty-block reorg: the indexer stopped rather than carry on");
+    await ctx.manualRestart("stopped on a reorg deeper than its rollback window");
+    await synced(ctx);
+  } else {
+    checks["deep"] = fail(
+      `still running with data that does not match the chain after a sixty-block reorg: ` +
+        `${deep.status === "fail" ? deep.detail : ""}`
+    );
+    await ctx.stopTool();
+    await ctx.launch();
+    await synced(ctx);
+  }
+
+  // A rewrite below the head, at a height the tool has already indexed but is
+  // still working towards — the one a head-only reorg check walks past.
+  checks["during-backfill"] = await reconciles(
+    "reorg behind the head during a backfill",
+    () => ctx.chain.reorg({ depth: 4, extend: 250, logs: "changed" }),
+    0
+  );
+
+  const measures: Record<string, number> = {};
+  if (recoveries.length > 0) {
+    measures["reorg-recovery-seconds"] =
+      Math.round((recoveries.reduce((a, b) => a + b, 0) / recoveries.length) * 10) / 10;
+  }
+  return { checks, measures };
+}
+
+// ── RPC faults ─────────────────────────────────────────────────────────
+
+export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+
+  ctx.chain.advance(600);
+  await ctx.launch();
+  if (!(await reaches(ctx, 60))) {
+    return {
+      checks: { survives: na("the tool indexed nothing before the faults began") },
+      measures: {},
+    };
+  }
+
+  // What the tool asks for when nothing is wrong, as a rate per second. The
+  // back-off check is relative to this: an indexer that polls hard when
+  // healthy is not hammering when it polls hard under a fault.
+  ctx.chain.reset();
+  await sleep(10_000);
+  const healthyRate = ctx.chain.stats().requests / 10;
+
+  const windows: { kind: "error" | "status" | "timeout"; status?: number; label: string }[] = [
+    { kind: "error", label: "JSON-RPC errors" },
+    { kind: "status", status: 429, label: "HTTP 429" },
+    { kind: "status", status: 502, label: "HTTP 502" },
+    { kind: "timeout", label: "requests that are never answered" },
+  ];
+  let peakRate = 0;
+  for (const window of windows) {
+    ctx.chain.reset();
+    ctx.chain.fail({ kind: window.kind, status: window.status, message: window.label });
+    await sleep(30_000);
+    peakRate = Math.max(peakRate, ctx.chain.stats().requests / 30);
+    ctx.chain.fail(null);
+    ctx.log(`  ${window.label}: ${ctx.chain.stats().requests} requests in 30s`);
+    if (!ctx.alive()) break;
+  }
+
+  checks["survives"] = verdict(ctx.alive(), "exited while the node was failing");
+  checks["backs-off"] = verdict(
+    peakRate <= Math.max(healthyRate * 20, 20),
+    `asked ${peakRate.toFixed(1)} times a second while the node was failing, against ` +
+      `${healthyRate.toFixed(1)} when it was healthy`
+  );
+
+  if (!ctx.alive()) {
+    await ctx.manualRestart("exited while the node was failing");
+    checks["resumes"] = fail("had to be restarted before it would index again");
+  } else {
+    const before = await ctx.observe.count().catch(() => 0);
+    // Something to come back to. A tool that had caught up before the faults
+    // began has nothing to index when they stop, and would be failed for
+    // being finished.
+    ctx.chain.advance(50);
+    checks["resumes"] = verdict(
+      await ctx.waitFor(
+        "indexing again once the node recovered",
+        async () => (await ctx.observe.count().catch(() => 0)) > before,
+        30_000
+      ),
+      "indexed nothing for thirty seconds after the node recovered"
+    );
+  }
+
+  ctx.chain.advance(20);
+  await synced(ctx);
+  const result = await compare(ctx);
+  checks["no-loss"] = verdict(
+    result.missing.length === 0 && result.wrong.length === 0,
+    `a failed request cost data: ${result.summary}`
+  );
+  return { checks, measures: {} };
+}
+
+export async function rpcLimits(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+
+  // Caps a public endpoint really imposes, and neither is configured anywhere
+  // the tool can see. The result cap is set below what a full range of blocks
+  // would return, so narrowing the block range is not enough on its own.
+  const MAX_RANGE = 1_000;
+  const MAX_LOGS = 500;
+  ctx.chain.setLimits({ maxBlockRange: MAX_RANGE, maxLogsPerResponse: MAX_LOGS });
+  ctx.chain.advance(2_000);
+  await ctx.launch();
+
+  const finished = await synced(ctx);
+  const widest = ctx.chain.stats().widestRange;
+  checks["splits-range"] = verdict(
+    finished,
+    `did not get through 2,000 blocks against an endpoint capping ranges at ` +
+      `${MAX_RANGE}; widest range asked for was ${widest}`
+  );
+  // Only a tool that narrowed below the result cap could have finished: the
+  // cap trips at 500 logs, which is 250 blocks of this chain.
+  checks["splits-results"] = verdict(
+    finished,
+    `did not get through a range whose responses were capped at ${MAX_LOGS} logs ` +
+      `(${MAX_LOGS / LOGS_PER_BLOCK} blocks)`
+  );
+
+  // With the caps lifted, a tool that permanently collapsed to tiny queries
+  // stays slow forever. One that adapts widens again.
+  const narrowest = ctx.chain.stats().widestRange;
+  ctx.chain.setLimits({});
+  ctx.chain.reset();
+  ctx.chain.advance(3_000);
+  await synced(ctx);
+  const afterLift = ctx.chain.stats().widestRange;
+  checks["recovers-width"] = verdict(
+    afterLift > Math.min(narrowest, MAX_LOGS / LOGS_PER_BLOCK),
+    `still asking for ${afterLift} blocks at a time after the caps were lifted`
+  );
+  return { checks, measures: {} };
+}
+
+export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+
+  ctx.chain.advance(200);
+  await ctx.launch();
+  if (!(await synced(ctx))) {
+    return {
+      checks: { "head-goes-backwards": na("the tool never caught up with the chain") },
+      measures: {},
+    };
+  }
+
+  // ── A replica answering from behind ──
+  const before = await compare(ctx);
+  ctx.chain.setHeadLag(30);
+  await sleep(20_000);
+  const during = await compare(ctx);
+  ctx.chain.setHeadLag(0);
+  ctx.chain.advance(10);
+  const recovered = await synced(ctx);
+  checks["head-goes-backwards"] = verdict(
+    ctx.alive() && recovered && during.missing.length <= before.missing.length,
+    !ctx.alive()
+      ? "exited when the endpoint answered from behind"
+      : !recovered
+        ? "did not catch up again after the endpoint stopped lagging"
+        : `discarded data it already had when the head moved backwards: ${during.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when the endpoint answered from behind");
+
+  // ── The same logs served twice in one response ──
+  ctx.chain.setDuplicateLogs(true);
+  ctx.chain.advance(40);
+  const sawDoubles = await synced(ctx);
+  ctx.chain.setDuplicateLogs(false);
+  const doubled = await compare(ctx);
+  checks["duplicate-delivery"] = verdict(
+    doubled.duplicates === 0 &&
+      doubled.extra.length === 0 &&
+      (doubled.balances === null || doubled.balances.length === 0),
+    sawDoubles
+      ? `wrote the duplicated logs: ${doubled.summary}`
+      : `did not get through a range whose logs were served twice: ${doubled.summary}`
+  );
+
+  // ── A hash that stops existing under a request ──
+  ctx.chain.advance(20);
+  ctx.chain.reorg({ depth: 6, logs: "changed" });
+  ctx.chain.advance(10);
+  const afterStale = await synced(ctx);
+  const stale = await compare(ctx);
+  checks["stale-hash"] = verdict(
+    ctx.alive() && afterStale && stale.clean,
+    !ctx.alive()
+      ? "exited when a block hash it was using was reorged away"
+      : `did not reconcile after a block hash stopped existing: ${stale.summary}`
+  );
+  return { checks, measures: {} };
+}
+
+// ── Data fidelity ──────────────────────────────────────────────────────
+
+/**
+ * The block the chain gives an amount of 2^256-1, and the stretch it leaves
+ * empty. Both are read by the scenario and by the chain spec that sets them
+ * up, so they live here rather than in two places that could disagree.
+ */
+export const MAX_UINT_BLOCK = START_BLOCK + 40;
+export const EMPTY_RANGE = { from: START_BLOCK + 100, to: START_BLOCK + 599 };
+export const MAX_UINT = (1n << 256n) - 1n;
+
+export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+
+  ctx.chain.advance(700);
+  await ctx.launch();
+  const finished = await synced(ctx);
+
+  // ── Values in the transfer table ──
+  const stored: StoredRow[] = await ctx.observe.rows().catch(() => []);
+  const chainRows: ChainRow[] = ctx.chain.rows();
+  const hugeIndex = chainRows.find((row) => row.logIndex > 2_147_483_647);
+  checks["huge-log-index"] = hugeIndex
+    ? verdict(
+        finished &&
+          stored.some(
+            (row) => row.block === hugeIndex.block && row.logIndex === hugeIndex.logIndex
+          ),
+        finished
+          ? `stored no transfer at log index ${hugeIndex.logIndex}`
+          : `did not get through a range whose log indices reach ${hugeIndex.logIndex}`
+      )
+    : na("the chain served no log index above the 32-bit limit");
+
+  const huge = stored.find((row) => row.block === MAX_UINT_BLOCK && row.amount === MAX_UINT);
+  const atBlock = stored.find((row) => row.block === MAX_UINT_BLOCK);
+  checks["max-uint"] = verdict(
+    huge !== undefined,
+    atBlock
+      ? `stored ${atBlock.amount} for a transfer of 2^256-1`
+      : `stored no transfer for block ${MAX_UINT_BLOCK}, which carried 2^256-1`
+  );
+
+  const progress = await ctx.progress();
+  const at = (progress?.blocks ?? 0) + START_BLOCK;
+  checks["empty-blocks"] = verdict(
+    at > EMPTY_RANGE.to,
+    `reports being at block ${at}, which is still inside the ` +
+      `${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks that carried no logs`
+  );
+
+  // ── Values from the contract read ──
+  const tokens = await ctx.observe.tokens().catch(() => []);
+  if (tokens.length === 0) {
+    const missing = na("the tool wrote no token row, so its metadata could not be read");
+    checks["null-symbol"] = missing;
+    checks["nul-byte"] = missing;
+    return { checks, measures: {} };
+  }
+  const token = tokens[0];
+  checks["null-symbol"] = verdict(
+    token.symbol === null || token.symbol === "",
+    `stored ${JSON.stringify(token.symbol)} for a symbol() that returned no data`
+  );
+  // The name carries a NUL, which Postgres will not accept in a text column.
+  // Sanitising it is fine and so is storing nothing; what is not fine is the
+  // row never arriving, or the indexer stalling behind it — which the rest of
+  // this scenario's checks would already have caught.
+  checks["nul-byte"] = verdict(
+    token.name === null || !token.name.includes(NUL),
+    `stored a name still carrying a NUL byte: ${JSON.stringify(token.name)}`
+  );
+  return { checks, measures: {} };
+}
+
+// ── Head latency ───────────────────────────────────────────────────────
+
+export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
+  const BLOCK_MS = 2_000;
+  const BLOCKS = 90;
+
+  ctx.chain.advance(100);
+  await ctx.launch();
+  if (!(await synced(ctx))) {
+    return {
+      checks: {
+        "median-under-block-time": na("the tool never caught up, so it was never at the head"),
+      },
+      measures: {},
+    };
+  }
+
+  /**
+   * Publish blocks and watch for their rows, sampling faster than the chain
+   * produces so the reading is the tool's latency rather than the poll's.
+   */
+  async function watch(blocks: number, from: number) {
+    const seen = { at: from, latencies: [] as number[], worstLag: 0, longestLagMs: 0 };
+    let lagSince: number | null = null;
+    const producing = produce(ctx, blocks, BLOCK_MS);
+    const until = performance.now() + (blocks + 5) * BLOCK_MS;
+    while (performance.now() < until) {
+      await sleep(250);
+      const highest = await ctx.observe.highestBlock().catch(() => 0);
+      while (seen.at < highest) {
+        seen.at++;
+        const block = ctx.chain.blockAt(seen.at);
+        // Only blocks published during this window have a publication time;
+        // the backfill's were all published before it started.
+        if (block?.publishedAtMs) seen.latencies.push(Date.now() - block.publishedAtMs);
+      }
+      const lag = ctx.chain.head() - highest;
+      seen.worstLag = Math.max(seen.worstLag, lag);
+      if (lag > 5) lagSince ??= performance.now();
+      else if (lagSince !== null) {
+        seen.longestLagMs = Math.max(seen.longestLagMs, performance.now() - lagSince);
+        lagSince = null;
+      }
+    }
+    await producing;
+    if (lagSince !== null) {
+      seen.longestLagMs = Math.max(seen.longestLagMs, performance.now() - lagSince);
+    }
+    return seen;
+  }
+
+  const run = await watch(BLOCKS, ctx.chain.head());
+  if (run.latencies.length === 0) {
+    return {
+      checks: {
+        "median-under-block-time": na(
+          "no block published during the window reached the database"
+        ),
+      },
+      measures: {},
+    };
+  }
+  const sorted = [...run.latencies].sort((a, b) => a - b);
+  const percentile = (share: number) =>
+    sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))];
+  const p50 = percentile(0.5);
+  const p99 = percentile(0.99);
+
+  const checks: Record<string, Outcome> = {
+    "median-under-block-time": verdict(
+      p50 <= BLOCK_MS,
+      `median latency was ${(p50 / 1_000).toFixed(1)}s, longer than the ` +
+        `${BLOCK_MS / 1_000}s block time`
+    ),
+    "tail-bounded": verdict(
+      p99 <= 10_000,
+      `the slowest one percent took ${(p99 / 1_000).toFixed(1)}s`
+    ),
+    "keeps-up": verdict(
+      run.longestLagMs <= 15_000,
+      `ran more than five blocks behind the head for ` +
+        `${(run.longestLagMs / 1_000).toFixed(0)}s`
+    ),
+  };
+
+  // ── And the same again across a reorg ──
+  ctx.chain.reorg({ depth: 4, logs: "changed" });
+  const reconciled = await synced(ctx, 60_000);
+  const after = await watch(15, ctx.chain.head());
+  const afterSorted = [...after.latencies].sort((a, b) => a - b);
+  const p50After = afterSorted[Math.floor(afterSorted.length / 2)];
+  checks["recovers-after-reorg"] = !reconciled
+    ? fail("had not reconciled the reorg a minute later")
+    : after.latencies.length === 0
+      ? na("no block reached the database in the window after the reorg")
+      : verdict(
+          p50After <= Math.max(p50 * 2, BLOCK_MS),
+          `median latency after the reorg was ${(p50After / 1_000).toFixed(1)}s, against ` +
+            `${(p50 / 1_000).toFixed(1)}s before it`
+        );
+
+  return {
+    checks,
+    measures: {
+      "p50-ms": Math.round(p50),
+      "p99-ms": Math.round(p99),
+      "max-lag-blocks": run.worstLag,
+    },
+  };
+}
+
+// ── The catalog's other half ───────────────────────────────────────────
+
+/**
+ * Every scenario the catalog declares, and the function that runs it. The
+ * suite's tests pin this against the catalog in both directions: a scenario
+ * with no implementation would publish a column of dashes nobody could
+ * explain, and an implementation with no catalog entry would score checks
+ * nothing describes.
+ */
+export const PLAYS: Record<string, (ctx: Ctx) => Promise<ScenarioResult>> = {
+  "db-restart": dbRestart,
+  "process-kill": processKill,
+  "graceful-shutdown": gracefulShutdown,
+  "reorg-cases": reorgCases,
+  "rpc-outage": rpcOutage,
+  "rpc-limits": rpcLimits,
+  "rpc-inconsistency": rpcInconsistency,
+  "awkward-values": awkwardValues,
+  "block-to-row": blockToRow,
+};

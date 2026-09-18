@@ -17,6 +17,68 @@ The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s re
 Contributions are welcome — we already have some from the [SQD](https://sqd.dev) team. Open an issue or a pull request to add an indexer, add a scenario, report a result that looks wrong, or improve the methodology. Indexer teams especially: nobody knows your tool better than you do. Or just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
 
 
+## Reliability
+
+Speed is one question about an indexer and it is not the one that wakes anyone
+up. These scores are the other question: what the tool does when its database
+restarts under it, when the chain rewrites six blocks it had already stored,
+when the node it reads from starts answering 429 to everything, when a token's
+`symbol()` returns no data at all. Each column is a list of checks a tool either
+passes or does not, run against a chain the benchmark makes up so that a
+nine-block reorg or a thirty-second stall happens on demand and happens the same
+way every time.
+
+A cell is the checks passed over the checks asked. Nothing is weighted, because
+a weighting would be an opinion buried in the arithmetic — `4 / 6` is a claim
+about *which four*, and the page behind every cell names them.
+
+<!-- RELIABILITY:START -->
+| tool | source | crash recovery | reorgs | rpc faults | data fidelity | head latency | overall |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (1) |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (2) |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (3) |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (4) |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (5) |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (6) |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (7) |
+
+> **(1)** Envio Indexer — not measured yet: no run has published a result
+> **(2)** Ponder — not measured yet: no run has published a result
+> **(3)** Envio Subgraph — the reliability case has no subgraph/ project yet, which is what this row would run on HyperIndex
+> **(4)** Rindexer — the reliability case has no rindexer/ project yet
+> **(5)** Squid SDK — the reliability case has no sqd/ project yet
+> **(6)** Subgraph — the reliability case has no subgraph/ project yet
+> **(7)** SubQuery — the reliability case has no subquery/ project yet
+<!-- RELIABILITY:END -->
+
+Every tool that reads plain RPC gets a row, measured or not. Tools that read
+their own network — HyperSync, SQD Network, StreamingFast — have no row here at
+all: the benchmark cannot make those sources reorg or fail on demand, so each
+is measured on its RPC row instead, and the scenario page says so tool by tool.
+
+The column with a number beside it carries the measurement a count cannot make:
+how many times a tool had to be restarted by hand to get through the database
+restart, and the median gap between a block being published and its rows being
+readable. A dash is not `0 / n` — it means the run could not ask.
+
+Every scenario runs three times against a fresh chain and a fresh database, and
+a check passes only if it passed every one: an indexer that survives a database
+restart unless the restart lands mid-batch has not survived it.
+
+There is no passing mark, and a full column is a smaller claim than it looks:
+it means the tool survived the situations someone thought to write down. What
+is not yet asked is published too, at the end of the same page, along with
+which tools are measured and why the others are not.
+
+[Every check, and what is still missing →](./reliability/README.md)
+
+```bash
+node reliability/run.ts                 # every tool, every scenario, three runs each
+node reliability/run.ts ponder --repeats=5
+```
+
+
 ## Scenarios
 
 ### State Aggregation

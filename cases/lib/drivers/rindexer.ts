@@ -2,7 +2,7 @@ import { execFile, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { exec, kill, psql, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -172,6 +172,7 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
     async cleanup() {
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
     },
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

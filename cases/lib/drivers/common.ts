@@ -44,6 +44,17 @@ export interface Driver {
   cleanup(): Promise<void>;
   /** True once the indexer exited on its own, e.g. on reaching its end block. */
   exited(): boolean;
+  /**
+   * Send a signal straight to the indexer, returning false when there is
+   * nothing running to send it to.
+   *
+   * Optional, and unused by the throughput runner: it exists for the
+   * reliability scenarios that are about how a tool dies — killed outright
+   * with no chance to flush, or asked to stop and watched to see whether it
+   * does. A driver that cannot express it leaves those checks unmeasured
+   * rather than failed.
+   */
+  signal?(signal: NodeJS.Signals): boolean | Promise<boolean>;
 }
 
 export interface Ctx {

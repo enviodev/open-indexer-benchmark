@@ -73,19 +73,66 @@ export function kill(proc: ChildProcess | null): Promise<void> {
   });
 }
 
-/** Run a SQL query via psql and return the trimmed stdout. */
+/**
+ * Send a signal to a process and its group, without waiting for it to die.
+ *
+ * `kill` above is the orderly stop every phase ends with. This is for the
+ * reliability scenarios that are about how an indexer dies: SIGKILL with no
+ * chance to flush, or SIGTERM with the harness watching whether it takes it.
+ * Returns false when there is nothing running to signal.
+ */
+export function signalGroup(
+  proc: ChildProcess | null,
+  signal: NodeJS.Signals
+): boolean {
+  if (!proc?.pid || proc.exitCode !== null || proc.signalCode !== null) return false;
+  try {
+    process.kill(-proc.pid, signal);
+    return true;
+  } catch {
+    try {
+      proc.kill(signal);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * Run a SQL query via psql and return the trimmed stdout.
+ *
+ * The query goes in on stdin rather than as an argument. Linux caps a single
+ * argument at 128 KB, and a query over that fails as `spawn E2BIG` — an error
+ * that names nothing about SQL and takes a while to recognise. Every query the
+ * benchmark issues today is far under the cap, but nothing enforces that, and
+ * the first one that is not would fail somewhere far from here.
+ *
+ * `-f -` also runs several statements as several statements, where `-c` wraps
+ * them in one implicit transaction. Nothing here passes more than one, and a
+ * caller that wants them atomic should say BEGIN and COMMIT rather than rely
+ * on which flag the helper happens to use.
+ */
 export function psql(connStr: string, query: string): Promise<string> {
   return new Promise((res, rej) => {
-    const p = spawn("psql", [connStr, "-t", "-A", "-c", query], {
+    const p = spawn("psql", [connStr, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-f", "-"], {
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
     p.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
     p.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    p.on("error", rej);
+    // A psql that cannot connect exits before the query is written, and the
+    // write then fails with EPIPE — which, unhandled, takes the process down.
+    // The exit code is what the failure is reported from, so the broken pipe
+    // is ignored. The reliability suite takes databases away on purpose, so
+    // this is a normal path there rather than an edge case.
+    p.stdin?.on("error", () => {});
     p.on("exit", (code) =>
       code === 0 ? res(stdout.trim()) : rej(new Error(`psql failed (${code}): ${stderr}`))
     );
+    p.stdin?.end(query);
   });
 }
 

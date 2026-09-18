@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CaseConfig } from "../case.ts";
-import { exec, kill, psql, start } from "../process.ts";
+import { exec, kill, psql, start, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -117,6 +117,7 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
     // throwaway CI runner nothing and saves a container restart per phase; run
     // `envio stop` in the case directory to reclaim it locally.
     async cleanup() {},
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

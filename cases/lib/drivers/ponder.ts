@@ -1,7 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { exec, kill, psql, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg, signalGroup } from "../process.ts";
 import {
   BENCHMARK_PORT,
   blocksIndexed,
@@ -85,6 +85,7 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     async cleanup() {
       await exec("docker", ["rm", "-f", PG_CONTAINER], dir).catch(() => {});
     },
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };
