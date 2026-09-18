@@ -29,16 +29,24 @@ import {
   type DriverFactory,
 } from "../../cases/lib/drivers/index.ts";
 import { psql, sleep } from "../../cases/lib/process.ts";
-import { startChainMock, type ChainMock, type ChainSpec } from "./chain-mock.ts";
+import {
+  SELECTORS,
+  encodeString,
+  startChainMock,
+  type ChainMock,
+  type ChainSpec,
+} from "./chain-mock.ts";
 import { NO_END_BLOCK, RELIABILITY_CASE, baseChainSpec } from "./case.ts";
 import { NoDatabaseContainer, restartDatabase } from "./db-control.ts";
 import { observer } from "./observe.ts";
 import {
+  DEFAULT_PATIENCE,
   EMPTY_RANGE,
   MAX_UINT,
   MAX_UINT_BLOCK,
   PLAYS,
   type Ctx,
+  type Patience,
   type ScenarioResult,
 } from "./play.ts";
 import { SCENARIOS } from "./scenarios.ts";
@@ -61,6 +69,8 @@ export interface RunOptions {
   tools: ReliabilityTool[];
   scenarios: string[];
   repeats: number;
+  /** How long to wait for things. Published runs leave this alone. */
+  patience?: Patience;
   /** Where each completed tool's result line is written. */
   emit?: (tool: ToolReliability) => void;
 }
@@ -90,19 +100,11 @@ function chainSpecFor(scenario: string): ChainSpec {
       ...spec.calls,
       // A name with a NUL in the middle. Legal in a Solidity string, and not
       // storable in a Postgres text column without being sanitised first.
-      [SELECTOR_NAME]: encodeNulName(),
+      [SELECTORS.name]: encodeString(
+        `Reliability${String.fromCharCode(0)}Token`
+      ),
     },
   };
-}
-
-// Kept out of chainSpecFor so the escape is written once and named.
-const SELECTOR_NAME = "0x06fdde03";
-function encodeNulName(): string {
-  const raw = `Reliability${String.fromCharCode(0)}Token`;
-  const bytes = Buffer.from(raw, "utf8");
-  const padded = Buffer.concat([bytes, Buffer.alloc((32 - (bytes.length % 32)) % 32)]);
-  const word = (value: bigint) => value.toString(16).padStart(64, "0");
-  return `0x${word(32n)}${word(BigInt(bytes.length))}${padded.toString("hex")}`;
 }
 
 // ── One run of one scenario ────────────────────────────────────────────
@@ -134,7 +136,8 @@ export async function runOnce(
   scenario: string,
   attempt: number,
   log: (message: string) => void,
-  restartDb: typeof restartDatabase = restartDatabase
+  restartDb: typeof restartDatabase = restartDatabase,
+  patience: Patience = DEFAULT_PATIENCE
 ): Promise<ScenarioResult> {
   const play = PLAYS[scenario];
   if (!play) return allUnmeasured(scenario, `no implementation for scenario "${scenario}"`);
@@ -165,6 +168,7 @@ export async function runOnce(
       driver: activeDriver,
       observe,
       log,
+      patience,
       async launch() {
         await activeDriver.launch();
         launched = true;
@@ -223,7 +227,12 @@ export async function runOnce(
     // rather than unmentioned: a missing check would silently shrink the
     // denominator, which flatters exactly the tool that made the scenario
     // give up.
-    return fillUnasked(scenario, result, "the scenario stopped before this was asked");
+    return withoutRefusedMethods(
+      scenario,
+      fillUnasked(scenario, result, "the scenario stopped before this was asked"),
+      activeChain.control.stats().refused,
+      log
+    );
   } catch (err) {
     const message = (err as Error)?.message ?? String(err);
     // A failure to set the run up is the harness's, not the tool's — with one
@@ -247,6 +256,43 @@ export async function runOnce(
       await chain?.close();
     } catch {}
   }
+}
+
+/**
+ * Drop any failure from a scenario the chain could not fully serve.
+ *
+ * The generated chain implements the methods someone thought to write down. An
+ * indexer reaching for one of the others gets an error back, fails to index,
+ * and — without this — is published as a tool that cannot handle reorgs. That
+ * would be the benchmark's own gap, reported as a finding about somebody
+ * else's software, which is the one failure mode this whole repository exists
+ * to avoid.
+ *
+ * So a refusal voids the failures: every failed check becomes unmeasured, and
+ * says which method is missing. Checks that passed are left alone, because a
+ * tool that coped is a tool that coped. The result is a dash in the table and
+ * a named to-do against chain-mock.ts, rather than a score nobody can trust.
+ */
+function withoutRefusedMethods(
+  scenario: string,
+  result: ScenarioResult,
+  refused: Record<string, number>,
+  log: (message: string) => void
+): ScenarioResult {
+  const methods = Object.keys(refused);
+  if (methods.length === 0) return result;
+
+  const reason =
+    `the generated chain does not serve ${methods.join(", ")}, which this tool ` +
+    `asked for, so the scenario cannot say anything about it — ` +
+    `add the method to reliability/lib/chain-mock.ts`;
+  log(`  ! ${scenario}: refused ${methods.join(", ")}; failures are not the tool's`);
+
+  const checks: Record<string, Outcome> = {};
+  for (const [id, outcome] of Object.entries(result.checks)) {
+    checks[id] = outcome.status === "fail" ? { status: "na", detail: reason } : outcome;
+  }
+  return { checks, measures: result.measures };
 }
 
 function fillUnasked(
@@ -357,7 +403,17 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
       for (let attempt = 1; attempt <= options.repeats; attempt++) {
         console.log(`\n--- ${tool} / ${scenario} (run ${attempt} of ${options.repeats}) ---`);
         const startedAt = performance.now();
-        attempts.push(await runOnce(tool, DRIVERS[tool], scenario, attempt, log));
+        attempts.push(
+          await runOnce(
+            tool,
+            DRIVERS[tool],
+            scenario,
+            attempt,
+            log,
+            restartDatabase,
+            options.patience ?? DEFAULT_PATIENCE
+          )
+        );
         console.log(
           `  run ${attempt} finished in ${((performance.now() - startedAt) / 1_000).toFixed(0)}s`
         );

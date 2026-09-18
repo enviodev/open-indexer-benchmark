@@ -172,6 +172,21 @@ export interface Fault {
 
 export interface ChainStats {
   requests: number;
+  /**
+   * Methods the chain was asked for and does not implement, by name.
+   *
+   * This is the honest accounting of the mock's own limits. A generated chain
+   * serves the methods someone thought to write, and an indexer reaching for
+   * one of the others gets an error — which, left unexamined, looks exactly
+   * like an indexer that cannot index. Every entry here is a bug report
+   * against this file, and the harness treats a scenario that saw one as
+   * unmeasured rather than failed: a tool cannot be marked down for a question
+   * the benchmark could not answer.
+   *
+   * Deliberately not cleared by reset(), which scenarios call to count
+   * requests over a window. A refusal is a fact about the whole run.
+   */
+  refused: Record<string, number>;
   /** Requests broken by an injected fault. */
   faulted: number;
   /** Per-method counts, so a scenario can assert a tool split its ranges. */
@@ -270,7 +285,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   let fault: Fault | null = null;
 
   function emptyStats(): ChainStats {
-    return { requests: 0, faulted: 0, methods: {}, widestRange: 0 };
+    return { requests: 0, faulted: 0, methods: {}, widestRange: 0, refused: {} };
   }
 
   function append(epoch: number, logs: boolean): MockBlock {
@@ -542,8 +557,11 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         // does with nothing — store a null, or fall over.
         return answer ?? "0x";
       }
-      default:
-        throw rpcFault(-32_601, `the mock chain does not serve ${req.method}`);
+      default: {
+        const method = req.method ?? "an unnamed method";
+        stats.refused[method] = (stats.refused[method] ?? 0) + 1;
+        throw rpcFault(-32_601, `the mock chain does not serve ${method}`);
+      }
     }
   }
 
@@ -699,9 +717,17 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     setDuplicateLogs(on) {
       duplicateLogs = on;
     },
-    stats: () => ({ ...stats, methods: { ...stats.methods } }),
+    stats: () => ({
+      ...stats,
+      methods: { ...stats.methods },
+      refused: { ...stats.refused },
+    }),
     reset() {
+      // Refusals survive: they are the mock's own shortcomings rather than
+      // part of whatever window a scenario is counting.
+      const refused = stats.refused;
       stats = emptyStats();
+      stats.refused = refused;
     },
   };
 

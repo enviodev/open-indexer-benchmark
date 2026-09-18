@@ -39,19 +39,28 @@ import type { Outcome } from "./score.ts";
 // ── Timings ────────────────────────────────────────────────────────────
 
 /**
- * How long a tool may take to catch up with the chain before it has failed,
- * and how long it may take to show any sign of life after a shove.
+ * How long a tool is given before a wait is called off.
  *
  * Both are deliberately generous: nothing here is a speed measurement, and a
  * tool that reconciles a reorg in ninety seconds passes the reorg check with
- * its ninety seconds recorded beside it. They are settable because the suite's
- * own tests drive a fake indexer that answers in milliseconds, where waiting
- * three minutes to conclude a deliberate defect is a defect would make the
- * tests useless — and because a slower machine may honestly need longer.
- * Published runs use the defaults.
+ * its ninety seconds recorded beside it.
+ *
+ * Carried on the context rather than read from the environment. An
+ * environment variable that changes a published score is a quiet way to
+ * publish a different benchmark under the same name; a parameter has to be
+ * passed by whoever wanted it. The suite's own tests are the only thing that
+ * passes anything else, because the indexer they drive answers in
+ * milliseconds and waiting three minutes to conclude that a deliberate defect
+ * is a defect would make them useless.
  */
-const SYNC_TIMEOUT_MS = Number(process.env.RELIABILITY_SYNC_TIMEOUT_MS ?? 180_000);
-const REACT_TIMEOUT_MS = Number(process.env.RELIABILITY_REACT_TIMEOUT_MS ?? 120_000);
+export interface Patience {
+  /** Catching up with the chain. */
+  syncMs: number;
+  /** Showing any sign of life after a shove. */
+  reactMs: number;
+}
+
+export const DEFAULT_PATIENCE: Patience = { syncMs: 180_000, reactMs: 120_000 };
 /** How long the database stays down when it is taken away. */
 const DB_DOWN_MS = 10_000;
 
@@ -85,6 +94,9 @@ export interface Ctx {
   /** False once the indexer has exited on its own. */
   alive(): boolean;
   restarts(): number;
+
+  /** How long this run waits for things. */
+  patience: Patience;
 
   progress(): Promise<Snapshot | null>;
   /** Poll until the predicate holds. False on timeout — never throws. */
@@ -157,7 +169,7 @@ async function compare(ctx: Ctx, upTo?: number): Promise<Comparison> {
 }
 
 /** Wait until the tool holds every row the chain holds. */
-async function synced(ctx: Ctx, timeoutMs = SYNC_TIMEOUT_MS): Promise<boolean> {
+async function synced(ctx: Ctx, timeoutMs = ctx.patience.syncMs): Promise<boolean> {
   return ctx.waitFor(
     "catching up with the chain",
     async () => (await compare(ctx)).clean,
@@ -166,7 +178,7 @@ async function synced(ctx: Ctx, timeoutMs = SYNC_TIMEOUT_MS): Promise<boolean> {
 }
 
 /** Wait for the tool to hold at least this many transfers. */
-async function reaches(ctx: Ctx, transfers: number, timeoutMs = SYNC_TIMEOUT_MS) {
+async function reaches(ctx: Ctx, transfers: number, timeoutMs = ctx.patience.syncMs) {
   return ctx.waitFor(
     `indexing ${transfers} transfers`,
     async () => (await ctx.observe.count().catch(() => 0)) >= transfers,
@@ -236,13 +248,13 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   const movedOn = await ctx.waitFor(
     "indexing again after the database came back",
     async () => (await ctx.observe.count().catch(() => 0)) > before,
-    REACT_TIMEOUT_MS
+    ctx.patience.reactMs
   );
   measures["resume-seconds"] = Math.round((performance.now() - backAt) / 1_000);
   checks["survives-backfill"] = verdict(
     ctx.alive() && movedOn,
     ctx.alive()
-      ? `stayed up but indexed nothing for ${Math.round(REACT_TIMEOUT_MS / 1_000)}s ` +
+      ? `stayed up but indexed nothing for ${Math.round(ctx.patience.reactMs / 1_000)}s ` +
         `after the database came back`
       : "exited when the database went away"
   );
@@ -259,7 +271,7 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     const survivedHead = await ctx.waitFor(
       "indexing again at the head",
       async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
-      REACT_TIMEOUT_MS
+      ctx.patience.reactMs
     );
     checks["survives-head"] = verdict(
       ctx.alive() && survivedHead,
@@ -328,7 +340,7 @@ export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
       !(await ctx.waitFor(
         "writing again after the restart",
         async () => (await ctx.observe.count().catch(() => 0)) > 0,
-        REACT_TIMEOUT_MS
+        ctx.patience.reactMs
       ))
     ) {
       break;

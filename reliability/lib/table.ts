@@ -124,6 +124,30 @@ export function toReliabilityRow(
   };
 }
 
+/**
+ * The row published for a tool the suite does not run, with the reason.
+ *
+ * A tool missing from a table is indistinguishable from a tool whose job
+ * failed, and the reasons here are worth reading: some are facts about the
+ * benchmark that will not change — a source that cannot be made to reorg on
+ * request — and some are work not yet done. Either way the row is present and
+ * says which.
+ */
+export function unrunRow(
+  tool: { name: string; toolUrl: string; source: string; sourceUrl: string },
+  reason: string
+): ReliabilityRow {
+  return {
+    name: tool.name,
+    tool: `[${tool.name}](${tool.toolUrl})`,
+    source: tool.source === "—" ? tool.source : `[${tool.source}](${tool.sourceUrl})`,
+    cells: Object.fromEntries(GROUPS.map((group) => [group.id, NO_VALUE])),
+    overall: { passed: 0, asked: 0 },
+    overallCell: NO_VALUE,
+    notes: [reason],
+  };
+}
+
 const HEAD = ["tool", "source", ...GROUPS.map((g) => g.title), "overall"];
 
 export function buildReliabilityTable(rows: ReliabilityRow[]): string {

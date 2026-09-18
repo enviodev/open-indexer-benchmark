@@ -31,18 +31,21 @@ const FULL = process.argv.includes("--full");
 /** Narrows the run to expectations whose label contains this, while iterating. */
 const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
 
-// The harness's patience is read when its module loads, so it is set before
-// anything imports it. The fake indexer answers in milliseconds; waiting three
-// minutes to conclude that a deliberate defect is a defect would make these
-// tests useless.
-process.env.RELIABILITY_SYNC_TIMEOUT_MS ??= "30000";
-process.env.RELIABILITY_REACT_TIMEOUT_MS ??= "15000";
-
 const { runOnce, mergeCheck, median } = await import("../reliability/lib/runner.ts");
 const { fakeIndexer } = await import("../reliability/lib/fake-indexer.ts");
 const { SCENARIOS } = await import("../reliability/lib/scenarios.ts");
 const { PLAYS } = await import("../reliability/lib/play.ts");
 const { sleep } = await import("../cases/lib/process.ts");
+
+/**
+ * How long this test waits, against the suite's own minutes.
+ *
+ * The indexer it drives answers in milliseconds, so the published patience
+ * would mean waiting three minutes to conclude that a deliberate defect is a
+ * defect. Passed explicitly rather than set in the environment: a published
+ * run reads neither of these.
+ */
+const PATIENCE = { syncMs: 30_000, reactMs: 15_000 };
 type Outcome = import("../reliability/lib/score.ts").Outcome;
 type Defect = import("../reliability/lib/fake-indexer.ts").Defect;
 
@@ -123,6 +126,8 @@ interface Expectation {
   passes?: string[];
   /** Checks that must fail — the defect's fingerprint. */
   fails?: string[];
+  /** Checks that must come back unmeasured rather than failed. */
+  unmeasured?: string[];
   /** Restart the database by refusing its connections instead of a container. */
   outage?: boolean;
   slow?: boolean;
@@ -165,6 +170,19 @@ const EXPECTATIONS: Expectation[] = [
     outage: true,
     fails: ["survives-backfill"],
   },
+
+  // ── And a gap in the benchmark is never a finding about the tool ──
+  //
+  // Both defects at once: an indexer that would genuinely fail every reorg
+  // check, and that also asks for a method the generated chain does not serve.
+  // The second has to win. A mock that refuses a method an indexer needs will
+  // fail it at everything, and publishing that as "no reorg handling" would be
+  // this benchmark accusing somebody else's software of its own shortcoming.
+  {
+    scenario: "reorg-cases",
+    defects: ["no-reorg-handling", "asks-for-an-unserved-method"],
+    unmeasured: ["shallow", "removes-event", "while-down"],
+  },
 ];
 
 await ensureRole();
@@ -192,7 +210,8 @@ for (const expectation of EXPECTATIONS) {
     expectation.scenario,
     1,
     () => {},
-    expectation.outage ? connectionOutage(name) : undefined
+    expectation.outage ? connectionOutage(name) : undefined,
+    PATIENCE
   );
   const seconds = ((Date.now() - startedAt) / 1_000).toFixed(0);
 
@@ -201,6 +220,14 @@ for (const expectation of EXPECTATIONS) {
       `${label}: ${id} passes`,
       status(result.checks[id]) === "pass",
       `${status(result.checks[id])} — ${detailOf(result.checks[id])} (${seconds}s)`
+    );
+  }
+  for (const id of expectation.unmeasured ?? []) {
+    check(
+      `${label}: ${id} is unmeasured, not failed`,
+      status(result.checks[id]) === "na",
+      `the harness reported ${status(result.checks[id])} for a scenario the chain ` +
+        `could not fully serve (${seconds}s)`
     );
   }
   for (const id of expectation.fails ?? []) {

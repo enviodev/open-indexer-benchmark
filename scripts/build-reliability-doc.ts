@@ -82,6 +82,46 @@ production may behave differently there, and nothing here claims otherwise —
 the source column says which path was measured, the same way it does for
 throughput.
 
+### Why a generated chain, and not a real node
+
+[Anvil](https://getfoundry.sh/anvil/overview) can reorg on demand —
+\`anvil_reorg\` rewinds by a depth and mines replacement blocks — and it would
+be a better chain than this one in every respect that is about being a chain:
+real receipts, real hashes, real ordering, a real ERC-20 to read. It was the
+first option considered, and it is the obvious way to run the reorg and head
+latency scenarios if this ever outgrows a generated chain.
+
+It is not what these scenarios use, for two reasons.
+
+Half of what they do is not about the chain at all. A node that answers 429 for
+thirty seconds, refuses a block range, serves the same log twice in one
+response, or reports a head lower than the one it reported a second ago — none
+of that is a chain doing something. It is a *provider* doing something, and no
+real node will do any of it on request. Ten of the checks here are exactly
+that.
+
+And one of them is impossible on a real chain by construction. A log index of
+\`0xffffffe2\` is what some providers emit for synthetic logs, and is what
+[ponder-sh/ponder#2373](https://github.com/ponder-sh/ponder/pull/2373) was
+opened about. A real EVM numbers logs sequentially within a block and would
+need four billion of them in one.
+
+The honest version of the alternative is a fault-injecting proxy in front of
+anvil, which would get both halves — and this repository already puts a proxy
+in front of a real endpoint for the contract-call scenario, so the shape is
+familiar. That is a good direction and nothing here forecloses it: the tools
+are pointed at a URL, and what serves it is one module.
+
+**The cost of a generated chain, and what is done about it.** It serves the
+methods someone thought to write down. An indexer reaching for another gets an
+error, fails to index, and — left alone — would be published as a tool that
+cannot handle reorgs, which would be this benchmark reporting its own gap as a
+finding about somebody else's software. So it is not left alone: the chain
+counts every method it refused, and a scenario that saw one publishes its
+failures as *unmeasured*, naming the method. A gap in the benchmark shows up as
+a dash and a to-do against
+[\`chain-mock.ts\`](./lib/chain-mock.ts), never as a score.
+
 ## How a score is put together
 
 There is nothing to it, on purpose. Every check below either passes or does

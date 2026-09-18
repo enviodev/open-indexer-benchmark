@@ -33,8 +33,29 @@ a weighting would be an opinion buried in the arithmetic — `4 / 6` is a claim
 about *which four*, and the page behind every cell names them.
 
 <!-- RELIABILITY:START -->
-_No reliability results collected._
+| tool | source | crash recovery | reorgs | rpc faults | data fidelity | head latency | overall |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (1) |
+| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (2) |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (3) |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (4) |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (5) |
+| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (6) |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (7) |
+
+> **(1)** Envio Indexer — not measured yet: no run has published a result
+> **(2)** Ponder — not measured yet: no run has published a result
+> **(3)** Envio Subgraph — the reliability case has no subgraph/ project yet, which is what this row would run on HyperIndex
+> **(4)** Rindexer — the reliability case has no rindexer/ project yet
+> **(5)** Squid SDK — the reliability case has no sqd/ project yet
+> **(6)** Subgraph — the reliability case has no subgraph/ project yet
+> **(7)** SubQuery — the reliability case has no subquery/ project yet
 <!-- RELIABILITY:END -->
+
+Every tool that reads plain RPC gets a row, measured or not. Tools that read
+their own network — HyperSync, SQD Network, StreamingFast — have no row here at
+all: the benchmark cannot make those sources reorg or fail on demand, so each
+is measured on its RPC row instead, and the scenario page says so tool by tool.
 
 The column with a number beside it carries the measurement a count cannot make:
 how many times a tool had to be restarted by hand to get through the database

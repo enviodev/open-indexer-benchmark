@@ -102,6 +102,7 @@ const LOCAL_SCRIPTS = new Set([
   "scripts/test-chain-mock.ts",
   "scripts/test-reliability.ts",
   "scripts/test-reliability-harness.ts",
+  "scripts/build-reliability-table.ts",
   "scripts/build-reliability-doc.ts",
   "scripts/test-tables.ts",
   "scripts/test-rpc-mock.ts",

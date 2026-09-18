@@ -23,49 +23,20 @@
 //   die-on-db-error     exits the moment a query fails, instead of retrying
 //   no-sanitise         writes strings through unchanged, so a NUL byte in
 //                       one reaches Postgres and fails the insert
+//   asks-for-an-unserved-method
+//                       reaches for a JSON-RPC method the generated chain does
+//                       not implement, which stands for every real indexer
+//                       that uses something nobody thought to mock
 //
 // Each defect is meant to fail a specific check. scripts/test-reliability-
 // harness.ts turns them on one at a time and asserts exactly that.
 
-import { spawn } from "node:child_process";
 import type { DriverFactory, Snapshot } from "../../cases/lib/drivers/index.ts";
-import { sleep } from "../../cases/lib/process.ts";
+import { psql, sleep } from "../../cases/lib/process.ts";
 import { START_BLOCK, TOKEN } from "./case.ts";
 
-/**
- * Runs SQL through psql's stdin rather than its command line.
- *
- * The shared helper in cases/lib/process.ts passes the query as an argument,
- * which Linux caps at 128 KB per argument — enough for every query the
- * benchmark itself issues, and not enough for a batch of five hundred inserts,
- * which fails as `spawn E2BIG`. Only this double writes statements that large,
- * so the workaround lives here rather than in the shared helper, where it
- * would be a change to the path all forty-four throughput jobs run through.
- */
-function sqlIn(connStr: string, query: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const p = spawn("psql", [connStr, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-f", "-"], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    p.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-    p.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-    p.on("error", reject);
-    // A psql that cannot connect exits before the query is written, and the
-    // write then fails with EPIPE — which, unhandled, takes the whole process
-    // down. That is not an edge case here: it is what every query does while
-    // the database-restart scenario has the database taken away. The exit code
-    // is what the failure is reported from, so the broken pipe is ignored.
-    p.stdin.on("error", () => {});
-    p.on("exit", (code) =>
-      code === 0 ? resolve(stdout.trim()) : reject(new Error(`psql failed (${code}): ${stderr}`))
-    );
-    p.stdin.end(query);
-  });
-}
-
 export type Defect =
+  | "asks-for-an-unserved-method"
   | "no-reorg-handling"
   | "checkpoint-ahead"
   | "double-apply"
@@ -115,7 +86,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
     let batch = options.batchBlocks ?? 500;
     let loop: Promise<void> | null = null;
 
-    const sql = (query: string) => sqlIn(dbUrl, query);
+    const sql = (query: string) => psql(dbUrl, query);
 
     /** A write that a kill since `gen` cancels, the way a signal would. */
     function sqlAlive(gen: number, query: string): Promise<string> {
@@ -321,6 +292,13 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
      * is killed does not come back when its replacement starts.
      */
     async function run(gen: number) {
+      if (defects.has("asks-for-an-unserved-method")) {
+        // Stands in for an indexer that uses a method the mock never learned.
+        // What matters is not that this call fails — it is that every verdict
+        // in the scenario becomes unmeasured, because the benchmark cannot
+        // mark a tool down for a question it could not answer.
+        await rpc("eth_newFilter", [{}]).catch(() => {});
+      }
       try {
         await readToken();
       } catch {

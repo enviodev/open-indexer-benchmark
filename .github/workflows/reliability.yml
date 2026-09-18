@@ -88,3 +88,42 @@ jobs:
           name: reliability-${{ matrix.tool }}
           path: reliability-output.txt
           retention-days: 30
+
+  summary:
+    name: Summary
+    needs: tools
+    # A tool whose job failed is a result in its own right: the table carries
+    # its last published row forward and marks it stale, which is the same
+    # contract the throughput tables have.
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download the results
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: reliability-*
+
+      # Writes the table into README.md between its markers and prints it. The
+      # scheduled run leaves the edit in the workspace rather than committing
+      # it; publishing is a separate decision from measuring, and the
+      # throughput tables are committed by their own step for the same reason.
+      - name: Build the reliability table
+        run: node scripts/build-reliability-table.ts | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the updated README
+        uses: actions/upload-artifact@v4
+        with:
+          name: reliability-readme
+          path: README.md
+          retention-days: 30
