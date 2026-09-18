@@ -13,18 +13,23 @@ export interface ExpectedData {
   entities: Record<string, string[]>;
 }
 
-export interface CaseConfig {
+/** Ground-truth rows for a case, plus how far into the range they reach. */
+export interface GroundTruth extends ExpectedData {
+  /**
+   * The highest block in the range that carries an event, which is not
+   * necessarily the last block of the range — the last blocks are often empty.
+   */
+  lastEventBlock: number;
+}
+
+/** What every case declares, whichever chain it reads. */
+interface CommonCaseConfig {
   /** Directory name under cases/, e.g. "erc20-transfer-events". */
   name: string;
   /** Human-readable case name used in headings. */
   title: string;
   /** Absolute path to the case directory. */
   dir: string;
-  /**
-   * The contract the case indexes. A factory case may list several — different
-   * deployments of the same protocol, which the ground truth reads together.
-   */
-  contract: string | string[];
   startBlock: number;
   /**
    * Inclusive end block of the bounded verification run. Size it by what the
@@ -42,18 +47,6 @@ export interface CaseConfig {
    * its rate is computed over the time it took.
    */
   throughputEndBlock?: number;
-  /** Event topic0 values the case indexes on `contract`. */
-  topics: string[];
-  /**
-   * Set for a factory case: `contract` is then the factory, and these are the
-   * topics indexed on the child contracts it announces. `childOf` names the
-   * child a factory log created, so the ground truth can be built in two
-   * passes without the case having to know how HyperSync is queried.
-   */
-  child?: {
-    topics: string[];
-    childOf: (log: DecodedLog) => string;
-  };
   /**
    * Set for a case whose handlers read contract state. Every tool is then
    * pointed at an endpoint that answers those calls itself — same latency and
@@ -69,11 +62,15 @@ export interface CaseConfig {
    * should be visible in the table, not quietly absent from it.
    */
   unsupported?: Record<string, string>;
+  /**
+   * Tools this scenario runs only when it is run by hand. A row that needs an
+   * endpoint the project pays for by the request has no business in a run that
+   * fires on every push, so CI leaves these out and `scripts/run-local.ts`
+   * puts them back.
+   */
+  localOnly?: string[];
   /** Entities checked against the ground truth. */
   entities: EntitySpec[];
-  /** Replays the case logic over raw logs to produce the expected rows. */
-  computeExpected(logs: DecodedLog[]): ExpectedData;
-
   /**
    * Keys of the entities that hold one row per processed event, so their row
    * counts sum to the number of events an indexer has got through. Aggregated
@@ -86,6 +83,79 @@ export interface CaseConfig {
   eventEntities: string[];
 }
 
+/** A case reading an EVM chain, whose ground truth is built from logs. */
+export interface EvmCaseConfig extends CommonCaseConfig {
+  /**
+   * The contract the case indexes. A factory case may list several — different
+   * deployments of the same protocol, which the ground truth reads together.
+   */
+  contract: string | string[];
+  /** Event topic0 values the case indexes on `contract`. */
+  topics: string[];
+  /**
+   * Set for a factory case: `contract` is then the factory, and these are the
+   * topics indexed on the child contracts it announces. `childOf` names the
+   * child a factory log created, so the ground truth can be built in two
+   * passes without the case having to know how HyperSync is queried.
+   */
+  child?: {
+    topics: string[];
+    childOf: (log: DecodedLog) => string;
+  };
+  /** Replays the case logic over raw logs to produce the expected rows. */
+  computeExpected(logs: DecodedLog[]): ExpectedData;
+}
+
+/**
+ * A case the log path cannot express, which builds its own ground truth —
+ * from a second reading of the chain, or from a snapshot of its reference
+ * implementation where the logic is not replayable from raw data.
+ */
+export interface SvmCaseConfig extends CommonCaseConfig {
+  buildGroundTruth(
+    token: string,
+    onProgress?: (progress: FetchProgress) => void
+  ): Promise<GroundTruth>;
+}
+
+export type CaseConfig = EvmCaseConfig | SvmCaseConfig;
+
+export function isEvmCase(config: CaseConfig): config is EvmCaseConfig {
+  return "topics" in config;
+}
+
+/**
+ * The ground truth for a case, however it is built. Callers verify against it
+ * and generate it from the same function, so the two can never disagree about
+ * what a case expects.
+ */
+export async function buildGroundTruth(
+  config: CaseConfig,
+  token: string,
+  onProgress?: (progress: FetchProgress) => void
+): Promise<GroundTruth> {
+  if (!isEvmCase(config)) return config.buildGroundTruth(token, onProgress);
+
+  const logs = await fetchCaseLogs(config, token, onProgress);
+  if (logs.length === 0) {
+    throw new Error(
+      `No logs found for ${config.name} — check the contract address and block range`
+    );
+  }
+  const { totalEvents, entities } = config.computeExpected(logs);
+  if (totalEvents !== logs.length) {
+    throw new Error(
+      `${config.name}: case logic accounted for ${totalEvents} of ${logs.length} ` +
+        `logs — a topic is being fetched but not handled`
+    );
+  }
+  const lastEventBlock = logs.reduce(
+    (highest, log) => (log.blockNumber > highest ? log.blockNumber : highest),
+    config.startBlock
+  );
+  return { totalEvents, entities, lastEventBlock };
+}
+
 /**
  * Every log a case's ground truth is built from, in the order an indexer would
  * see them. A factory case reads in two passes — the factory, then the children
@@ -94,7 +164,7 @@ export interface CaseConfig {
  * through here.
  */
 export function fetchCaseLogs(
-  config: CaseConfig,
+  config: EvmCaseConfig,
   token: string,
   onProgress?: (progress: FetchProgress) => void
 ): Promise<DecodedLog[]> {

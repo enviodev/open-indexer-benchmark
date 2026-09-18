@@ -1,0 +1,16 @@
+manifestVersion: subsquid.io/v0.1
+name: solana-spl-transfers
+version: 1
+description: 'Solana SPL Token transfers benchmark squid'
+build:
+deploy:
+  addons:
+    postgres:
+  processor:
+    cmd:
+      - sqd
+      - process:prod
+  api:
+    cmd:
+      - sqd
+      - serve:prod

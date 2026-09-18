@@ -1,0 +1,11 @@
+type Transfer {
+  id: ID!
+  amount: BigInt!
+  source: String!
+  destination: String!
+  signer: String!
+  txSignature: String!
+  checked: Boolean!
+  slot: Int!
+  timestamp: Int!
+}

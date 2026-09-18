@@ -28,6 +28,16 @@ There is no aggregation — accounts, balances, and allowances are intentionally
 - **Squid SDK** — [sqd/](./sqd/)
 - **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
 - **SubQuery** — [subquery/](./subquery/) (requires Docker)
+- **Substreams** — [substreams/](./substreams/), run locally
+
+Substreams reads through StreamingFast, which bills by the request and needs an
+API key, so unlike the rows above it is measured by hand rather than on every
+push:
+
+```bash
+ENVIO_API_TOKEN=your-token SUBSTREAMS_API_KEY=your-key \
+  node scripts/run-local.ts erc20-transfer-events --commit
+```
 
 ## Running the Benchmark
 

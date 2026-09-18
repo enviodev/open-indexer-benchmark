@@ -1,0 +1,51 @@
+specVersion: v0.1.0
+package:
+  name: 'erc20_transfer_events'
+  version: v0.1.0
+
+imports:
+  # substreams-sink-sql resolves the sink type from this spkg — it does not
+  # bundle the descriptors. The `substreams` CLI does bundle them, so with this
+  # import present its own commands (`run`, `protogen`) fail on an ambiguous
+  # sf.substreams.sink.sql.v1.Service; comment it out for those, and see the
+  # README.
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.7/substreams-sink-sql-protodefs-v1.0.7.spkg
+  database: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.3.1/substreams-database-change-v1.3.1.spkg
+
+protobuf:
+  files:
+    - evm/transfers.proto
+  importPaths:
+    - ./proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/substreams_erc20_transfer_events.wasm
+
+modules:
+  - name: map_transfer_events
+    kind: map
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:evm.transfers.v1.TransferEvents
+
+  - name: db_out
+    kind: map
+    inputs:
+      - map: map_transfer_events
+    output:
+      type: proto:sf.substreams.sink.database.v1.DatabaseChanges
+
+network: mainnet
+params:
+  map_transfer_events: contract:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+sink:
+  module: db_out
+  type: sf.substreams.sink.sql.v1.Service
+  config:
+    schema: "./schema.sql"
+    engine: postgres

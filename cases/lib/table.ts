@@ -31,6 +31,13 @@ export interface TableRow {
   /** True when re-published from the README because this run produced none. */
   carriedOver?: boolean;
   /**
+   * True for a carried row the run was never going to produce: a tool the
+   * scenario measures by hand. Its numbers are as real as any other row's,
+   * they are just from whenever someone last ran it, and saying so is the
+   * difference between a stale row and one that looks like a failed job.
+   */
+  localOnly?: boolean;
+  /**
    * Set when the tool cannot express the case. The row renders as dashes and
    * the reason becomes its numbered note; it sorts last regardless of rate,
    * because it has no rate to compare.
@@ -133,13 +140,24 @@ export function buildTable(rows: TableRow[]): string {
   }
   if (notes.length > 0) lines.push("", ...notes.map((note) => `> ${note}`));
 
-  const carried = sorted.filter((r) => r.carriedOver).map((r) => r.name);
+  const carried = sorted
+    .filter((r) => r.carriedOver && !r.localOnly)
+    .map((r) => r.name);
   if (carried.length > 0) {
     lines.push(
       "",
       `> ⚠️ ${carried.join(
         ", "
       )} — carried forward from a previous run; the latest run produced no fresh result.`
+    );
+  }
+
+  const local = sorted.filter((r) => r.carriedOver && r.localOnly).map((r) => r.name);
+  if (local.length > 0) {
+    lines.push(
+      "",
+      `> ⚠️ ${local.join(", ")} — measured by hand rather than in CI, so these ` +
+        `numbers are from the last local run rather than from this one.`
     );
   }
   return lines.join("\n");

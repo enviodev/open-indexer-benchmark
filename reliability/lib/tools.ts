@@ -62,6 +62,16 @@ export const NOT_RUN: Record<string, string> = {
   sqd:
     "reads SQD Network, which the benchmark cannot make reorg or fail on demand; " +
     "the Squid SDK's RPC row is measured instead",
+  substreams:
+    "reads a StreamingFast endpoint rather than plain RPC, which the benchmark " +
+    "cannot make reorg or fail on demand",
+  // Carbon does read plain RPC, but Solana's, and the generated chain is an
+  // Ethereum JSON-RPC node: it has no slots, no leader schedule and no
+  // account model to lie about. A Solana chain to provoke would be a second
+  // mock rather than an entry in this list.
+  carbon:
+    "indexes Solana, and the generated chain is an Ethereum node; provoking a " +
+    "Solana indexer needs a Solana chain to provoke",
 };
 
 export type ReliabilityTool = (typeof RELIABILITY_TOOLS)[number];

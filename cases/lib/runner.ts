@@ -32,7 +32,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { fetchCaseLogs, type CaseConfig } from "./case.ts";
+import { buildGroundTruth, type CaseConfig } from "./case.ts";
 import type { Expected } from "./checksum.ts";
 import {
   DRIVERS,
@@ -116,6 +116,8 @@ async function cleanup() {
 interface PhaseOutcome {
   blocks: number;
   events: number;
+  /** Rows committed, where the driver reports them apart from `events`. */
+  rows?: number;
   elapsedS: number;
   /** Reached the end block (or the expected event count) before running out of time. */
   completed: boolean;
@@ -146,6 +148,22 @@ async function runPhase(
 
   let last: Snapshot = { blocks: 0, events: 0 };
 
+  /**
+   * Whether a reading means the phase is done. A driver that reports rows
+   * apart from events has told us its progress counter can run ahead of what
+   * is committed, so the range is only finished once the rows are there too —
+   * otherwise the phase ends while the last batch is still being written and
+   * verification reads a table that is still filling.
+   */
+  const reachedTarget = (s: Snapshot) =>
+    (s.blocks >= targetBlocks || s.events >= targetEvents) &&
+    // The throughput window has no event target, so there is no row count to
+    // hold it to; requiring one would mean a window that reached its end block
+    // never counted as finished, and every sample from it was discarded.
+    (targetEvents === Number.POSITIVE_INFINITY ||
+      s.rows === undefined ||
+      s.rows >= targetEvents);
+
   // Progress is read as an absolute position, so anything left over from a
   // previous phase would be counted as work done in this one. Every driver is
   // supposed to start from an empty database; say so loudly if one does not,
@@ -168,11 +186,7 @@ async function runPhase(
     // Exiting is a reason to stop waiting, not evidence of success: an indexer
     // that crashed on startup exits too. Completion is decided below, from the
     // progress actually recorded.
-    if (
-      last.blocks >= targetBlocks ||
-      last.events >= targetEvents ||
-      driver.exited()
-    ) {
+    if (reachedTarget(last) || driver.exited()) {
       break;
     }
     const remaining = Math.max(0, targetBlocks - last.blocks) / targetBlocks;
@@ -193,7 +207,10 @@ async function runPhase(
   // genuinely done this costs one extra reading, and on one that is not it is
   // the difference between verifying complete data and reporting a hole in it
   // as a data mismatch.
-  const metTarget = last.blocks >= targetBlocks || last.events >= targetEvents;
+  // Leaving the loop before the deadline means something broke out of it — a
+  // target met, or the indexer exiting — and both are worth settling on. A
+  // phase that ran out of time has nothing left to wait for.
+  const metTarget = performance.now() < deadline;
   for (let settle = 0; metTarget && settle < SETTLE_READS; settle++) {
     if (performance.now() >= deadline) break;
     await sleep(SETTLE_MS);
@@ -203,7 +220,10 @@ async function runPhase(
     } catch {
       break;
     }
-    const moved = next.events > last.events || next.blocks > last.blocks;
+    const moved =
+      next.events > last.events ||
+      next.blocks > last.blocks ||
+      (next.rows ?? 0) > (last.rows ?? 0);
     last = next;
     if (!moved) break;
   }
@@ -234,9 +254,15 @@ async function runPhase(
     }
   }
   const elapsedS = (performance.now() - startedAt) / 1_000;
-  const completed = last.blocks >= targetBlocks || last.events >= targetEvents;
+  const completed = reachedTarget(last);
 
-  return { blocks: last.blocks, events: last.events, elapsedS, completed };
+  return {
+    blocks: last.blocks,
+    events: last.events,
+    rows: last.rows,
+    elapsedS,
+    completed,
+  };
 }
 
 // ── Benchmark ──────────────────────────────────────────────────────────
@@ -253,11 +279,16 @@ async function runPhase(
  * case, and nothing is extrapolated from it.
  */
 function coverageOf(run: PhaseOutcome, expected: Expected) {
+  // Rows where a driver reports them: a run that timed out can have a progress
+  // counter ahead of what was committed, and both the share this reports and
+  // the database size scaled from it are about the rows that are actually
+  // there to verify.
+  const indexed = run.rows ?? run.events;
   const indexedShare =
-    expected.totalEvents > 0 ? Math.min(1, run.events / expected.totalEvents) : 0;
+    expected.totalEvents > 0 ? Math.min(1, indexed / expected.totalEvents) : 0;
   return {
     indexedShare,
-    indexedNothing: run.blocks <= 0 && run.events <= 0,
+    indexedNothing: run.blocks <= 0 && indexed <= 0,
   };
 }
 
@@ -451,8 +482,7 @@ async function benchmarkIndexer(
       ? {
           fetchExpectedRows: async () => {
             console.log("  Mismatch found — rebuilding ground truth to diff it...");
-            const logs = await fetchCaseLogs(config, apiToken);
-            return config.computeExpected(logs).entities;
+            return (await buildGroundTruth(config, apiToken)).entities;
           },
         }
       : {}

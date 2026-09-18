@@ -21,6 +21,8 @@ const CASES = readdirSync(resolve(ROOT, "cases"))
   .sort();
 const INDEXERS = [...REGISTERED];
 
+
+
 /** The given indexers, in every scenario — what a repo-wide change selects. */
 const inEvery = (indexers: string[]) =>
   Object.fromEntries(CASES.map((c) => [c, indexers]));
@@ -59,6 +61,23 @@ let failures = 0;
       console.log(`ok workflow: all ${REGISTERED.length} indexers get a job`);
     }
   }
+
+  // The scope below diffs against the pull request's base commit, which a
+  // shallow clone does not contain. Pinned to the literal 0 rather than an
+  // expression: `github.event_name == 'pull_request' && 0 || 1` reads as
+  // "full history on a pull request" and evaluates to 1 on every event,
+  // because 0 is falsy, so the checkout is shallow and the diff dies on a
+  // bad object.
+  const depth = workflow.match(/fetch-depth:(.*)/);
+  if (depth?.[1].trim() !== "0") {
+    console.error(
+      `FAIL workflow: the setup job's checkout must be fetch-depth: 0, got ` +
+        `${depth ? depth[1].trim() : "no fetch-depth at all"}`
+    );
+    failures++;
+  } else {
+    console.log("ok workflow: the scope diff has the base commit to diff against");
+  }
 }
 
 function check(name: string, changed: string[], expected: Record<string, string[]>) {
@@ -92,25 +111,26 @@ function check(name: string, changed: string[], expected: Record<string, string[
 // directory each indexer's projects live in. If they drift, a changed indexer
 // silently keeps its stale carried-forward row instead of being re-measured,
 // which is the one failure mode the filter must not have. Pin the two
-// together: a change in every registered indexer's project directory must
-// select that indexer, in every scenario it exists in.
+// together: a change in some registered indexer's project directory must
+// select that indexer. Scenario by scenario would be stricter, but a scenario
+// only some tools implement — Solana — has directories for only those, and an
+// absent directory would then be indistinguishable from a stale mapping.
 for (const indexer of REGISTERED) {
-  for (const benchCase of CASES) {
-    const dirs = readdirSync(resolve(ROOT, "cases", benchCase));
-    const dir = dirs.find((d) => {
+  const selectable = CASES.some((benchCase) =>
+    readdirSync(resolve(ROOT, "cases", benchCase)).some((d) => {
       const picked =
         selectScope([`cases/${benchCase}/${d}/x`], CASES, INDEXERS).indexers[benchCase] ?? [];
       // A proper subset, so the whole-scenario fallback for a directory the
       // filter does not recognize cannot pass for a match.
       return picked.includes(indexer) && picked.length < INDEXERS.length;
-    });
-    if (!dir) {
-      console.error(
-        `FAIL registry: no directory under cases/${benchCase}/ selects "${indexer}" — ` +
-          `does select-scope.ts's INDEXER_DIRS know about it?`
-      );
-      failures++;
-    }
+    })
+  );
+  if (!selectable) {
+    console.error(
+      `FAIL registry: no directory in any scenario selects "${indexer}" — ` +
+        `does select-scope.ts's INDEXER_DIRS know about it?`
+    );
+    failures++;
   }
 }
 if (failures === 0) console.log(`ok registry: all ${REGISTERED.length} indexers selectable`);

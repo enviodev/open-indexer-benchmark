@@ -1,0 +1,9 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: carbon
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "${DB_PORT:-25432}:5432"
+    shm_size: 1gb

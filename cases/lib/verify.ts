@@ -182,6 +182,10 @@ function fieldExpr(field: FieldSpec, col: ColumnInfo): string {
       return type === "bytea"
         ? `('0x' || encode(${ident}, 'hex'))`
         : `lower(${ident}::text)`;
+    case "base58":
+      // Base58 has no canonical case to fold to, and every indexer stores a
+      // Solana address as the text it came as.
+      return `${ident}::text`;
     case "amount":
       // numeric everywhere except indexers that keep uint256 as a string.
       return `(${ident}::numeric)::text`;

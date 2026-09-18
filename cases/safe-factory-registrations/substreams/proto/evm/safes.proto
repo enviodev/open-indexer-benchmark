@@ -1,0 +1,87 @@
+syntax = "proto3";
+package evm.safes.v1;
+
+message Proxies {
+  repeated Safe data = 1;
+}
+
+message Safe {
+  string id = 1;
+  string proxy = 2;
+  string singleton = 3;
+  int64 block_timestamp = 4;
+}
+
+message Events {
+  repeated SafeSetup setups = 1;
+  repeated SafeReceived received = 2;
+  repeated ModuleTransaction module_transactions = 3;
+  repeated MultiSigTransaction multisig_transactions = 4;
+  repeated Payment executions = 5;
+  repeated Threshold thresholds = 6;
+  repeated AddressEvent address_events = 7;
+}
+
+message SafeSetup {
+  string id = 1;
+  string safe = 2;
+  string initiator = 3;
+  string threshold = 4;
+  int64 block_timestamp = 5;
+}
+
+message SafeReceived {
+  string id = 1;
+  string safe = 2;
+  string sender = 3;
+  string value = 4;
+  int64 block_timestamp = 5;
+}
+
+message ModuleTransaction {
+  string id = 1;
+  string safe = 2;
+  string module = 3;
+  string to = 4;
+  string value = 5;
+  string operation = 6;
+  int64 block_timestamp = 7;
+}
+
+message MultiSigTransaction {
+  string id = 1;
+  string safe = 2;
+  string to = 3;
+  string value = 4;
+  string operation = 5;
+  int64 block_timestamp = 6;
+}
+
+// ExecutionSuccess and ExecutionFailure carry a payment and nothing else, and
+// differ only in the table they land in.
+message Payment {
+  string id = 1;
+  string table = 2;
+  string safe = 3;
+  string payment = 4;
+  int64 block_timestamp = 5;
+}
+
+message Threshold {
+  string id = 1;
+  string safe = 2;
+  string threshold = 3;
+  int64 block_timestamp = 4;
+}
+
+// The eight events that carry one address and nothing else. They differ in the
+// table they land in and what that table calls the column, so the message names
+// both rather than repeating the shape eight times.
+message AddressEvent {
+  string id = 1;
+  string table = 2;
+  string column = 3;
+  string safe = 4;
+  string address = 5;
+  int64 block_timestamp = 6;
+}

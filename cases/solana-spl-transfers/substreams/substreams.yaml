@@ -1,0 +1,54 @@
+specVersion: v0.1.0
+package:
+  name: 'solana_spl_transfers'
+  version: v0.1.0
+
+imports:
+  # substreams-sink-sql resolves the sink type from this spkg — it does not
+  # bundle the descriptors. The `substreams` CLI does bundle them, so with this
+  # import present its own commands (`run`, `protogen`) fail on an ambiguous
+  # sf.substreams.sink.sql.v1.Service; comment it out for those, and see the
+  # README.
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.7/substreams-sink-sql-protodefs-v1.0.7.spkg
+  database: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.3.1/substreams-database-change-v1.3.1.spkg
+  solana: https://spkg.io/streamingfast/solana-common-v0.3.0.spkg
+
+protobuf:
+  files:
+    - spl/transfers.proto
+  importPaths:
+    - ./proto
+
+binaries:
+  default:
+    type: wasm/rust-v1+wasm-bindgen-shims
+    file: ./target/wasm32-unknown-unknown/release/substreams_solana_spl_transfers.wasm
+
+modules:
+  - name: map_transfers
+    kind: map
+    inputs:
+      - params: string
+      - source: sf.substreams.v1.Clock
+      - map: solana:transactions_by_programid_without_votes
+    output:
+      type: proto:spl.transfers.v1.Transfers
+
+  - name: db_out
+    kind: map
+    inputs:
+      - map: map_transfers
+    output:
+      type: proto:sf.substreams.sink.database.v1.DatabaseChanges
+
+network: solana
+params:
+  map_transfers: token_contract:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+  solana:transactions_by_programid_without_votes: program:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+sink:
+  module: db_out
+  type: sf.substreams.sink.sql.v1.Service
+  config:
+    schema: "./schema.sql"
+    engine: postgres

@@ -1,0 +1,78 @@
+specVersion: v0.1.0
+package:
+  name: 'erc20_account_balances'
+  version: v0.1.0
+
+imports:
+  # substreams-sink-sql resolves the sink type from this spkg — it does not
+  # bundle the descriptors. The `substreams` CLI does bundle them, so with this
+  # import present its own commands (`run`, `protogen`) fail on an ambiguous
+  # sf.substreams.sink.sql.v1.Service; comment it out for those, and see the
+  # README.
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.7/substreams-sink-sql-protodefs-v1.0.7.spkg
+  database: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.3.1/substreams-database-change-v1.3.1.spkg
+
+protobuf:
+  files:
+    - evm/balances.proto
+  importPaths:
+    - ./proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/substreams_erc20_account_balances.wasm
+
+modules:
+  - name: map_events
+    kind: map
+    # The scenario's balances are the ones its range produces, the way every
+    # other implementation computes them: from nothing at the start block. A
+    # store otherwise accumulates from its initial block, which defaults to
+    # genesis — 18.6 million blocks of state to prepare before the first row,
+    # and a different question answered.
+    initialBlock: 18600000
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:evm.balances.v1.Events
+
+  - name: store_balances
+    kind: store
+    initialBlock: 18600000
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_events
+
+  - name: store_allowances
+    kind: store
+    initialBlock: 18600000
+    updatePolicy: set
+    valueType: bigint
+    inputs:
+      - map: map_events
+
+  - name: db_out
+    kind: map
+    initialBlock: 18600000
+    inputs:
+      - map: map_events
+      - store: store_balances
+        mode: deltas
+      - store: store_allowances
+        mode: deltas
+    output:
+      type: proto:sf.substreams.sink.database.v1.DatabaseChanges
+
+network: mainnet
+params:
+  map_events: contract:0xae78736cd615f374d3085123a210448e74fc6393
+
+sink:
+  module: db_out
+  type: sf.substreams.sink.sql.v1.Service
+  config:
+    schema: "./schema.sql"
+    engine: postgres

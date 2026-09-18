@@ -10,7 +10,7 @@
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchCaseLogs, type CaseConfig } from "../cases/lib/case.ts";
+import { buildGroundTruth, isEvmCase, type CaseConfig } from "../cases/lib/case.ts";
 import { summarise, type Expected } from "../cases/lib/checksum.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -19,6 +19,7 @@ const ALL_CASES = [
   "erc20-account-balances",
   "safe-factory-registrations",
   "erc20-allowance-calls",
+  "solana-spl-transfers",
 ];
 
 async function loadCase(name: string): Promise<CaseConfig> {
@@ -33,47 +34,33 @@ async function generate(name: string, token: string) {
   console.log(
     `Blocks ${config.startBlock.toLocaleString("en-US")}–${config.verifyEndBlock.toLocaleString(
       "en-US"
-    )} (${blocks.toLocaleString("en-US")}) of ${[config.contract].flat().join(", ")}`
+    )} (${blocks.toLocaleString("en-US")})${
+      isEvmCase(config) ? ` of ${[config.contract].flat().join(", ")}` : ""
+    }`
   );
 
   // A factory case reads the same range twice, so the pass is named: without it
   // the block number appears to jump backwards halfway through.
   let pass = "";
-  const logs = await fetchCaseLogs(config, token, (progress) => {
-    if (progress.pass !== pass) {
-      if (pass) process.stdout.write("\n");
-      pass = progress.pass;
+  const { totalEvents, entities: rows, lastEventBlock } = await buildGroundTruth(
+    config,
+    token,
+    (progress) => {
+      if (progress.pass !== pass) {
+        if (pass) process.stdout.write("\n");
+        pass = progress.pass;
+      }
+      process.stdout.write(
+        `\r  ${progress.pass}: fetched to block ${progress.block.toLocaleString(
+          "en-US"
+        )} — ${progress.logs.toLocaleString("en-US")} rows`
+      );
     }
-    process.stdout.write(
-      `\r  ${progress.pass}: fetched to block ${progress.block.toLocaleString(
-        "en-US"
-      )} — ${progress.logs.toLocaleString("en-US")} logs`
-    );
-  });
+  );
   process.stdout.write("\n");
 
-  if (logs.length === 0) {
-    throw new Error(
-      `No logs found for ${name} — check the contract address and block range`
-    );
-  }
-
-  const { totalEvents, entities: rows } = config.computeExpected(logs);
   const entities = Object.fromEntries(
     Object.entries(rows).map(([key, value]) => [key, summarise(value)])
-  );
-  if (totalEvents !== logs.length) {
-    throw new Error(
-      `${name}: case logic accounted for ${totalEvents} of ${logs.length} logs — ` +
-        `a topic is being fetched but not handled`
-    );
-  }
-
-  // The last block that carries an event, which is as far as an indexer whose
-  // progress is read from its own rows can ever appear to get.
-  const lastEventBlock = logs.reduce(
-    (highest, log) => (log.blockNumber > highest ? log.blockNumber : highest),
-    config.startBlock
   );
 
   const expected: Expected = {

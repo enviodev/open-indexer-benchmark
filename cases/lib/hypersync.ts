@@ -56,7 +56,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * POST with retries. Transient DNS failures and 5xx responses are common
  * enough that without this a whole benchmark job can fail before it starts.
  */
-async function post(url: string, token: string, body?: unknown): Promise<any> {
+export async function post(url: string, token: string, body?: unknown): Promise<any> {
   let lastError = "";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {

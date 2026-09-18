@@ -107,6 +107,8 @@ write down, which is not the same as a reliable tool — see
 | envio-subgraph | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Subgraph's RPC row is measured instead |
 | rindexer-hypersync | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; Rindexer's RPC row is measured instead |
 | sqd | — | reads SQD Network, which the benchmark cannot make reorg or fail on demand; the Squid SDK's RPC row is measured instead |
+| substreams | — | reads a StreamingFast endpoint rather than plain RPC, which the benchmark cannot make reorg or fail on demand |
+| carbon | — | indexes Solana, and the generated chain is an Ethereum node; provoking a Solana indexer needs a Solana chain to provoke |
 
 A tool needs two things to appear in the results: an RPC path the generated
 chain can serve, and an implementation of the case above for its framework.
