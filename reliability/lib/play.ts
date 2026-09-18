@@ -559,6 +559,10 @@ export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
     checks["resumes"] = fail("had to be restarted before it would index again");
   } else {
     const before = await ctx.observe.count().catch(() => 0);
+    // Something to come back to. A tool that had caught up before the faults
+    // began has nothing to index when they stop, and would be failed for
+    // being finished.
+    ctx.chain.advance(50);
     checks["resumes"] = verdict(
       await ctx.waitFor(
         "indexing again once the node recovered",

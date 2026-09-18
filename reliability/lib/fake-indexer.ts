@@ -145,7 +145,17 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
     ) {
       const values: string[] = [];
       const balances = new Map<string, bigint>();
+      // A log is identified by its block and its index within it, and the
+      // same one may arrive twice: a provider stitching two backends together
+      // will serve it twice in one response. Deduplicating here rather than
+      // relying on the primary key is the difference between a balance that
+      // is right and one that is doubled — the insert absorbs the second row
+      // and the arithmetic does not.
+      const seen = new Set<string>();
       for (const log of logs) {
+        const identity = `${BigInt(log.blockNumber)}-${BigInt(log.logIndex)}`;
+        if (seen.has(identity)) continue;
+        seen.add(identity);
         const block = Number(BigInt(log.blockNumber));
         const logIndex = BigInt(log.logIndex).toString();
         const from = `0x${log.topics[1].slice(-40)}`;
