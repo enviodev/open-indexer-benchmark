@@ -161,14 +161,17 @@ jobs:
             echo "$TOOL was not selected by this run."
             exit 0
           fi
-          ARGS="$TOOL --repeats=$REPEATS"
+          # An array, expanded quoted: `repeats` and `scenarios` are strings a
+          # dispatch supplies, and an unquoted expansion would let a space or a
+          # `*` in one of them add arguments of its own.
+          ARGS=("$TOOL" "--repeats=$REPEATS")
           # An `&&` list that comes out false is a failed command under
           # `set -e`, and "no scenarios named" means every scenario — the case
           # a pull request and the weekly run both take.
           if [ -n "$SCENARIOS" ]; then
-            ARGS="$ARGS --scenarios=$SCENARIOS"
+            ARGS+=("--scenarios=$SCENARIOS")
           fi
-          node reliability/run.ts $ARGS 2>&1 | tee reliability-output.txt
+          node reliability/run.ts "${ARGS[@]}" 2>&1 | tee reliability-output.txt
 
       - name: Upload the result
         if: always()
