@@ -235,6 +235,16 @@ jobs:
           REPORTED=$(grep -c . /tmp/reliability-reported.txt 2>/dev/null || echo 0)
           MISSING=$(( $(echo $TOOLS | wc -w) - REPORTED ))
 
+          # A run where nothing reported has nothing to say, and saying it
+          # anyway overwrites the last run's results with a table of dashes —
+          # which is what a cancelled run did to a complete one. The carry
+          # forward cannot save it either: that reads the README, and on a pull
+          # request the README is whatever `main` last published.
+          if [ "$REPORTED" -eq 0 ]; then
+            echo "No tool reported a result, so the comment is left as it is."
+            exit 0
+          fi
+
           {
             echo "## Reliability"
             echo
@@ -263,6 +273,14 @@ jobs:
       - name: Update README
         if: github.event_name != 'pull_request'
         run: |
+          # Same as the comment above: a run that measured nothing must not
+          # publish that as the repository's claim. The table builder carries
+          # rows forward from the README, so a partial run is fine; a run with
+          # no results at all is not a run.
+          if [ "$(grep -c . /tmp/reliability-reported.txt 2>/dev/null || echo 0)" -eq 0 ]; then
+            echo "No tool reported a result, so the README is left as it is."
+            exit 0
+          fi
           # `&& exit 0` would take the step down with it under `set -e` when
           # there is a diff, which is the case this step exists for.
           if git diff --quiet README.md; then
