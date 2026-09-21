@@ -791,17 +791,28 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
   const at = (progress?.blocks ?? 0) + START_BLOCK;
 
   /**
-   * Whether the tool got past a block, by its own position or by its rows.
+   * The furthest point there is any evidence the tool reached: its own
+   * position, or the last block it wrote a row for, whichever is further.
    *
+   * Rows count because for two of these tools the benchmark reads position
+   * from the rows they wrote. The position can also be missing altogether — a
+   * driver whose snapshot throws reports none — and reading that as "the tool
+   * is at the start block" would state something about the tool that nobody
+   * observed.
+   */
+  const furthest = stored.reduce((max, row) => Math.max(max, row.block), at);
+  const noFurther = progress
+    ? `has got no further than block ${furthest}`
+    : `has got no further than block ${furthest}, and its own progress could not be read`;
+
+  /**
    * A check about what a tool stored for a block is only a question once the
    * tool has been offered that block. Ask it of a tool that ran out of time
    * three hundred blocks earlier and the answer is always "stored nothing",
    * which is the harness's deadline published as a finding about somebody
-   * else's software. Rows count as well as position because for two of these
-   * tools the benchmark reads position from the rows they wrote.
+   * else's software.
    */
-  const wentPast = (block: number) =>
-    at > block || stored.some((row) => row.block > block);
+  const wentPast = (block: number) => furthest > block;
 
   const atBlock = stored.find((row) => row.block === MAX_UINT_BLOCK);
   checks["max-uint"] = atBlock
@@ -812,8 +823,8 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
     : wentPast(MAX_UINT_BLOCK)
       ? verdict(false, `stored no transfer for block ${MAX_UINT_BLOCK}, which carried 2^256-1`)
       : na(
-          `the tool had not reached block ${MAX_UINT_BLOCK}, so it was never shown ` +
-            `a transfer of 2^256-1`
+          `${noFurther}, so there is no saying whether it was ever shown a ` +
+            `transfer of 2^256-1`
         );
 
   // Either the tool's own position has moved past the empty stretch, or it has
@@ -826,12 +837,11 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
   checks["empty-blocks"] = arrived
     ? verdict(
         wentPast(EMPTY_RANGE.to),
-        `reports being at block ${at} and has nothing past block ${EMPTY_RANGE.to}, ` +
-          `so it is still inside the ${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks ` +
-          `that carried no logs`
+        `${noFurther}, so it is still inside the ` +
+          `${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks that carried no logs`
       )
     : na(
-        `the tool had only reached block ${at}, so it never arrived at the ` +
+        `${noFurther}, so it never arrived at the ` +
           `${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks that carried no logs`
       );
 
