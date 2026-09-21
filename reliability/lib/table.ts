@@ -23,6 +23,21 @@ export const DETAIL_PAGE = "./reliability/README.md";
 
 const NO_VALUE = "—";
 
+/**
+ * A note and the cell it is about.
+ *
+ * The reference number goes on that cell rather than on the overall tally: a
+ * reader following "(3)" from the end of the row has to work out which of six
+ * columns it was about, and the one thing the note exists to say is which.
+ * Notes with no group are about the row itself — a tool nothing ran for — and
+ * those do go on the overall cell, because that is what they are about.
+ */
+export interface ReliabilityNote {
+  /** The group whose cell carries the reference, or the row when absent. */
+  group?: string;
+  text: string;
+}
+
 export interface ReliabilityRow {
   name: string;
   /** Markdown link to the tool's project page. */
@@ -35,7 +50,7 @@ export interface ReliabilityRow {
   overall: Tally;
   overallCell: string;
   /** Numbered notes this row earned: a dash to explain, or a nil to name. */
-  notes: string[];
+  notes: ReliabilityNote[];
   carriedOver?: boolean;
 }
 
@@ -90,7 +105,7 @@ export function toReliabilityRow(
   measures: Record<string, number>
 ): ReliabilityRow {
   const cells: Record<string, string> = {};
-  const notes: string[] = [];
+  const notes: ReliabilityNote[] = [];
 
   for (const group of GROUPS) {
     const scored = score.groups.find((g) => g.group === group.id);
@@ -101,14 +116,18 @@ export function toReliabilityRow(
       const why = scored?.scenarios
         .flatMap((s) => s.skipped.map((skip) => skip.detail))
         .find(Boolean);
-      notes.push(`${group.title} was not measured${why ? `: ${why}` : ""}`);
+      notes.push({
+        group: group.id,
+        text: `${group.title} was not measured${why ? `: ${why}` : ""}`,
+      });
       continue;
     }
     if (tally.passed === 0) {
       const worst = scored?.scenarios.flatMap((s) => s.failures)[0];
-      notes.push(
-        `passed no ${group.title} check${worst ? `, starting with: ${worst.detail}` : ""}`
-      );
+      notes.push({
+        group: group.id,
+        text: `passed no ${group.title} check${worst ? `, starting with: ${worst.detail}` : ""}`,
+      });
     }
   }
 
@@ -157,7 +176,7 @@ export function unrunRow(
     cells: Object.fromEntries(GROUPS.map((group) => [group.id, NO_VALUE])),
     overall: { passed: 0, asked: 0 },
     overallCell: NO_VALUE,
-    notes: [reason],
+    notes: [{ text: reason }],
   };
 }
 
@@ -165,7 +184,10 @@ export function unrunRow(
 const SOURCE_URL =
   "./reliability/README.md#why-a-generated-chain-and-not-a-real-node";
 
-const HEAD = ["tool", "source", ...GROUPS.map((g) => g.title), "overall"];
+/** The key a row-level note is filed under, which no group uses. */
+const OVERALL = "overall";
+
+const HEAD = ["tool", "source", ...GROUPS.map((g) => g.title), OVERALL];
 
 export function buildReliabilityTable(rows: ReliabilityRow[]): string {
   if (rows.length === 0) return "_No reliability results collected._";
@@ -185,18 +207,24 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
   ];
   const notes: string[] = [];
   for (const row of sorted) {
-    const marks: string[] = [];
+    /** Reference numbers by the cell that carries them. */
+    const marks = new Map<string, string[]>();
     for (const note of row.notes) {
-      notes.push(`**(${notes.length + 1})** ${row.name} — ${note}`);
-      marks.push(String(notes.length));
+      notes.push(`**(${notes.length + 1})** ${row.name} — ${note.text}`);
+      const on = note.group ?? OVERALL;
+      marks.set(on, [...(marks.get(on) ?? []), String(notes.length)]);
     }
+    const mark = (cell: string, on: string) => {
+      const refs = marks.get(on);
+      return refs ? `${cell} (${refs.join(", ")})` : cell;
+    };
     const name = row.carriedOver ? `${row.tool} ⚠️` : row.tool;
     lines.push(
       `| ${[
         name,
         row.source,
-        ...GROUPS.map((g) => row.cells[g.id] ?? NO_VALUE),
-        `${row.overallCell}${marks.length > 0 ? ` (${marks.join(", ")})` : ""}`,
+        ...GROUPS.map((g) => mark(row.cells[g.id] ?? NO_VALUE, g.id)),
+        mark(row.overallCell, OVERALL),
       ].join(" | ")} |`
     );
   }
@@ -217,6 +245,11 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
 /** Identifies a row across runs, the way the throughput tables do. */
 export function reliabilityRowKey(row: Pick<ReliabilityRow, "name" | "source">): string {
   return `${row.name}|${linkText(row.source)}`;
+}
+
+/** A cell without the reference numbers the run that published it added. */
+function stripMarks(cell: string): string {
+  return cell.replace(/\s*\(\d+(?:,\s*\d+)*\)\s*$/, "").trim();
 }
 
 function linkText(cell: string): string {
@@ -249,15 +282,17 @@ export function parsePublishedReliability(markdown: string): ReliabilityRow[] {
     if (!name) continue;
     // "**23 / 35** (1, 2)" — the note references belong to the run that
     // published them, and a carried row is re-numbered from its own notes, so
-    // strip them before the cell is kept.
-    const overallCell = cells[cells.length - 1].replace(/\s*\(\d+(?:,\s*\d+)*\)\s*$/, "");
+    // they are stripped from every cell that carries one before it is kept.
+    const overallCell = stripMarks(cells[cells.length - 1]);
     const tally = overallCell.replace(/\*/g, "").match(/(\d+)\s*\/\s*(\d+)/);
 
     rows.push({
       name,
       tool: label,
       source: cells[1],
-      cells: Object.fromEntries(GROUPS.map((group, i) => [group.id, cells[2 + i]])),
+      cells: Object.fromEntries(
+        GROUPS.map((group, i) => [group.id, stripMarks(cells[2 + i])])
+      ),
       overall: tally
         ? { passed: Number(tally[1]), asked: Number(tally[2]) }
         : { passed: 0, asked: 0 },

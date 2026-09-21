@@ -3,13 +3,13 @@ name: Reliability
 # What a tool does when things go wrong, published beside what it does when
 # they do not.
 #
-# The suite is expensive — nine scenarios, three runs each, one tool at a time,
-# which is hours — so it runs at two depths.
+# The suite is expensive — nine scenarios, three runs each — so it runs at two
+# depths. Tools run in parallel, one runner each, so a depth costs the wall
+# clock of its slowest tool rather than the sum of seven.
 #
-# A pull request that touches the suite gets a smoke run: one scenario per
-# tool, once, which is enough to say whether every project still starts and
-# indexes. It is posted back as a comment and changes nothing in the
-# repository.
+# A pull request that touches the suite gets every scenario once per tool,
+# which fills every column of the table and is enough to say what each tool
+# does. It is posted back as a comment and changes nothing in the repository.
 #
 # The full suite runs weekly, and on demand, and that is what writes the table
 # into the README. Nothing about these results changes between commits — they
@@ -51,6 +51,19 @@ on:
       - 'cases/lib/checksum.ts'
       - 'scripts/build-reliability-table.ts'
       - '.github/workflows/reliability.yml'
+  push:
+    # Merging a change to the suite republishes the table. Without this the
+    # README's table waits for the Monday run, which is a week of a benchmark
+    # page saying it has measured nothing.
+    branches: [main]
+    paths:
+      - 'reliability/**'
+      - 'cases/lib/drivers/**'
+      - 'cases/lib/process.ts'
+      - 'cases/lib/verify.ts'
+      - 'cases/lib/checksum.ts'
+      - 'scripts/build-reliability-table.ts'
+      - '.github/workflows/reliability.yml'
   schedule:
     # Weekly, well clear of the benchmark schedule: a full suite is hours of
     # runner time and nothing about it changes between commits.
@@ -71,15 +84,14 @@ jobs:
           SCENARIOS: ${{ inputs.scenarios }}
           REPEATS: ${{ inputs.repeats }}
         run: |
-          # A pull request gets one scenario, once. It is the cheapest run that
-          # still exercises every part of a project — the schema, the handlers,
-          # the contract read, and the harness reading the tables back — so it
-          # catches a project that no longer starts, which is what a pull
-          # request can usefully be asked.
+          # A pull request gets every scenario, once each. One scenario was
+          # cheaper and published a table of dashes, which reads as a benchmark
+          # that measures nothing; the repeat is what a pull request can afford
+          # to drop, because it is what turns a signal into a published score.
           if [ "$EVENT" = "pull_request" ]; then
-            echo "scenarios=awkward-values" >> "$GITHUB_OUTPUT"
+            echo "scenarios=" >> "$GITHUB_OUTPUT"
             echo "repeats=1" >> "$GITHUB_OUTPUT"
-            echo "depth=smoke" >> "$GITHUB_OUTPUT"
+            echo "depth=single" >> "$GITHUB_OUTPUT"
           else
             echo "scenarios=${SCENARIOS}" >> "$GITHUB_OUTPUT"
             echo "repeats=${REPEATS:-3}" >> "$GITHUB_OUTPUT"
@@ -93,12 +105,14 @@ jobs:
     permissions:
       contents: read
     strategy:
-      # One tool at a time. The scenarios need the machine to themselves: two
-      # of them measure how long a tool takes to react, and a neighbour
-      # competing for CPU would show up as a tool that cannot keep up with the
-      # head. A tool that fails is a result rather than a reason to stop
-      # measuring the others.
-      max-parallel: 1
+      # All seven at once. The scenarios do need a machine to themselves —
+      # two of them measure how long a tool takes to react, and a neighbour
+      # competing for CPU would read as a tool that cannot keep up with the
+      # head — and they get one: GitHub gives every matrix job its own runner
+      # VM, so the isolation is the runner's, not the queue's. Serialising
+      # them bought nothing and cost the wall clock of all seven in a row.
+      # A tool that fails is a result rather than a reason to stop measuring
+      # the others.
       fail-fast: false
       matrix:
         # Kept in step with RELIABILITY_TOOLS in reliability/lib/tools.ts by
@@ -139,7 +153,12 @@ jobs:
             exit 0
           fi
           ARGS="$TOOL --repeats=$REPEATS"
-          [ -n "$SCENARIOS" ] && ARGS="$ARGS --scenarios=$SCENARIOS"
+          # An `&&` list that comes out false is a failed command under
+          # `set -e`, and "no scenarios named" means every scenario — the case
+          # a pull request and the weekly run both take.
+          if [ -n "$SCENARIOS" ]; then
+            ARGS="$ARGS --scenarios=$SCENARIOS"
+          fi
           node reliability/run.ts $ARGS 2>&1 | tee reliability-output.txt
 
       - name: Upload the result
@@ -184,78 +203,50 @@ jobs:
 
       - name: Comment the results on the pull request
         if: github.event_name == 'pull_request' && !cancelled()
-        uses: actions/github-script@v7
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SECTION: reliability
           DEPTH: ${{ needs.scope.outputs.depth }}
-          SCENARIOS: ${{ needs.scope.outputs.scenarios }}
-        with:
-          script: |
-            const fs = require('fs');
-            const table = fs.existsSync('/tmp/reliability-table.md')
-              ? fs.readFileSync('/tmp/reliability-table.md', 'utf8')
-              : '_No reliability results collected._';
-            const reported = fs.existsSync('/tmp/reliability-reported.txt')
-              ? fs.readFileSync('/tmp/reliability-reported.txt', 'utf8').trim().split('\n').filter(Boolean)
-              : [];
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TOOLS: envio-rpc envio-subgraph-rpc ponder rindexer sqd-rpc subgraph subquery
+        run: |
+          TABLE=/tmp/reliability-table.md
+          [ -f "$TABLE" ] || echo "_No reliability results collected._" > "$TABLE"
 
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+          # A tool that was asked and reported nothing is a failed job, and it
+          # must not read as a tool nobody measures: its row shows the last
+          # published value, and this says so.
+          # Counting non-empty lines, not newlines: the file has no trailing
+          # one, so `wc -l` reports a tool short and every run would claim a
+          # job had failed.
+          REPORTED=$(grep -c . /tmp/reliability-reported.txt 2>/dev/null || echo 0)
+          MISSING=$(( $(echo $TOOLS | wc -w) - REPORTED ))
 
-            // Say exactly what was run. A smoke run fills one column and
-            // leaves the rest dashed, and a reader who is not told that will
-            // read the dashes as findings.
-            const note = process.env.DEPTH === 'smoke'
-              ? `A smoke run: \`${process.env.SCENARIOS}\` only, once per tool — enough to say `
-                + `whether every project still starts and indexes. The other columns are `
-                + `dashes because this run did not ask them, not because anything failed. `
-                + `The full suite runs on \`main\`.`
-              : '';
+          {
+            echo "## Reliability"
+            echo
+            if [ "$DEPTH" = "single" ]; then
+              echo "Every scenario, once per tool. The published table is the median of"
+              echo "three runs with a check passing only if it passed every one, so treat a"
+              echo "single run as a signal rather than a score."
+              echo
+            fi
+            if [ "$MISSING" -gt 0 ]; then
+              echo "> ⚠️ $MISSING tool job(s) reported no result at all. Those rows show the"
+              echo "> last published value; [check the failed job(s)]($RUN_URL)."
+              echo
+            fi
+            cat "$TABLE"
+            # Two: the table file ends without a newline, so the first only
+            # finishes its last line and the link would join the notes.
+            echo
+            echo
+            echo "[Full output]($RUN_URL) is in the workflow run logs."
+            echo "[What each check means](./reliability/README.md)."
+          } > /tmp/reliability-comment.md
 
-            const missing = [
-              'envio-rpc', 'envio-subgraph-rpc', 'ponder', 'rindexer',
-              'sqd-rpc', 'subgraph', 'subquery',
-            ].length - reported.length;
-            const failureNote = missing > 0
-              ? `> ⚠️ ${missing} tool job(s) reported no result at all. Those rows show the last `
-                + `published value; [check the failed job(s)](${runUrl}).`
-              : '';
-
-            const marker = '<!-- reliability-results -->';
-            const body = [
-              marker,
-              '## Reliability',
-              '',
-              ...(note ? [note, ''] : []),
-              ...(failureNote ? [failureNote, ''] : []),
-              table,
-              '',
-              `[Full output](${runUrl}) is in the workflow run logs. `
-                + `[What each check means](./reliability/README.md).`,
-            ].join('\n');
-
-            // Updated in place rather than appended, so a branch pushed ten
-            // times has one comment that is current instead of ten that are
-            // not.
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.data.find(c => c.body?.startsWith(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+          node scripts/pr-comment.ts /tmp/reliability-comment.md
 
       - name: Update README
         if: github.event_name != 'pull_request'
