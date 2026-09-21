@@ -29,9 +29,10 @@ contracts:
       - network: ethereum
         address: "0x0000000000000000000000000000000000c0ffee"
         start_block: "1000000"
-        # A block no scenario reaches: the suite is about what happens at the
-        # head, so this runs as an open-ended head follower.
-        end_block: "${RINDEXER_END_BLOCK}"
+        # No end block. The suite is about what happens at the head, so this
+        # follows it — and rindexer refuses to start at all when the end block
+        # it is given is above the chain's current head, which the generated
+        # chain's is by a million blocks at the moment a run begins.
     abi: ./abis/ERC20.abi.json
     include_events:
       - Transfer

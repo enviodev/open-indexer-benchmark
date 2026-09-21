@@ -50,7 +50,7 @@ import type { Outcome } from "./score.ts";
  * publish a different benchmark under the same name; a parameter has to be
  * passed by whoever wanted it. The suite's own tests are the only thing that
  * passes anything else, because the indexer they drive answers in
- * milliseconds and waiting three minutes to conclude that a deliberate defect
+ * milliseconds and waiting five minutes to conclude that a deliberate defect
  * is a defect would make them useless.
  */
 export interface Patience {
@@ -60,7 +60,13 @@ export interface Patience {
   reactMs: number;
 }
 
-export const DEFAULT_PATIENCE: Patience = { syncMs: 180_000, reactMs: 120_000 };
+/**
+ * Three minutes was not enough for every tool on a shared CI runner: SubQuery
+ * spends a minute on its own startup before the first block, and came back
+ * unmeasured there while finishing comfortably on a laptop. Five is a deadline
+ * for a tool that is not coming back, not a budget a working one should feel.
+ */
+export const DEFAULT_PATIENCE: Patience = { syncMs: 300_000, reactMs: 120_000 };
 /** How long the database stays down when it is taken away. */
 const DB_DOWN_MS = 10_000;
 
@@ -781,28 +787,53 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
   const ordinary = await synced(ctx);
 
   const stored: StoredRow[] = await ctx.observe.rows().catch(() => []);
-  const atBlock = stored.find((row) => row.block === MAX_UINT_BLOCK);
-  checks["max-uint"] = verdict(
-    atBlock?.amount === MAX_UINT,
-    atBlock
-      ? `stored ${atBlock.amount} for a transfer of 2^256-1`
-      : `stored no transfer for block ${MAX_UINT_BLOCK}, which carried 2^256-1`
-  );
-
-  // Either the tool's own position has moved past the empty stretch, or it has
-  // rows from beyond it. Both are proof it walked through; the second is here
-  // because for two tools the benchmark reads position from the rows they
-  // wrote — a choice the throughput suite made, not something those tools do —
-  // and a check that ignored that would fail them for the harness's decision.
   const progress = await ctx.progress();
   const at = (progress?.blocks ?? 0) + START_BLOCK;
-  const rowsBeyond = stored.some((row) => row.block > EMPTY_RANGE.to);
-  checks["empty-blocks"] = verdict(
-    at > EMPTY_RANGE.to || rowsBeyond,
-    `reports being at block ${at} and has nothing past block ${EMPTY_RANGE.to}, ` +
-      `so it is still inside the ${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks ` +
-      `that carried no logs`
-  );
+
+  /**
+   * Whether the tool got past a block, by its own position or by its rows.
+   *
+   * A check about what a tool stored for a block is only a question once the
+   * tool has been offered that block. Ask it of a tool that ran out of time
+   * three hundred blocks earlier and the answer is always "stored nothing",
+   * which is the harness's deadline published as a finding about somebody
+   * else's software. Rows count as well as position because for two of these
+   * tools the benchmark reads position from the rows they wrote.
+   */
+  const wentPast = (block: number) =>
+    at > block || stored.some((row) => row.block > block);
+
+  const atBlock = stored.find((row) => row.block === MAX_UINT_BLOCK);
+  checks["max-uint"] = atBlock
+    ? verdict(
+        atBlock.amount === MAX_UINT,
+        `stored ${atBlock.amount} for a transfer of 2^256-1`
+      )
+    : wentPast(MAX_UINT_BLOCK)
+      ? verdict(false, `stored no transfer for block ${MAX_UINT_BLOCK}, which carried 2^256-1`)
+      : na(
+          `the tool had not reached block ${MAX_UINT_BLOCK}, so it was never shown ` +
+            `a transfer of 2^256-1`
+        );
+
+  // Either the tool's own position has moved past the empty stretch, or it has
+  // rows from beyond it. Both are proof it walked through.
+  //
+  // A tool that never arrived at the stretch at all is a different statement,
+  // and not one this check makes: it is unmeasured rather than stuck. Arriving
+  // means reaching the last block that carried logs before the stretch began.
+  const arrived = wentPast(EMPTY_RANGE.from - 2);
+  checks["empty-blocks"] = arrived
+    ? verdict(
+        wentPast(EMPTY_RANGE.to),
+        `reports being at block ${at} and has nothing past block ${EMPTY_RANGE.to}, ` +
+          `so it is still inside the ${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks ` +
+          `that carried no logs`
+      )
+    : na(
+        `the tool had only reached block ${at}, so it never arrived at the ` +
+          `${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks that carried no logs`
+      );
 
   // ── The values from the contract read ──
   const tokens = await ctx.observe.tokens().catch(() => []);
