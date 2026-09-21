@@ -49,7 +49,7 @@ it costs throughput, costs data, or costs someone their evening.
 ## How these scenarios are run
 
 Every scenario runs against a chain the benchmark makes up
-([\`cases/lib/chain-mock.ts\`](../lib/chain-mock.ts)) rather than a real network,
+([\`reliability/lib/chain-mock.ts\`](./lib/chain-mock.ts)) rather than a real network,
 for the reason that makes the scores mean anything: a nine-block reorg, a node
 that stalls for exactly thirty seconds, and a log index of \`0xffffffe2\` cannot
 be arranged on a real chain on demand, and could never be arranged twice the
@@ -66,6 +66,11 @@ log, a running balance, and one row written from a contract read — under
 [\`reliability/\`](.), started by the same drivers the throughput suite uses.
 What the harness does is start the chain, provoke it, and read the tool's
 tables directly.
+
+One thing the harness does start: HyperIndex connects to a Postgres it expects
+to be running already, where every other tool brings its own up. Both Envio
+rows would otherwise index nothing, so the suite starts one on that port before
+running them, and leaves alone whatever is already there.
 
 **Every scenario runs more than once**, three times by default, against a fresh
 chain and a fresh database each time, and a check passes only if it passed

@@ -10,7 +10,7 @@ it costs throughput, costs data, or costs someone their evening.
 ## How these scenarios are run
 
 Every scenario runs against a chain the benchmark makes up
-([`cases/lib/chain-mock.ts`](../lib/chain-mock.ts)) rather than a real network,
+([`reliability/lib/chain-mock.ts`](./lib/chain-mock.ts)) rather than a real network,
 for the reason that makes the scores mean anything: a nine-block reorg, a node
 that stalls for exactly thirty seconds, and a log index of `0xffffffe2` cannot
 be arranged on a real chain on demand, and could never be arranged twice the
@@ -27,6 +27,11 @@ log, a running balance, and one row written from a contract read — under
 [`reliability/`](.), started by the same drivers the throughput suite uses.
 What the harness does is start the chain, provoke it, and read the tool's
 tables directly.
+
+One thing the harness does start: HyperIndex connects to a Postgres it expects
+to be running already, where every other tool brings its own up. Both Envio
+rows would otherwise index nothing, so the suite starts one on that port before
+running them, and leaves alone whatever is already there.
 
 **Every scenario runs more than once**, three times by default, against a fresh
 chain and a fresh database each time, and a check passes only if it passed
@@ -333,7 +338,7 @@ Chain data is not the tidy subset a schema was designed around. A token's `symbo
 | a NUL byte in a string does not kill the write | A symbol containing `\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. Either the tool sanitises it or it fails that row explicitly; what it must not do is fail the whole batch forever and stall the indexer behind one token. |
 | a log index near the 32-bit ceiling | Logs with index `0xffffffe2`, as some providers emit for synthetic logs. Storing it in a signed 32-bit column overflows and halts the backfill outright — the failure reported in ponder-sh/ponder#2373. The check is that the range finishes and the index round-trips. |
 | an unsigned 256-bit maximum survives the round trip | A transfer of 2^256-1. The stored value must equal it exactly. Anything that goes through a double loses precision quietly, which is worse than failing. |
-| long empty stretches advance progress | Five hundred blocks with no logs at all. The tool's progress must move through them: a tool that tracks position only by the last row it wrote appears to be stuck, and stops answering how far along it is. |
+| long empty stretches advance progress | Five hundred blocks with no logs at all. The tool has to come out the other side: either its own position moves through them, or it holds rows from beyond them. A tool that does neither has stalled on a stretch of chain that asked nothing of it. Both answers count because the benchmark reads position from the rows written for two of these tools, which is the harness's choice rather than theirs. |
 
 <a id="head-latency"></a>
 

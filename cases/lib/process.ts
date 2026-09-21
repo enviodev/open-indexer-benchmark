@@ -33,6 +33,15 @@ export function start(
   env?: NodeJS.ProcessEnv
 ): ChildProcess {
   const p = spawn(cmd, args, { cwd, stdio: "pipe", detached: true, env });
+  // A binary that is not there raises an `error` event and no `exit`, and an
+  // unhandled `error` takes the whole harness down with it — one tool whose
+  // CLI failed to install would end the run for every other. Reporting it as
+  // an exit instead leaves it as what it is: a tool that is not running, which
+  // every driver already knows how to see.
+  p.on("error", (err: Error) => {
+    console.log(`  ${cmd} could not be started: ${err.message}`);
+    p.emit("exit", 127, null);
+  });
   for (const stream of [p.stdout, p.stderr]) {
     stream?.on("data", (chunk: Buffer) => {
       for (const line of chunk.toString().split("\n")) {

@@ -7,15 +7,18 @@ import { Erc20Abi__factory } from "../types/contracts";
 const NUL = String.fromCharCode(0);
 
 /**
- * A metadata string as it should be stored, or null.
+ * A metadata string as it should be stored, or nothing.
  *
  * Empty returndata is a null, not a failure: that is what a token with no
  * `symbol()` gives you. A NUL in the middle is legal in a Solidity string and
  * unstorable in a text column, so it is stripped rather than written through.
+ *
+ * SubQuery's codegen types an optional field as `string | undefined`, and a
+ * field left undefined is the null column this case is looking for.
  */
-function clean(value: string): string | null {
+function clean(value: string): string | undefined {
   const stripped = value.split(NUL).join("");
-  return stripped.length === 0 ? null : stripped;
+  return stripped.length === 0 ? undefined : stripped;
 }
 
 /**
@@ -27,13 +30,13 @@ async function ensureToken(address: string): Promise<void> {
   if (await Token.get(id)) return;
 
   const contract = Erc20Abi__factory.connect(address, api);
-  const read = async (call: () => Promise<string>): Promise<string | null> => {
+  const read = async (call: () => Promise<string>): Promise<string | undefined> => {
     try {
       return clean(await call());
     } catch {
       // A revert, or returndata that does not decode as a string, is the token
       // not answering — which is a null, not a failed block.
-      return null;
+      return undefined;
     }
   };
 

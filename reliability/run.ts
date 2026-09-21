@@ -64,3 +64,22 @@ await runReliability({
   scenarios: scenarios.length > 0 ? scenarios : SCENARIOS.map((s) => s.id),
   repeats,
 });
+
+// A run that has published its results is finished.
+//
+// Leaving is explicit because the suite starts a lot of things — a chain, a
+// database, an indexer and whatever that indexer starts — and any one of them
+// can leave a handle behind that keeps the event loop alive. In a terminal
+// that is a prompt that does not come back. In CI it is a job that hangs until
+// its timeout, which here is five hours, and a hung job reports nothing at
+// all: the results are already printed above and would be thrown away.
+//
+// Whatever is still open is named first, so the cause is a thing someone can
+// go and close rather than a thing they have to reproduce.
+const open = [...new Set(process.getActiveResourcesInfo())].filter(
+  (handle) => handle !== "TTYWrap" && handle !== "FileHandle"
+);
+if (open.length > 0) {
+  console.log(`\nStill open at exit, and closed by leaving: ${open.join(", ")}`);
+}
+process.exit(0);

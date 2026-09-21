@@ -2,3 +2,5 @@ node_modules
 lib
 db/migrations
 .env
+generated
+src/model/generated

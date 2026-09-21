@@ -2,3 +2,4 @@ node_modules
 generated
 .envio
 .env.local
+envio-env.d.ts

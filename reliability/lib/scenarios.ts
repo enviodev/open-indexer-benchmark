@@ -437,7 +437,7 @@ export const SCENARIOS: Scenario[] = [
         id: "empty-blocks",
         label: "long empty stretches advance progress",
         detail:
-          "Five hundred blocks with no logs at all. The tool's progress must move through them: a tool that tracks position only by the last row it wrote appears to be stuck, and stops answering how far along it is.",
+          "Five hundred blocks with no logs at all. The tool has to come out the other side: either its own position moves through them, or it holds rows from beyond them. A tool that does neither has stalled on a stretch of chain that asked nothing of it. Both answers count because the benchmark reads position from the rows written for two of these tools, which is the harness's choice rather than theirs.",
       },
     ],
   },

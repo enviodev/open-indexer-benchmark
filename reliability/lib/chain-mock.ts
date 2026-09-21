@@ -38,21 +38,37 @@ export const CHAIN_PORT = 19_879;
 const JSON_HEADERS = { "content-type": "application/json" };
 
 /**
- * The bloom filter every block and receipt carries: all ones.
+ * The bloom filter a block carries: all ones when it has logs, all zeros when
+ * it has none.
  *
- * A real node derives this from the logs, and a client may check that a log it
- * was given is present in it. Serving zeros while also serving logs is a
- * contradiction, and a careful indexer says so and stops — Ponder does, with
- * "Log not found in block.logsBloom", which is how this was found.
+ * A real node derives this from the logs, and indexers check it in both
+ * directions. Ponder checks that a log it was given is present in the block's
+ * bloom, and stopped on a bloom of zeros: "Log not found in block.logsBloom".
+ * The Squid SDK checks the converse — that a non-empty bloom is matched by
+ * logs — and stopped on a bloom of ones over an empty block: "got 0 log
+ * records from eth_getLogs, but logs bloom is not empty". Each found one half,
+ * and only a real indexer could have.
  *
- * All ones rather than a computed filter, because computing one needs keccak256
- * and nothing else in this harness has a dependency. It is sound rather than a
- * shortcut: a bloom filter is allowed false positives and not false negatives,
- * so every membership test passes and nothing is ever wrongly skipped. A client
- * that used it to avoid fetching a block simply fetches every block, which is
- * what an indexer pointed at this chain should be doing anyway.
+ * Deriving it per block satisfies both without a keccak256 this harness has no
+ * dependency for. All ones is a legal bloom for a block that has logs: a bloom
+ * is allowed false positives and not false negatives, so every membership test
+ * passes and nothing is ever wrongly skipped. All zeros is the exact answer for
+ * a block that has none.
  */
-const LOGS_BLOOM = `0x${"f".repeat(512)}`;
+const BLOOM_SET = `0x${"f".repeat(512)}`;
+const BLOOM_EMPTY = `0x${"0".repeat(512)}`;
+const bloomFor = (logCount: number) => (logCount > 0 ? BLOOM_SET : BLOOM_EMPTY);
+
+/**
+ * How far below the start block a hash lookup will walk.
+ *
+ * Ancestors are derived rather than stored, so a hash that belongs to none of
+ * them can only be ruled out by trying heights. A tool asks for an ancestor to
+ * find the parent of where it starts, never for one thousands of blocks down,
+ * so a bounded walk answers every real question and a wrong hash costs a
+ * bounded loop instead of a walk to block zero.
+ */
+const ANCESTOR_SEARCH_DEPTH = 1_000;
 
 // ── The chain ──────────────────────────────────────────────────────────
 
@@ -124,7 +140,10 @@ export interface ChainSpec {
    * store as a null rather than crash on.
    */
   calls?: Record<string, string | null>;
-  /** Override the listening port, so two chains can run side by side. */
+  /**
+   * Override the listening port, so two chains can run side by side. Zero
+   * takes whatever port is free, and `url` then names it.
+   */
   port?: number;
   /**
    * A stretch of blocks that carry no logs at all, inclusive. A tool whose
@@ -404,6 +423,29 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     };
   }
 
+  /**
+   * A block by hash, ancestors included.
+   *
+   * Graph Node starts by asking for the parent of its start block by hash, and
+   * that parent is below the chain's start block — derived, never in `chain`.
+   * Searching only the array answered null there, which reads to a tool as a
+   * node that does not have the block it just named.
+   */
+  function blockByHash(hash: string): MockBlock | null {
+    const inChain = chain.find(
+      (b) => b.hash === hash && b.number <= servedHead()
+    );
+    if (inChain) return inChain;
+    for (let height = spec.startBlock - 1; height >= 0; height--) {
+      const ancestor = ancestorAt(height);
+      if (ancestor.hash === hash) return ancestor;
+      // Hashes are derived from the height alone, so a scan that has gone
+      // deeper than any tool would ask is a hash that is not an ancestor.
+      if (spec.startBlock - height > ANCESTOR_SEARCH_DEPTH) break;
+    }
+    return null;
+  }
+
   function blockAt(height: number): MockBlock | null {
     if (height < spec.startBlock) return height >= 0 ? ancestorAt(height) : null;
     // A lagging replica does not have the blocks it has not seen. Hiding them
@@ -431,7 +473,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       // than reading the fields they need.
       nonce: "0x0000000000000000",
       sha3Uncles: hex32("uncles", block.number),
-      logsBloom: LOGS_BLOOM,
+      logsBloom: bloomFor(logs.length),
       transactionsRoot: hex32("txroot", block.number, block.epoch),
       stateRoot: hex32("stateroot", block.number, block.epoch),
       receiptsRoot: hex32("receipts", block.number, block.epoch),
@@ -580,9 +622,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         return block ? serializeBlock(block, params[1] === true) : null;
       }
       case "eth_getBlockByHash": {
-        const block = chain.find(
-          (b) => b.hash === params[0] && b.number <= servedHead()
-        );
+        const block = blockByHash(params[0] as string);
         return block ? serializeBlock(block, params[1] === true) : null;
       }
       case "eth_getLogs":
@@ -630,7 +670,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       effectiveGasPrice: "0x7",
       contractAddress: null,
       logs: [log],
-      logsBloom: LOGS_BLOOM,
+      logsBloom: bloomFor(1),
       status: "0x1",
       type: "0x2",
     };
@@ -708,17 +748,27 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     });
   });
 
-  const port = spec.port ?? CHAIN_PORT;
+  const requested = spec.port ?? CHAIN_PORT;
   await new Promise<void>((resolve, reject) => {
     // A listen failure has to reject rather than reach the process as an
     // unhandled "error" event: a scenario that could not start its chain
     // should fail as that, not take the whole run down with a stack trace.
     server.once("error", reject);
-    server.listen(port, "127.0.0.1", () => {
+    // Every interface, not just the loopback: SubQuery's node runs inside a
+    // container and reaches the host through the docker gateway, which is a
+    // different interface. A chain bound to 127.0.0.1 is a chain that one of
+    // the seven tools cannot see at all.
+    server.listen(requested, () => {
       server.removeListener("error", reject);
       resolve();
     });
   });
+
+  // Port 0 asks the OS for a free one, which is what the tests use: a fixed
+  // port is a test that cannot run while a scenario is running, and the two
+  // want to run side by side.
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : requested;
 
   // One block to start from, so the chain is never empty when a tool asks.
   append(0, true);

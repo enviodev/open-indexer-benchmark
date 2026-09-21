@@ -38,6 +38,7 @@ import {
 } from "./chain-mock.ts";
 import { NO_END_BLOCK, RELIABILITY_CASE, baseChainSpec } from "./case.ts";
 import { NoDatabaseContainer, restartDatabase } from "./db-control.ts";
+import { ensureEnvioDb, needsEnvioDb } from "./envio-db.ts";
 import { observer } from "./observe.ts";
 import {
   DEFAULT_PATIENCE,
@@ -400,6 +401,10 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
     }
     const log = (message: string) => console.log(message);
     console.log(`\n=== ${presentation(tool).name} (${presentation(tool).source}) ===`);
+
+    // HyperIndex connects to a Postgres it expects to find already running,
+    // where every other tool starts its own.
+    if (needsEnvioDb(tool)) await ensureEnvioDb(log);
 
     const runs: ScenarioRun[] = [];
     for (const scenario of options.scenarios) {

@@ -54,6 +54,9 @@ const amountsAt = async (from: number, to: number): Promise<bigint[]> => {
 
 try {
   mock = await startChainMock({
+    // Whatever port is free: these tests are worth running while a scenario
+    // is running, and a scenario holds the default port.
+    port: 0,
     chainId: 1,
     startBlock: START,
     blockTimeS: 12,
@@ -116,6 +119,30 @@ try {
   check("logs for a reorged-away block hash are an error", !!gone.error, JSON.stringify(gone));
   const goneBlock = await rpc("eth_getBlockByHash", [before.hash, false]);
   check("the block itself comes back null", goneBlock.result === null, JSON.stringify(goneBlock));
+
+  // ── The parent of the start block is findable by hash ──
+  //
+  // Graph Node starts by reading the block before its start block and then
+  // asking for it by hash. That parent is below the chain's start block, so it
+  // is derived rather than stored, and answering null there reads to the tool
+  // as a node that lost a block it had just named.
+  const parent = await rpc("eth_getBlockByNumber", [
+    `0x${(START - 1).toString(16)}`,
+    false,
+  ]);
+  const parentHash = (parent.result as { hash: string } | null)?.hash;
+  const byHash = await rpc("eth_getBlockByHash", [parentHash, false]);
+  check(
+    "an ancestor of the start block comes back by hash",
+    (byHash.result as { number: string } | null)?.number === `0x${(START - 1).toString(16)}`,
+    JSON.stringify(byHash).slice(0, 120)
+  );
+  const strayHash = await rpc("eth_getBlockByHash", [`0x${"ab".repeat(32)}`, false]);
+  check(
+    "a hash belonging to no block is still null",
+    strayHash.result === null,
+    JSON.stringify(strayHash).slice(0, 120)
+  );
 
   // ── A reorg that drops the events entirely ──
   mock.control.reorg({ depth: 2, logs: "dropped" });
@@ -198,7 +225,7 @@ try {
     logsPerBlock: 1,
     contract: CONTRACT,
     firstLogIndex: 0xffff_ffe2,
-    port: 19_880,
+    port: 0,
   });
   try {
     const res = await fetch(huge.url, {
@@ -230,7 +257,7 @@ try {
     blockTimeS: 12,
     logsPerBlock: 1,
     contract: `${CONTRACT}ff`,
-    port: 19_881,
+    port: 0,
   }).then(
     (started) => started.close().then(() => null),
     (err: Error) => err

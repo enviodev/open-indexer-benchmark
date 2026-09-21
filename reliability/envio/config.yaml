@@ -16,4 +16,6 @@ chains:
       for: ${ENVIO_RPC_FOR:-sync}
     contracts:
       - name: ERC20
-        address: 0x0000000000000000000000000000000000c0ffee
+        # Quoted: YAML reads a bare 0x… as a hexadecimal integer, and a config
+        # parser expecting a string then rejects the whole contract entry.
+        address: "0x0000000000000000000000000000000000c0ffee"

@@ -115,13 +115,26 @@ export function toReliabilityRow(
   return {
     name: score.name,
     tool: `[${score.name}](${score.toolUrl})`,
-    source: `[${score.source}](${score.sourceUrl})`,
+    source: sourceCell(score.source),
     cells,
     overall: { passed: score.passed, asked: score.asked },
     overallCell:
       score.asked === 0 ? NO_VALUE : `**${score.passed} / ${score.asked}**`,
     notes,
   };
+}
+
+/**
+ * What a tool read through, linked to what that means here.
+ *
+ * The throughput tables link a source to the provider behind it, because there
+ * a source is a product and its speed is the thing being measured. Here every
+ * run reads the same generated chain over plain JSON-RPC, and linking it to a
+ * provider would claim a measurement of that provider which nobody made. The
+ * link goes to the page that says what the chain is instead.
+ */
+function sourceCell(source: string): string {
+  return source === "—" ? source : `[${source}](${SOURCE_URL})`;
 }
 
 /**
@@ -140,13 +153,17 @@ export function unrunRow(
   return {
     name: tool.name,
     tool: `[${tool.name}](${tool.toolUrl})`,
-    source: tool.source === "—" ? tool.source : `[${tool.source}](${tool.sourceUrl})`,
+    source: sourceCell(tool.source),
     cells: Object.fromEntries(GROUPS.map((group) => [group.id, NO_VALUE])),
     overall: { passed: 0, asked: 0 },
     overallCell: NO_VALUE,
     notes: [reason],
   };
 }
+
+/** Where the source column points: what the generated chain is, and why. */
+const SOURCE_URL =
+  "./reliability/README.md#why-a-generated-chain-and-not-a-real-node";
 
 const HEAD = ["tool", "source", ...GROUPS.map((g) => g.title), "overall"];
 

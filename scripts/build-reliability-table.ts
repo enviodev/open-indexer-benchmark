@@ -1,6 +1,12 @@
 // Collects the reliability suite's output into the table the README publishes.
 //
 //   RESULTS_DIR=results node scripts/build-reliability-table.ts
+//   UPDATE_README=1 RESULTS_DIR=results node scripts/build-reliability-table.ts
+//
+// The table is always written to OUT_DIR, which is what the pull request
+// comment is assembled from. README.md is only rewritten when UPDATE_README
+// says so: a pull request publishes its results as a comment, and only a run
+// on main changes what the repository claims.
 //
 // The same shape as scripts/build-tables.ts, and for the same reasons: read
 // the result lines each job emitted, render them with the module the runner
@@ -35,6 +41,7 @@ import { TOOLS } from "../cases/lib/drivers/index.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RESULTS_DIR = process.env.RESULTS_DIR ?? "results";
+const OUT_DIR = process.env.OUT_DIR ?? "/tmp";
 const README = resolve(ROOT, "README.md");
 
 const rows: ReliabilityRow[] = [];
@@ -96,8 +103,20 @@ for (const [tool, reason] of Object.entries(AWAITING_PROJECT)) {
 
 const table = buildReliabilityTable(rows);
 console.log(table);
+writeFileSync(join(OUT_DIR, "reliability-table.md"), table);
 
-if (readme) {
+// Which tools reported this run, so a comment can say what it actually
+// covered rather than leaving a reader to infer it from the dashes.
+writeFileSync(
+  join(OUT_DIR, "reliability-reported.txt"),
+  [...fresh].map((key) => key.split("|")[0]).join("\n")
+);
+
+if (process.env.UPDATE_README === "1") {
+  if (!readme) {
+    console.error("No README.md to update.");
+    process.exit(1);
+  }
   const start = readme.indexOf(RELIABILITY_START);
   const end = readme.indexOf(RELIABILITY_END);
   if (start === -1 || end === -1) {

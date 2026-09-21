@@ -26,6 +26,11 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    # The generated chain is served from the host, and this is the only indexer
+    # that runs inside a container: without the mapping, the endpoint's host is
+    # this container rather than the machine.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DB_USER: postgres
       DB_PASS: postgres
@@ -41,6 +46,14 @@ services:
       - --db-schema=app
       - --workers=4
       - --batch-size=30
+      # SubQuery runs mappings in a sandbox that only allows
+      # ["assert","buffer","crypto","util","path"] to be imported. The token
+      # metadata read in this case's handler goes through ethers, which reaches
+      # for node's `http` when it makes the request, so without this the mapping
+      # fails on every event with "Cannot find module 'http'" and the indexer
+      # records nothing at all. This is SubQuery's own documented escape hatch
+      # for projects that need more than the whitelist.
+      - --unsafe
     healthcheck:
       test:
         ["CMD", "wget", "--spider", "-q", "http://subquery-node:3000/ready"]

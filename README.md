@@ -2,46 +2,35 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?logo=discord&logoColor=white)](https://discord.com/invite/envio)
 
-An open and honest benchmark for blockchain indexers. Every number below comes from code in this repository, so you can run it yourself and check, and the tables are refreshed automatically by scheduled CI runs.
+How fast is a blockchain indexer, and what does it do when something goes
+wrong? This repository measures both, for the tools people actually build on.
 
-If you want to know how the numbers are produced, or what a column means, that is all in [METHODOLOGY.md](./METHODOLOGY.md).
+Every number comes from code in this repository, so you can run it yourself and
+check, and CI refreshes the tables.
 
-
-## History
-
-The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s research. That repository was later closed, so [Envio](https://envio.dev) picked it up and has kept it current since. We are not affiliated with Sentio, and although the project now lives under the Envio organisation — its data is what the [Envio landing page](https://envio.dev) and the [Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026) article cite — the point of it is a fair comparison.
-
-
-## Contributing
-
-Contributions are welcome — we already have some from the [SQD](https://sqd.dev) team. Open an issue or a pull request to add an indexer, add a scenario, report a result that looks wrong, or improve the methodology. Indexer teams especially: nobody knows your tool better than you do. Or just come and ask on [Discord](https://discord.com/invite/envio) or [Telegram](https://t.me/+kAIGElzPjApiMjI0).
+- [**Reliability**](#reliability) — what a tool does when its database restarts
+  under it, the chain reorgs, or the node it reads from starts failing.
+- [**Speed**](#speed) — how fast each tool gets through five scenarios, from a
+  plain event stream to Solana.
 
 
 ## Reliability
 
-Speed is one question about an indexer and it is not the one that wakes anyone
-up. These scores are the other question: what the tool does when its database
-restarts under it, when the chain rewrites six blocks it had already stored,
-when the node it reads from starts answering 429 to everything, when a token's
-`symbol()` returns no data at all. Each column is a list of checks a tool either
-passes or does not, run against a chain the benchmark makes up so that a
-nine-block reorg or a thirty-second stall happens on demand and happens the same
-way every time.
-
-A cell is the checks passed over the checks asked. Nothing is weighted, because
-a weighting would be an opinion buried in the arithmetic — `4 / 6` is a claim
-about *which four*, and the page behind every cell names them.
+An indexer that is fast and wrong is not fast. These scenarios take the
+database away mid-write, rewrite the chain underneath the tool, make the node
+answer 429 to everything, and hand it values that are legal but awkward — then
+check what ended up in the database.
 
 <!-- RELIABILITY:START -->
 | tool | source | crash recovery | reorgs | rpc faults | data fidelity | head latency | overall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (1) |
-| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (2) |
-| [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (3) |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (4) |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (5) |
-| [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (6) |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — | — | — (7) |
+| [Envio Indexer](https://envio.dev) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (1) |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (2) |
+| [Ponder](https://ponder.sh) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (3) |
+| [Rindexer](https://rindexer.xyz) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (4) |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (5) |
+| [Subgraph](https://thegraph.com) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (6) |
+| [SubQuery](https://subquery.network) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (7) |
 
 > **(1)** Envio Indexer — not measured yet: no run has published a result
 > **(2)** Envio Subgraph — not measured yet: no run has published a result
@@ -52,38 +41,20 @@ about *which four*, and the page behind every cell names them.
 > **(7)** SubQuery — not measured yet: no run has published a result
 <!-- RELIABILITY:END -->
 
-Every tool that reads plain RPC gets a row, measured or not. Tools that read
-their own network — HyperSync, SQD Network, StreamingFast — have no row here at
-all: the benchmark cannot make those sources reorg or fail on demand, so each
-is measured on its RPC row instead, and the scenario page says so tool by tool.
+Each cell is the checks a tool passed out of the checks it was asked. Follow
+one for the list behind it, and for what is deliberately not asked yet.
 
-The column with a number beside it carries the measurement a count cannot make:
-how many times a tool had to be restarted by hand to get through the database
-restart, and the median gap between a block being published and its rows being
-readable. A dash is not `0 / n` — it means the run could not ask.
-
-Every scenario runs three times against a fresh chain and a fresh database, and
-a check passes only if it passed every one: an indexer that survives a database
-restart unless the restart lands mid-batch has not survived it.
-
-There is no passing mark, and a full column is a smaller claim than it looks:
-it means the tool survived the situations someone thought to write down. What
-is not yet asked is published too, at the end of the same page, along with
-which tools are measured and why the others are not.
-
-[Every check, and what is still missing →](./reliability/README.md)
-
-```bash
-node reliability/run.ts                 # every tool, every scenario, three runs each
-node reliability/run.ts ponder --repeats=5
-```
+[What every check means →](./reliability/README.md)
 
 
-## Scenarios
+## Speed
+
+Five scenarios, each run over a fixed block range to check the data and over a
+timed window to measure the rate.
 
 ### State Aggregation
 
-How well does an indexer cope with data it has to read back? Every rETH transfer changes a balance, so for each one the indexer has to find the right row, update it, and save it again. The scenario follows the benchmark on the [Ponder landing page](https://ponder.sh).
+Every rETH transfer changes a balance, so the indexer has to find the right row, update it and save it again. Reading your own writes is the slow part.
 
 <!-- BENCHMARK:erc20-account-balances:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -111,7 +82,7 @@ How well does an indexer cope with data it has to read back? Every rETH transfer
 
 ### Decoded Event Stream
 
-How fast can an indexer write? Every USDC transfer is stored once, with nothing to aggregate and nothing to look up first. This is the ingestion path on its own.
+Every USDC transfer, stored once, with nothing to aggregate and nothing to look up first. The ingestion path on its own.
 
 <!-- BENCHMARK:erc20-transfer-events:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -135,7 +106,7 @@ How fast can an indexer write? Every USDC transfer is stored once, with nothing 
 
 ### External Contract Calls
 
-Not everything an indexer needs is in the logs. Every approval on the eight busiest ERC-20s is followed by a read of the allowance at that block: 15,703 calls, 200ms each, answered by the benchmark so every tool waits the same. Nothing limits how many a tool may have outstanding, so the rows differ by how many of those waits it takes at once.
+Not everything an indexer needs is in the logs. Every approval is followed by a read of the allowance at that block — 15,703 calls, answered at a fixed latency so every tool waits the same.
 
 <!-- BENCHMARK:erc20-allowance-calls:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -163,7 +134,7 @@ Not everything an indexer needs is in the logs. Every approval on the eight busi
 
 ### Factory Contract Registration
 
-What happens when you do not know the contracts up front? The indexer watches the Safe proxy factories, and every one of the 82,268 proxies they create becomes another contract it has to follow from that moment on.
+What happens when you do not know the contracts up front? Each of the 82,268 proxies the Safe factories create becomes another contract to follow.
 
 <!-- BENCHMARK:safe-factory-registrations:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -194,7 +165,7 @@ What happens when you do not know the contracts up front? The indexer watches th
 
 ### Solana USDC Transfers
 
-Every USDC transfer on Solana, through the chain's busiest program. Solana makes that harder than it sounds: transfers hide inside swaps and routers, and many never say which token they moved. The scenario follows StreamingFast's [SPL token Substreams](https://github.com/streamingfast/substreams-solana-spl-token).
+The same question on a chain with no logs to subscribe to, where a transfer is an instruction inside a transaction.
 
 <!-- BENCHMARK:solana-spl-transfers:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
@@ -208,9 +179,44 @@ Every USDC transfer on Solana, through the chain's busiest program. Solana makes
 [How this case works, and how to run it →](./cases/solana-spl-transfers/README.md)
 
 
-## Sentio Benchmark Cases, May 2025
+## Run it yourself
 
-Six scenarios from the original 2025 research, kept here for reference. They are total sync times rather than throughput rates, and they predate the current methodology, so do not compare them with the tables above.
+```bash
+# Reliability: no credentials needed, the chain is generated
+node reliability/run.ts ponder --scenarios=reorg-cases
+
+# Speed: needs an Envio API token for the RPC endpoint and the ground truth
+ENVIO_API_TOKEN=your-token node scripts/run-benchmarks.ts ponder --cases=erc20-transfer-events
+```
+
+Each scenario page linked above has its own setup notes, and
+[METHODOLOGY.md](./METHODOLOGY.md) explains how the numbers are produced and
+what every column means.
+
+
+## Contributing
+
+Contributions are welcome — we already have some from the [SQD](https://sqd.dev)
+team. Open an issue or a pull request to add an indexer, add a scenario, report
+a result that looks wrong, or improve the methodology. Indexer teams especially:
+nobody knows your tool better than you do. Or come and ask on
+[Discord](https://discord.com/invite/envio) or
+[Telegram](https://t.me/+kAIGElzPjApiMjI0).
+
+
+## History
+
+The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s
+research. That repository was later closed, so [Envio](https://envio.dev) picked
+it up and has kept it current since. We are not affiliated with Sentio, and
+although the project now lives under the Envio organisation — its data is what
+the [Envio landing page](https://envio.dev) and the
+[Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026)
+article cite — the point of it is a fair comparison.
+
+Six scenarios from that original research are kept for reference. They are total
+sync times rather than throughput rates and predate the current methodology, so
+do not compare them with the tables above.
 
 | Case                   | Sentio | Envio HyperSync | Envio HyperIndex | Ponder | Subsquid | Subgraph | Sentio_Subgraph | Goldsky_Subgraph |
 | ---------------------- | ------ | --------------- | ---------------- | ------ | -------- | -------- | --------------- | ---------------- |
@@ -222,14 +228,3 @@ Six scenarios from the original 2025 research, kept here for reference. They are
 | case_6_template        | 19m    |                 | 8s               | 21m    | 2m       | 19m      | 10m             | 20h24m           |
 
 [More about these cases →](./sentio-benchmarks-may-2025/README.md)
-
-
-## Running the benchmarks
-
-Want to try it yourself? Each scenario page above has its own setup instructions, or you can run the whole suite the way CI does:
-
-```bash
-ENVIO_API_TOKEN=your-token SQD_API_KEY=your-key node scripts/run-benchmarks.ts
-```
-
-Arguments are passed straight through, so `node scripts/run-benchmarks.ts envio ponder --duration=100` picks which indexers to run and how long the window is, and `--cases=erc20-transfer-events` narrows it to one scenario. You will need an [Envio](https://envio.dev) API token for the RPC endpoint and the ground truth; the [SQD](https://portal.sqd.dev) key is only needed for the Squid SDK run that reads from SQD Network.

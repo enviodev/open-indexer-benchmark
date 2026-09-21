@@ -789,12 +789,19 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
       : `stored no transfer for block ${MAX_UINT_BLOCK}, which carried 2^256-1`
   );
 
+  // Either the tool's own position has moved past the empty stretch, or it has
+  // rows from beyond it. Both are proof it walked through; the second is here
+  // because for two tools the benchmark reads position from the rows they
+  // wrote — a choice the throughput suite made, not something those tools do —
+  // and a check that ignored that would fail them for the harness's decision.
   const progress = await ctx.progress();
   const at = (progress?.blocks ?? 0) + START_BLOCK;
+  const rowsBeyond = stored.some((row) => row.block > EMPTY_RANGE.to);
   checks["empty-blocks"] = verdict(
-    at > EMPTY_RANGE.to,
-    `reports being at block ${at}, which is still inside the ` +
-      `${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks that carried no logs`
+    at > EMPTY_RANGE.to || rowsBeyond,
+    `reports being at block ${at} and has nothing past block ${EMPTY_RANGE.to}, ` +
+      `so it is still inside the ${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks ` +
+      `that carried no logs`
   );
 
   // ── The values from the contract read ──
