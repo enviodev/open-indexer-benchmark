@@ -8,7 +8,13 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - .data/postgres:/var/lib/postgresql/data
+      # A named volume, not a bind mount into the project. Postgres writes as
+      # its own user inside the container, so a bind-mounted `.data` comes back
+      # owned by somebody the runner is not — and the driver clears `.data`
+      # before every scenario, which then fails with EACCES and takes the rest
+      # of the suite's scenarios with it. `docker compose down -v` disposes of
+      # a named volume cleanly, which is what the harness does between runs.
+      - subquery-reliability-pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: postgres
     healthcheck:
@@ -60,3 +66,6 @@ services:
       interval: 3s
       timeout: 5s
       retries: 10
+
+volumes:
+  subquery-reliability-pgdata:
