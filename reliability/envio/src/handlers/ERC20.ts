@@ -4,7 +4,7 @@ import { createPublicClient, http, parseAbi } from "viem";
 const RPC_URL = process.env.ENVIO_RPC_URL;
 if (!RPC_URL) throw new Error("ENVIO_RPC_URL must be set");
 
-const TOKEN = "0x00000000000000000000000000000000000c0ffee" as const;
+const TOKEN = "0x0000000000000000000000000000000000c0ffee" as const;
 
 /** The byte Postgres will not accept in a text column. */
 const NUL = String.fromCharCode(0);

@@ -168,13 +168,27 @@ async function compare(ctx: Ctx, upTo?: number): Promise<Comparison> {
   };
 }
 
-/** Wait until the tool holds every row the chain holds. */
-async function synced(ctx: Ctx, timeoutMs = ctx.patience.syncMs): Promise<boolean> {
-  return ctx.waitFor(
-    "catching up with the chain",
-    async () => (await compare(ctx)).clean,
-    timeoutMs
-  );
+/**
+ * Wait until the tool holds every row the chain holds.
+ *
+ * The chain keeps producing while it waits, unless the caller is producing its
+ * own blocks and needs the head left alone. See startHeartbeat.
+ */
+async function synced(
+  ctx: Ctx,
+  timeoutMs = ctx.patience.syncMs,
+  { heartbeat = true } = {}
+): Promise<boolean> {
+  const beat = heartbeat ? startHeartbeat(ctx) : null;
+  try {
+    return await ctx.waitFor(
+      "catching up with the chain",
+      async () => (await compare(ctx)).clean,
+      timeoutMs
+    );
+  } finally {
+    beat?.stop();
+  }
 }
 
 /** Wait for the tool to hold at least this many transfers. */
@@ -192,6 +206,43 @@ async function produce(ctx: Ctx, blocks: number, everyMs: number) {
     ctx.chain.advance(1);
     await sleep(everyMs);
   }
+}
+
+/** How many blocks a heartbeat will add, and how often. */
+const HEARTBEAT_BLOCKS = 20;
+const HEARTBEAT_EVERY_MS = 3_000;
+
+/**
+ * Keeps the chain moving while the harness waits for a tool to catch up.
+ *
+ * A real chain always produces blocks, and an indexer's realtime path is
+ * written for that: it reacts to the head moving. A chain that has been
+ * advanced and then stands still is not a chain any of these tools were
+ * designed against, and one of them showed it — Ponder backfilled to its
+ * finalised block, handed the last sixty-five to realtime, and realtime had no
+ * new head to react to, so those blocks were never indexed and the scenario
+ * read that as an indexer that could not keep up.
+ *
+ * Bounded rather than endless, because the blocks it adds are real: a scenario
+ * that positions something at a particular height needs to know the head
+ * cannot wander past it.
+ */
+function startHeartbeat(ctx: Ctx) {
+  let added = 0;
+  let stopped = false;
+  const timer = setInterval(() => {
+    if (stopped || added >= HEARTBEAT_BLOCKS) return;
+    added++;
+    ctx.chain.advance(1);
+  }, HEARTBEAT_EVERY_MS);
+  // Nothing should be kept alive by a heartbeat.
+  timer.unref?.();
+  return {
+    stop() {
+      stopped = true;
+      clearInterval(timer);
+    },
+  };
 }
 
 /**
@@ -700,41 +751,39 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
 // ── Data fidelity ──────────────────────────────────────────────────────
 
 /**
- * The block the chain gives an amount of 2^256-1, and the stretch it leaves
- * empty. Both are read by the scenario and by the chain spec that sets them
- * up, so they live here rather than in two places that could disagree.
+ * Where the awkward values sit on the chain.
+ *
+ * The order matters, and it is the one thing a real run changed about this
+ * scenario. An indexer that refuses a log index above the signed 32-bit
+ * maximum stops there — Ponder does, loudly — and when every block carried
+ * one, that refusal was also the answer to every other question here, because
+ * the tool never reached the blocks they were about. So the hostile indices
+ * come last, after the values a tool should simply store, and the scenario
+ * asks in two phases either side of them.
  */
 export const MAX_UINT_BLOCK = START_BLOCK + 40;
 export const EMPTY_RANGE = { from: START_BLOCK + 100, to: START_BLOCK + 599 };
+export const HUGE_INDEX_FROM = START_BLOCK + 800;
 export const MAX_UINT = (1n << 256n) - 1n;
 
 export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
   const checks: Record<string, Outcome> = {};
 
-  ctx.chain.advance(700);
+  // ── Everything a tool should simply store ──
+  //
+  // Stopping short of the hostile indices by more than a heartbeat can add, so
+  // the first phase cannot wander into the second. The gap also has to clear
+  // whatever an indexer treats as unfinalised: Ponder holds sixty-five blocks
+  // back on mainnet, and a progress marker that lags the head by that much
+  // would otherwise read as a tool stuck inside the empty stretch.
+  ctx.chain.advance(HUGE_INDEX_FROM - START_BLOCK - 1 - HEARTBEAT_BLOCKS - 5);
   await ctx.launch();
-  const finished = await synced(ctx);
+  const ordinary = await synced(ctx);
 
-  // ── Values in the transfer table ──
   const stored: StoredRow[] = await ctx.observe.rows().catch(() => []);
-  const chainRows: ChainRow[] = ctx.chain.rows();
-  const hugeIndex = chainRows.find((row) => row.logIndex > 2_147_483_647);
-  checks["huge-log-index"] = hugeIndex
-    ? verdict(
-        finished &&
-          stored.some(
-            (row) => row.block === hugeIndex.block && row.logIndex === hugeIndex.logIndex
-          ),
-        finished
-          ? `stored no transfer at log index ${hugeIndex.logIndex}`
-          : `did not get through a range whose log indices reach ${hugeIndex.logIndex}`
-      )
-    : na("the chain served no log index above the 32-bit limit");
-
-  const huge = stored.find((row) => row.block === MAX_UINT_BLOCK && row.amount === MAX_UINT);
   const atBlock = stored.find((row) => row.block === MAX_UINT_BLOCK);
   checks["max-uint"] = verdict(
-    huge !== undefined,
+    atBlock?.amount === MAX_UINT,
     atBlock
       ? `stored ${atBlock.amount} for a transfer of 2^256-1`
       : `stored no transfer for block ${MAX_UINT_BLOCK}, which carried 2^256-1`
@@ -748,26 +797,58 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
       `${EMPTY_RANGE.to - EMPTY_RANGE.from + 1} blocks that carried no logs`
   );
 
-  // ── Values from the contract read ──
+  // ── The values from the contract read ──
   const tokens = await ctx.observe.tokens().catch(() => []);
   if (tokens.length === 0) {
     const missing = na("the tool wrote no token row, so its metadata could not be read");
     checks["null-symbol"] = missing;
     checks["nul-byte"] = missing;
+  } else {
+    const token = tokens[0];
+    checks["null-symbol"] = verdict(
+      token.symbol === null || token.symbol === "",
+      `stored ${JSON.stringify(token.symbol)} for a symbol() that returned no data`
+    );
+    // The name carries a NUL, which Postgres will not accept in a text column.
+    // Sanitising it is fine and so is storing nothing; what is not fine is the
+    // row never arriving, or the indexer stalling behind it.
+    checks["nul-byte"] = verdict(
+      token.name === null || !token.name.includes(NUL),
+      `stored a name still carrying a NUL byte: ${JSON.stringify(token.name)}`
+    );
+  }
+
+  // ── And then the log indices near the 32-bit ceiling ──
+  if (!ordinary) {
+    checks["huge-log-index"] = na(
+      "the tool had not caught up with the ordinary part of the chain, so it was " +
+        "never shown a log index near the 32-bit ceiling"
+    );
     return { checks, measures: {} };
   }
-  const token = tokens[0];
-  checks["null-symbol"] = verdict(
-    token.symbol === null || token.symbol === "",
-    `stored ${JSON.stringify(token.symbol)} for a symbol() that returned no data`
+
+  ctx.chain.advance(60);
+  const hugeIndex = ctx.chain
+    .rows()
+    .find((row) => row.logIndex > 2_147_483_647);
+  if (!hugeIndex) {
+    checks["huge-log-index"] = na("the chain served no log index above the 32-bit limit");
+    return { checks, measures: {} };
+  }
+
+  const indexed = await ctx.waitFor(
+    "indexing the blocks with log indices near the 32-bit ceiling",
+    async () =>
+      (await ctx.observe.rows().catch(() => [])).some(
+        (row) => row.block === hugeIndex.block && row.logIndex === hugeIndex.logIndex
+      ),
+    ctx.patience.syncMs
   );
-  // The name carries a NUL, which Postgres will not accept in a text column.
-  // Sanitising it is fine and so is storing nothing; what is not fine is the
-  // row never arriving, or the indexer stalling behind it — which the rest of
-  // this scenario's checks would already have caught.
-  checks["nul-byte"] = verdict(
-    token.name === null || !token.name.includes(NUL),
-    `stored a name still carrying a NUL byte: ${JSON.stringify(token.name)}`
+  checks["huge-log-index"] = verdict(
+    indexed,
+    ctx.alive()
+      ? `did not store the transfer at log index ${hugeIndex.logIndex}`
+      : `stopped when the chain served a log index of ${hugeIndex.logIndex}`
   );
   return { checks, measures: {} };
 }
@@ -780,7 +861,9 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
 
   ctx.chain.advance(100);
   await ctx.launch();
-  if (!(await synced(ctx))) {
+  // No heartbeat: this scenario publishes its own blocks and times them, and a
+  // second source of blocks would be measuring the harness.
+  if (!(await synced(ctx, ctx.patience.syncMs, { heartbeat: false }))) {
     return {
       checks: {
         "median-under-block-time": na("the tool never caught up, so it was never at the head"),
@@ -859,7 +942,7 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
 
   // ── And the same again across a reorg ──
   ctx.chain.reorg({ depth: 4, logs: "changed" });
-  const reconciled = await synced(ctx, 60_000);
+  const reconciled = await synced(ctx, 60_000, { heartbeat: false });
   const after = await watch(15, ctx.chain.head());
   const afterSorted = [...after.latencies].sort((a, b) => a - b);
   const p50After = afterSorted[Math.floor(afterSorted.length / 2)];

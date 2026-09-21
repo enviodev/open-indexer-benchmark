@@ -43,7 +43,7 @@ const project: EthereumProject = {
       endBlock: requireEndBlock(),
       options: {
         abi: "erc20",
-        address: "0x00000000000000000000000000000000000c0ffee",
+        address: "0x0000000000000000000000000000000000c0ffee",
       },
       assets: new Map([["erc20", { file: "./abis/erc20.abi.json" }]]),
       mapping: {

@@ -28,7 +28,7 @@ function requireEndBlock(): number {
   return value;
 }
 
-export const CONTRACT_ADDRESS = "0x00000000000000000000000000000000000c0ffee";
+export const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000c0ffee";
 export const START_BLOCK = 1_000_000;
 
 const rpcEndpoint = assertNotNull(

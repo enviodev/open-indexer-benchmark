@@ -30,7 +30,7 @@ export default createConfig({
     ERC20: {
       chain: "mainnet",
       abi: ERC20Abi,
-      address: "0x00000000000000000000000000000000000c0ffee",
+      address: "0x0000000000000000000000000000000000c0ffee",
       startBlock: 1_000_000,
       endBlock: requireEndBlock(),
     },

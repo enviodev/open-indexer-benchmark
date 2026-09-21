@@ -16,4 +16,4 @@ chains:
       for: ${ENVIO_RPC_FOR:-sync}
     contracts:
       - name: ERC20
-        address: 0x00000000000000000000000000000000000c0ffee
+        address: 0x0000000000000000000000000000000000c0ffee

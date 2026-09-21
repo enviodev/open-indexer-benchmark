@@ -8,7 +8,7 @@ dataSources:
     # chain id as a configuration error rather than as a chain.
     network: mainnet
     source:
-      address: "0x00000000000000000000000000000000000c0ffee"
+      address: "0x0000000000000000000000000000000000c0ffee"
       abi: ERC20
       # Both substituted by the driver before codegen reads this, because the
       # manifest is the only place a subgraph can express its block range.

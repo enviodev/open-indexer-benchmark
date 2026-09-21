@@ -37,6 +37,23 @@ export const CHAIN_PORT = 19_879;
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
+/**
+ * The bloom filter every block and receipt carries: all ones.
+ *
+ * A real node derives this from the logs, and a client may check that a log it
+ * was given is present in it. Serving zeros while also serving logs is a
+ * contradiction, and a careful indexer says so and stops — Ponder does, with
+ * "Log not found in block.logsBloom", which is how this was found.
+ *
+ * All ones rather than a computed filter, because computing one needs keccak256
+ * and nothing else in this harness has a dependency. It is sound rather than a
+ * shortcut: a bloom filter is allowed false positives and not false negatives,
+ * so every membership test passes and nothing is ever wrongly skipped. A client
+ * that used it to avoid fetching a block simply fetches every block, which is
+ * what an indexer pointed at this chain should be doing anyway.
+ */
+const LOGS_BLOOM = `0x${"f".repeat(512)}`;
+
 // ── The chain ──────────────────────────────────────────────────────────
 
 export interface MockBlock {
@@ -80,6 +97,18 @@ export interface ChainSpec {
    * one indexer outright (ponder-sh/ponder#2373).
    */
   firstLogIndex?: number;
+  /**
+   * The height from which `firstLogIndex` applies; below it, logs are numbered
+   * from zero.
+   *
+   * This exists because of what a real run showed. An indexer that refuses a
+   * log index above the signed 32-bit maximum stops there, and when every
+   * block carried one, that single refusal was also the answer to every other
+   * question the scenario wanted to ask — the tool never reached the blocks
+   * they were about. Confining the hostile indices to the end of the chain
+   * means each check gets put to a tool that is still running.
+   */
+  firstLogIndexFrom?: number;
   /**
    * Reject an `eth_getLogs` spanning more than this many blocks, the way a
    * provider does. A tool that never splits its range simply stops here, which
@@ -273,6 +302,17 @@ export interface ChainMock {
 // ── Server ─────────────────────────────────────────────────────────────
 
 export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
+  // A generated chain will serve whatever it is given, which is most of its
+  // value and, here, a trap: an address one character too long went unnoticed
+  // until a real indexer refused to start on it, because nothing between the
+  // constant and the wire had any opinion about what an address is. A real
+  // node would have rejected it in the first request.
+  if (!/^0x[0-9a-fA-F]{40}$/.test(spec.contract)) {
+    throw new Error(
+      `${spec.contract} is not a 20-byte address, so no indexer will accept it ` +
+        `as a contract (${(spec.contract.length - 2) / 2} bytes)`
+    );
+  }
   const firstLogIndex = spec.firstLogIndex ?? 0;
   // Mutable copies of the caps, so a scenario can lift them mid-run.
   let maxBlockRange = spec.maxBlockRange;
@@ -320,6 +360,8 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     const empty = spec.emptyRange;
     if (empty && block.number >= empty.from && block.number <= empty.to) return [];
     return Array.from({ length: spec.logsPerBlock }, (_, i) => {
+      const logIndex =
+        block.number >= (spec.firstLogIndexFrom ?? spec.startBlock) ? firstLogIndex + i : i;
       const from = hex20("from", block.number, i);
       const to = hex20("to", block.number, i);
       const amount =
@@ -335,7 +377,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         // keys on (txHash, logIndex) sees the same uniqueness a chain gives it.
         transactionHash: hex32("tx", block.number, block.epoch, i),
         transactionIndex: quantity(i),
-        logIndex: quantity(firstLogIndex + i),
+        logIndex: quantity(logIndex),
         removed: false,
       };
     });
@@ -389,7 +431,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       // than reading the fields they need.
       nonce: "0x0000000000000000",
       sha3Uncles: hex32("uncles", block.number),
-      logsBloom: `0x${"0".repeat(512)}`,
+      logsBloom: LOGS_BLOOM,
       transactionsRoot: hex32("txroot", block.number, block.epoch),
       stateRoot: hex32("stateroot", block.number, block.epoch),
       receiptsRoot: hex32("receipts", block.number, block.epoch),
@@ -402,6 +444,12 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       gasUsed: quantity(21_000 * logs.length),
       baseFeePerGas: "0x7",
       uncles: [],
+      // A whole transaction, including the fields a type-2 one must carry.
+      // Leaving the fee fields out is the kind of gap only a real indexer
+      // finds: the historical path never asks for transactions, and the
+      // realtime path fetches whole blocks and converts every field it knows
+      // about — Ponder turned the missing maxFeePerGas into "Cannot convert
+      // undefined to a BigInt" and took its own process down with it.
       transactions: fullTx
         ? logs.map((log, i) => ({
             hash: log.transactionHash,
@@ -414,9 +462,13 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
             value: "0x0",
             gas: "0x5208",
             gasPrice: "0x7",
+            maxFeePerGas: "0x7",
+            maxPriorityFeePerGas: "0x1",
+            accessList: [],
             input: "0x",
             type: "0x2",
             chainId: quantity(spec.chainId),
+            yParity: "0x0",
             v: "0x0",
             r: hex32("r", block.number, i),
             s: hex32("s", block.number, i),
@@ -578,7 +630,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       effectiveGasPrice: "0x7",
       contractAddress: null,
       logs: [log],
-      logsBloom: `0x${"0".repeat(512)}`,
+      logsBloom: LOGS_BLOOM,
       status: "0x1",
       type: "0x2",
     };

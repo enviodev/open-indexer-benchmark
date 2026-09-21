@@ -42,6 +42,7 @@ import { observer } from "./observe.ts";
 import {
   DEFAULT_PATIENCE,
   EMPTY_RANGE,
+  HUGE_INDEX_FROM,
   MAX_UINT,
   MAX_UINT_BLOCK,
   PLAYS,
@@ -94,6 +95,9 @@ function chainSpecFor(scenario: string): ChainSpec {
   return {
     ...spec,
     firstLogIndex: 0xffff_ffe2,
+    // Only at the end of the chain, so an indexer that refuses them has
+    // already been asked everything else the scenario wants to know.
+    firstLogIndexFrom: HUGE_INDEX_FROM,
     emptyRange: EMPTY_RANGE,
     amountOf: (block) => (block === MAX_UINT_BLOCK ? MAX_UINT : null),
     calls: {

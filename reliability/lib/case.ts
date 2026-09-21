@@ -38,7 +38,7 @@ export const CHAIN_ID = 1;
 export const START_BLOCK = 1_000_000;
 
 /** The token every generated log belongs to. */
-export const TOKEN = "0x00000000000000000000000000000000000c0ffee";
+export const TOKEN = "0x0000000000000000000000000000000000c0ffee";
 
 /** Transfers per block. Two is enough for a log index to be wrong about. */
 export const LOGS_PER_BLOCK = 2;

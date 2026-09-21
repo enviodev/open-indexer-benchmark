@@ -219,6 +219,27 @@ try {
   } finally {
     await huge.close();
   }
+  // ── An address that is not an address is refused at the door ──
+  //
+  // The chain served a 41-digit address for a while, because nothing between
+  // the constant and the wire had an opinion about what an address is. It took
+  // a real indexer refusing to start to notice.
+  const badAddress = await startChainMock({
+    chainId: 1,
+    startBlock: START,
+    blockTimeS: 12,
+    logsPerBlock: 1,
+    contract: `${CONTRACT}ff`,
+    port: 19_881,
+  }).then(
+    (started) => started.close().then(() => null),
+    (err: Error) => err
+  );
+  check(
+    "a contract address of the wrong length is refused",
+    badAddress !== null && /not a 20-byte address/.test(badAddress.message),
+    String(badAddress)
+  );
 } finally {
   await mock?.close();
 }
