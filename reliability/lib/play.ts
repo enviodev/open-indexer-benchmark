@@ -66,6 +66,9 @@ export interface Patience {
  * unmeasured there while finishing comfortably on a laptop. Five is a deadline
  * for a tool that is not coming back, not a budget a working one should feel.
  */
+/** How often a reorg's aftermath is re-read while it is still settling. */
+const RECONCILE_POLL_MS = 500;
+
 export const DEFAULT_PATIENCE: Patience = { syncMs: 300_000, reactMs: 120_000 };
 /** How long the database stays down when it is taken away. */
 const DB_DOWN_MS = 10_000;
@@ -497,9 +500,27 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     rewrite();
     if (extend > 0) ctx.chain.advance(extend);
     const startedAt = performance.now();
-    const agreed = await synced(ctx);
-    if (agreed) recoveries.push((performance.now() - startedAt) / 1_000);
-    const result = await compare(ctx);
+    await synced(ctx);
+
+    // Agreeing about position is not agreeing about rows. A tool can report
+    // the head while the rewrites it is making underneath are still being
+    // committed, and the deeper the reorg the wider that window: sixty blocks
+    // of rollback failed here once, with four balances mid-flight, which is a
+    // tool being read too early rather than a tool that did not reconcile.
+    //
+    // So the comparison is given the same patience the rest of the scenario
+    // has, and the first clean reading wins. A tool that never agrees still
+    // fails, which is the thing being asked.
+    let result = await compare(ctx);
+    const deadline = performance.now() + ctx.patience.reactMs;
+    while (!result.clean && performance.now() < deadline) {
+      await sleep(RECONCILE_POLL_MS);
+      result = await compare(ctx);
+    }
+
+    // Timed to when the data agreed, not to when the position did, because
+    // that is what "recovered from the reorg" means.
+    if (result.clean) recoveries.push((performance.now() - startedAt) / 1_000);
     ctx.log(`  ${label}: ${result.summary}`);
     return verdict(result.clean, result.summary);
   }
