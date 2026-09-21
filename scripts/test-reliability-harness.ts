@@ -171,6 +171,21 @@ const EXPECTATIONS: Expectation[] = [
     fails: ["survives-backfill"],
   },
 
+  // ── A project that cannot implement an entity loses only its checks ──
+  //
+  // No-code rindexer has no facility for reading contract state, so its
+  // project has no token row and never will. The two checks that read one have
+  // to come back unmeasured — and, more importantly, the other three have to
+  // still be asked: a resolver that gave up on the whole schema over one
+  // missing table would turn a project with a documented limit into an indexer
+  // whose tables cannot be read at all.
+  {
+    scenario: "awkward-values",
+    defects: ["no-token-table"],
+    unmeasured: ["null-symbol", "nul-byte"],
+    passes: ["huge-log-index", "max-uint", "empty-blocks"],
+  },
+
   // ── And a gap in the benchmark is never a finding about the tool ──
   //
   // Both defects at once: an indexer that would genuinely fail every reorg

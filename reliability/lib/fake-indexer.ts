@@ -27,6 +27,11 @@
 //                       reaches for a JSON-RPC method the generated chain does
 //                       not implement, which stands for every real indexer
 //                       that uses something nobody thought to mock
+//   no-token-table      writes no token row at all, standing in for a project
+//                       that cannot read contract state — a no-code rindexer
+//                       project is exactly this, and the checks that read a
+//                       token row have to come back unmeasured rather than
+//                       failed, and rather than breaking every other read
 //
 // Each defect is meant to fail a specific check. scripts/test-reliability-
 // harness.ts turns them on one at a time and asserts exactly that.
@@ -37,6 +42,7 @@ import { START_BLOCK, TOKEN } from "./case.ts";
 
 export type Defect =
   | "asks-for-an-unserved-method"
+  | "no-token-table"
   | "no-reorg-handling"
   | "checkpoint-ahead"
   | "double-apply"
@@ -215,6 +221,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
     }
 
     async function readToken() {
+      if (defects.has("no-token-table")) return;
       const call = async (selector: string) =>
         rpc("eth_call", [{ to: TOKEN, data: selector }, "latest"]).catch(() => "0x");
       const symbol = decodeString(await call(SELECTOR_SYMBOL));
@@ -360,7 +367,9 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
             `CREATE TABLE transfer (id text PRIMARY KEY, block_number bigint, ` +
               `log_index numeric, "from" text, "to" text, amount numeric)`,
             "CREATE TABLE account (id text PRIMARY KEY, balance numeric)",
-            "CREATE TABLE token (id text PRIMARY KEY, symbol text, name text)",
+            ...(defects.has("no-token-table")
+              ? []
+              : ["CREATE TABLE token (id text PRIMARY KEY, symbol text, name text)"]),
             "CREATE TABLE progress (block bigint)",
             "CREATE TABLE block (number bigint PRIMARY KEY, hash text)",
             `INSERT INTO progress (block) VALUES (${START_BLOCK - 1})`,

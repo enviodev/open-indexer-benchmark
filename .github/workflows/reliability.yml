@@ -49,7 +49,14 @@ jobs:
       matrix:
         # Kept in step with RELIABILITY_TOOLS in reliability/lib/tools.ts by
         # scripts/test-reliability.ts, which the Checks workflow runs.
-        tool: [envio-rpc, ponder]
+        tool:
+          - envio-rpc
+          - envio-subgraph-rpc
+          - ponder
+          - rindexer
+          - sqd-rpc
+          - subgraph
+          - subquery
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4

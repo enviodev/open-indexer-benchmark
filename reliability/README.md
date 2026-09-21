@@ -137,24 +137,33 @@ write down, which is not the same as a reliable tool — see
 | tool | source | status |
 | --- | --- | --- |
 | Envio Indexer | RPC | measured |
+| Envio Subgraph | RPC | measured |
 | Ponder | RPC | measured |
-| envio-subgraph-rpc | RPC | not yet: the reliability case has no subgraph/ project yet, which is what this row would run on HyperIndex |
-| rindexer | RPC | not yet: the reliability case has no rindexer/ project yet |
-| sqd-rpc | RPC | not yet: the reliability case has no sqd/ project yet |
-| subgraph | RPC | not yet: the reliability case has no subgraph/ project yet |
-| subquery | RPC | not yet: the reliability case has no subquery/ project yet |
-| envio | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Indexer's RPC row is measured instead |
-| envio-subgraph | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Subgraph's RPC row is measured instead |
-| rindexer-hypersync | — | reads HyperSync, which the benchmark cannot make reorg or fail on demand; Rindexer's RPC row is measured instead |
-| sqd | — | reads SQD Network, which the benchmark cannot make reorg or fail on demand; the Squid SDK's RPC row is measured instead |
-| substreams | — | reads a StreamingFast endpoint rather than plain RPC, which the benchmark cannot make reorg or fail on demand |
-| carbon | — | indexes Solana, and the generated chain is an Ethereum node; provoking a Solana indexer needs a Solana chain to provoke |
+| Rindexer | RPC | measured |
+| Squid SDK | RPC | measured |
+| Subgraph | RPC | measured |
+| SubQuery | RPC | measured |
+| Envio Indexer | HyperSync | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Indexer's RPC row is measured instead |
+| Envio Subgraph | HyperSync | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Subgraph's RPC row is measured instead |
+| Rindexer | HyperSync | reads HyperSync, which the benchmark cannot make reorg or fail on demand; Rindexer's RPC row is measured instead |
+| Squid SDK | SQD Network | reads SQD Network, which the benchmark cannot make reorg or fail on demand; the Squid SDK's RPC row is measured instead |
+| Substreams | StreamingFast | reads a StreamingFast endpoint rather than plain RPC, which the benchmark cannot make reorg or fail on demand |
+| Carbon | RPC | indexes Solana, and the generated chain is an Ethereum node; provoking a Solana indexer needs a Solana chain to provoke |
 
 A tool needs two things to appear in the results: an RPC path the generated
 chain can serve, and an implementation of the case above for its framework.
-The rows marked *not yet* are waiting only on the second, and adding one is
-the whole of what it takes — the drivers, the scenarios, the scoring and the
-table are already common to every tool.
+Any row marked *not yet* is waiting only on the second, and adding one is the
+whole of what it takes — the drivers, the scenarios, the scoring and the table
+are already common to every tool.
+
+A project that cannot implement one of the three entities loses the checks
+that read it, and nothing else: they come back unmeasured, so that column's
+denominator is smaller rather than its numerator being lower. One row is in
+that position today. A no-code rindexer project is its yaml, which describes
+events and the tables they write and has no facility for reading contract
+state, so it writes no token row and the two metadata checks cannot be put to
+it. Writing those two would mean a rust rindexer project instead, which is
+what the External Contract Calls scenario uses for the same reason.
 
 <a id="crash-recovery"></a>
 

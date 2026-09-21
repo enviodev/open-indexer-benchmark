@@ -48,18 +48,18 @@ ponder.on("ERC20:Transfer", async ({ event, context }) => {
     });
   }
 
-  // Sequential, and skipped entirely for a self-transfer: both upserts would
-  // otherwise read the same pre-transfer balance and the credit would win.
-  if (from !== to) {
-    await context.db
-      .insert(account)
-      .values({ id: from, balance: -value })
-      .onConflictDoUpdate((row) => ({ balance: row.balance - value }));
-    await context.db
-      .insert(account)
-      .values({ id: to, balance: value })
-      .onConflictDoUpdate((row) => ({ balance: row.balance + value }));
-  }
+  // Sequential, not in parallel: a self-transfer is the same account twice,
+  // and two upserts issued together would both see the pre-transfer balance.
+  // In order, the debit and the credit cancel, which is what a self-transfer
+  // should do.
+  await context.db
+    .insert(account)
+    .values({ id: from, balance: -value })
+    .onConflictDoUpdate((row) => ({ balance: row.balance - value }));
+  await context.db
+    .insert(account)
+    .values({ id: to, balance: value })
+    .onConflictDoUpdate((row) => ({ balance: row.balance + value }));
 
   await context.db.insert(transfer).values({
     id: `${event.log.blockNumber}-${event.log.logIndex}`,

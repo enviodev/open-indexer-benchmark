@@ -20,33 +20,41 @@ import { DRIVERS, TOOLS } from "../../cases/lib/drivers/index.ts";
  * the order its rows are published. These are the reliability suite's rows.
  *
  * A tool needs both to appear here: an RPC path the mock chain can serve, and
- * an implementation of the reliability case for its framework. The second half
- * is why this list is shorter than the first: see AWAITING_PROJECT.
+ * an implementation of the reliability case for its framework. Both halves are
+ * pinned by scripts/test-reliability.ts, which fails if a tool listed here has
+ * no project to run.
+ *
+ * The two Envio rows and the Subgraph row share directories with each other in
+ * the way the throughput suite's do: envio-rpc runs `envio/`, and both the
+ * Subgraph and the Envio Subgraph rows run `subgraph/` unchanged, which is
+ * what makes those two a reading of one subgraph on two indexers.
  */
-export const RELIABILITY_TOOLS = ["envio-rpc", "ponder"] as const;
+export const RELIABILITY_TOOLS = [
+  "envio-rpc",
+  "envio-subgraph-rpc",
+  "ponder",
+  "rindexer",
+  "sqd-rpc",
+  "subgraph",
+  "subquery",
+] as const;
 
 /**
  * Drivers that read plain RPC and are waiting only on an implementation of the
  * reliability case for their framework — the project directory the driver
- * looks for, beside reliability/ponder and reliability/envio.
+ * looks for, beside the others under reliability/.
+ *
+ * Empty, now that every RPC row has one. It is kept rather than deleted
+ * because the next indexer added to the throughput suite will land here first:
+ * a driver has to be accounted for the moment it is registered, and "its
+ * project is not written" is a truer thing to publish than nothing at all.
  *
  * Kept apart from NOT_RUN because the two are different statements. NOT_RUN is
- * a fact about the benchmark that will not change: the mock chain cannot serve
- * HyperSync or SQD Network, so those rows cannot exist. This is a list of work
- * to do, and every entry here is a row the suite is supposed to have.
- *
- * Adding a project is the whole of what it takes to move a tool across: the
- * drivers, the scenarios, the scoring and the table are already common.
+ * a fact about the benchmark that will not change: the generated chain cannot
+ * serve HyperSync or SQD Network, so those rows cannot exist. This is a list
+ * of work to do, and every entry is a row the suite is supposed to have.
  */
-export const AWAITING_PROJECT: Record<string, string> = {
-  "envio-subgraph-rpc":
-    "the reliability case has no subgraph/ project yet, which is what this row " +
-    "would run on HyperIndex",
-  rindexer: "the reliability case has no rindexer/ project yet",
-  "sqd-rpc": "the reliability case has no sqd/ project yet",
-  subgraph: "the reliability case has no subgraph/ project yet",
-  subquery: "the reliability case has no subquery/ project yet",
-};
+export const AWAITING_PROJECT: Record<string, string> = {};
 
 /** Drivers that cannot be run here at all, and the reason, published as a note. */
 export const NOT_RUN: Record<string, string> = {

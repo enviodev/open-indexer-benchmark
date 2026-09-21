@@ -1,0 +1,20 @@
+type Transfer @entity {
+  id: ID!
+  blockNumber: BigInt!
+  "Near the top of an unsigned 32-bit integer in one scenario, so never an Int."
+  logIndex: BigInt!
+  from: String!
+  to: String!
+  amount: BigInt!
+}
+
+type Account @entity {
+  id: ID!
+  balance: BigInt!
+}
+
+type Token @entity {
+  id: ID!
+  symbol: String
+  name: String
+}

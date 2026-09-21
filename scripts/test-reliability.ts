@@ -150,19 +150,34 @@ check(
   unaccountedDrivers().length === 0,
   unaccountedDrivers().join(", ")
 );
+/**
+ * The file that makes a directory one tool's project.
+ *
+ * Not always a package.json: a no-code rindexer project is its yaml and
+ * nothing else, and a rust one is its crate. Looking for any of the three is
+ * what makes this a check that a project exists rather than a check that it is
+ * written in TypeScript.
+ */
+const PROJECT_MARKERS = ["package.json", "rindexer.yaml", "Cargo.toml"];
+
+const hasProject = (directory: string) =>
+  PROJECT_MARKERS.some((marker) =>
+    existsSync(resolve(ROOT, "reliability", directory, marker))
+  );
+
 for (const tool of RELIABILITY_TOOLS) {
   const directory = PROJECT_DIRS[tool] ?? tool;
   check(
     `${tool} has a reliability project to run`,
-    existsSync(resolve(ROOT, "reliability", directory, "package.json")),
-    `reliability/${directory} has no package.json`
+    hasProject(directory),
+    `reliability/${directory} holds none of ${PROJECT_MARKERS.join(", ")}`
   );
 }
 for (const [tool, reason] of Object.entries(AWAITING_PROJECT)) {
   const directory = PROJECT_DIRS[tool] ?? tool;
   check(
     `${tool} is still waiting on its project`,
-    !existsSync(resolve(ROOT, "reliability", directory, "package.json")),
+    !hasProject(directory),
     `reliability/${directory} exists now — move ${tool} from AWAITING_PROJECT into ` +
       `RELIABILITY_TOOLS in reliability/lib/tools.ts (its note reads "${reason}")`
   );

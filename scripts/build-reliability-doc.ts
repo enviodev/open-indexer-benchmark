@@ -32,6 +32,7 @@ import {
   RELIABILITY_TOOLS,
   presentation,
 } from "../reliability/lib/tools.ts";
+import { TOOLS } from "../cases/lib/drivers/index.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DOC_PATH = resolve(ROOT, "reliability", "README.md");
@@ -183,15 +184,26 @@ lines.push(
     return `| ${name} | ${source} | measured |`;
   }),
   ...Object.entries(AWAITING_PROJECT).map(
-    ([tool, reason]) => `| ${tool} | RPC | not yet: ${reason} |`
+    ([tool, reason]) => `| ${TOOLS[tool].name} | ${TOOLS[tool].source} | not yet: ${reason} |`
   ),
-  ...Object.entries(NOT_RUN).map(([tool, reason]) => `| ${tool} | — | ${reason} |`),
+  ...Object.entries(NOT_RUN).map(
+    ([tool, reason]) => `| ${TOOLS[tool].name} | ${TOOLS[tool].source} | ${reason} |`
+  ),
   "",
   "A tool needs two things to appear in the results: an RPC path the generated",
   "chain can serve, and an implementation of the case above for its framework.",
-  "The rows marked *not yet* are waiting only on the second, and adding one is",
-  "the whole of what it takes — the drivers, the scenarios, the scoring and the",
-  "table are already common to every tool.",
+  "Any row marked *not yet* is waiting only on the second, and adding one is the",
+  "whole of what it takes — the drivers, the scenarios, the scoring and the table",
+  "are already common to every tool.",
+  "",
+  "A project that cannot implement one of the three entities loses the checks",
+  "that read it, and nothing else: they come back unmeasured, so that column's",
+  "denominator is smaller rather than its numerator being lower. One row is in",
+  "that position today. A no-code rindexer project is its yaml, which describes",
+  "events and the tables they write and has no facility for reading contract",
+  "state, so it writes no token row and the two metadata checks cannot be put to",
+  "it. Writing those two would mean a rust rindexer project instead, which is",
+  "what the External Contract Calls scenario uses for the same reason.",
   ""
 );
 

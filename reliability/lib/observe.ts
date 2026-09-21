@@ -120,9 +120,32 @@ export function observer(sql: SqlRunner) {
     token: { qualified: string; predicate: string; symbol: string; name: string | null } | null;
   } | null = null;
 
+  /**
+   * The table backing one entity, or null when the tool has not written it.
+   *
+   * Resolved one entity at a time rather than all three together, because not
+   * every project has all three. No-code rindexer has no facility for reading
+   * contract state, so its schema has no token row and never will; a resolver
+   * that failed the lot on one missing entity would turn that into an indexer
+   * whose tables cannot be read at all, rather than two checks it cannot be
+   * asked.
+   */
+  async function optionalTable(key: string) {
+    const spec = RELIABILITY_CASE.entities.find((entity) => entity.key === key);
+    if (!spec) return null;
+    try {
+      const [table] = await resolveEntityTables(sql, [spec]);
+      return table ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async function resolve() {
-    const tables = await resolveEntityTables(sql, RELIABILITY_CASE.entities);
-    const transferTable = tables.find((t) => t.key === "transfer");
+    const transferSpec = RELIABILITY_CASE.entities.find((e) => e.key === "transfer")!;
+    // The transfer table is the one entity every project must have: without it
+    // there is nothing to compare against the chain.
+    const [transferTable] = await resolveEntityTables(sql, [transferSpec]);
     if (!transferTable) throw new MissingSchema("no transfer table yet");
     const transferColumns = await columnsOf(sql, transferTable.qualified);
     const block = pick(transferColumns, COLUMNS.block);
@@ -142,7 +165,7 @@ export function observer(sql: SqlRunner) {
     // table is: a tool that has not written its first transfer has not created
     // it either, and a scenario that finds it missing when it should be there
     // says so as a failed check rather than as a crash.
-    const accountTable = tables.find((t) => t.key === "account");
+    const accountTable = await optionalTable("account");
     let account = null;
     if (accountTable) {
       const accountColumns = await columnsOf(sql, accountTable.qualified);
@@ -161,7 +184,7 @@ export function observer(sql: SqlRunner) {
     // The token table is allowed to be absent: a tool that has not yet made
     // its first contract read has not written it, and one scenario is
     // precisely about what happens when that read answers nothing.
-    const tokenTable = tables.find((t) => t.key === "token");
+    const tokenTable = await optionalTable("token");
     let token = null;
     if (tokenTable) {
       const tokenColumns = await columnsOf(sql, tokenTable.qualified);
