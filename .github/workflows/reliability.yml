@@ -69,6 +69,15 @@ on:
     # runner time and nothing about it changes between commits.
     - cron: '0 3 * * 1'
 
+# One run per branch. Pushing again while a run is going leaves the first one
+# measuring code nobody will merge, on seven runners, and leaves two summary
+# jobs racing to write the same section of the same comment. A run on `main`
+# or the schedule is left alone to finish, because what it publishes is the
+# repository's own claim rather than a preview of somebody's branch.
+concurrency:
+  group: reliability-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   scope:
     name: Scope
