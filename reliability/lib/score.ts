@@ -128,6 +128,33 @@ const sum = (tallies: Tally[]): Tally => ({
   asked: tallies.reduce((n, t) => n + t.asked, 0),
 });
 
+/**
+ * One result per tool, from however many jobs measured it.
+ *
+ * CI shards the suite by group - a column of the table per runner - so a tool
+ * arrives as five partial results that each hold the scenarios their shard
+ * ran. Scoring them separately would publish five rows for one tool; scoring
+ * the concatenation publishes the row the suite means. A scenario measured
+ * twice keeps the first result rather than counting twice, which is what a
+ * re-run shard would otherwise do to a denominator.
+ */
+export function mergeToolResults(results: ToolReliability[]): ToolReliability[] {
+  const merged = new Map<string, ToolReliability>();
+  for (const result of results) {
+    const key = `${result.name}|${result.source}`;
+    const seen = merged.get(key);
+    if (!seen) {
+      merged.set(key, { ...result, runs: [...result.runs] });
+      continue;
+    }
+    for (const run of result.runs) {
+      if (seen.runs.some((had) => had.scenario === run.scenario)) continue;
+      seen.runs.push(run);
+    }
+  }
+  return [...merged.values()];
+}
+
 export function scoreTool(tool: ToolReliability): ToolScore {
   const runs = new Map(tool.runs.map((run) => [run.scenario, run]));
   // An unknown scenario or check id is a catalog/runner mismatch. Ignoring one

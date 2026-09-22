@@ -26,9 +26,11 @@ import {
   GROUPS,
   SCENARIOS,
   checkCount,
+  scenariosIn,
 } from "../reliability/lib/scenarios.ts";
 import {
   measuresOf,
+  mergeToolResults,
   scoreTool,
   tallyRank,
   type ScenarioRun,
@@ -183,6 +185,46 @@ for (const [tool, reason] of Object.entries(AWAITING_PROJECT)) {
   );
 }
 
+// ── The CI matrix ──────────────────────────────────────────────────────
+//
+// CI runs one job per tool per column, so the matrix is the suite's coverage
+// written out a second time, in a file nothing else reads. A tool or a group
+// missing from it does not fail anything - it publishes a table with a column
+// or a row quietly absent, which is the failure this suite exists to catch in
+// other people's software.
+
+const WORKFLOW = readFileSync(
+  resolve(ROOT, ".github", "workflows", "reliability.yml"),
+  "utf8"
+);
+
+/** The items of a `key:` block of `- value` lines, in order. */
+function matrixList(key: string): string[] {
+  const block = WORKFLOW.split(`\n        ${key}:\n`)[1];
+  if (!block) return [];
+  const items: string[] = [];
+  for (const line of block.split("\n")) {
+    const item = /^ {10}- (\S+)$/.exec(line);
+    if (!item) break;
+    items.push(item[1]);
+  }
+  return items;
+}
+
+check(
+  "every tool the suite measures has a job",
+  matrixList("tool").join(",") === [...RELIABILITY_TOOLS].sort().join(","),
+  `reliability.yml runs ${matrixList("tool").join(", ") || "nothing"}, ` +
+    `RELIABILITY_TOOLS is ${[...RELIABILITY_TOOLS].sort().join(", ")}`
+);
+
+check(
+  "every column of the table has a job",
+  matrixList("group").join(",") === GROUPS.map((group) => group.id).join(","),
+  `reliability.yml runs ${matrixList("group").join(", ") || "nothing"}, ` +
+    `GROUPS is ${GROUPS.map((group) => group.id).join(", ")}`
+);
+
 // ── Scoring ────────────────────────────────────────────────────────────
 
 const pass = { status: "pass" } as const;
@@ -203,6 +245,41 @@ function perfect(name: string): ToolReliability {
 }
 
 const ALL_CHECKS = SCENARIOS.reduce((n, s) => n + checkCount(s), 0);
+
+// ── Putting a tool's shards back together ──────────────────────────────
+//
+// A tool arrives from CI in five pieces, one per column. Scoring them as they
+// come would publish five rows for one tool, each with a fifth of the checks
+// asked - a table that reads as five different tools all doing badly.
+
+const shards = GROUPS.map((group) => ({
+  ...perfect("Sharded"),
+  runs: perfect("Sharded").runs.filter((run) =>
+    scenariosIn(group.id).some((scenario) => scenario.id === run.scenario)
+  ),
+}));
+const reassembled = mergeToolResults(shards);
+check(
+  "a tool measured a column at a time comes back as one row",
+  reassembled.length === 1 && scoreTool(reassembled[0]).asked === ALL_CHECKS,
+  `${reassembled.length} row(s), ${
+    reassembled[0] ? scoreTool(reassembled[0]).asked : 0
+  } of ${ALL_CHECKS} checks asked`
+);
+
+check(
+  "two tools stay two rows",
+  mergeToolResults([...shards, perfect("Other")]).length === 2
+);
+
+// A shard that ran twice - a re-run of a failed job, uploaded beside the
+// first - must not ask the same scenario's checks twice.
+const doubled = mergeToolResults([...shards, ...shards]);
+check(
+  "a scenario measured twice is counted once",
+  doubled.length === 1 && scoreTool(doubled[0]).asked === ALL_CHECKS,
+  `${doubled[0] ? scoreTool(doubled[0]).asked : 0} of ${ALL_CHECKS} checks asked`
+);
 const flawless = scoreTool(perfect("Perfect"));
 check(
   "a tool that passes everything passes every check",

@@ -4,8 +4,14 @@ name: Reliability
 # they do not.
 #
 # The suite is expensive - nine scenarios, three runs each - so it runs at two
-# depths. Tools run in parallel, one runner each, so a depth costs the wall
-# clock of its slowest tool rather than the sum of seven.
+# depths, and every job is one tool and one column of the table. Nothing is
+# shared between a tool and another tool, or between a column and another
+# column: each scenario generates its own chain and its own database, and each
+# wants a machine to itself anyway, because two of them measure how long a tool
+# takes to react and a neighbour competing for CPU reads as a tool that cannot
+# keep up with the head. So a depth costs the wall clock of its slowest single
+# column rather than the sum of nine scenarios across seven tools - about
+# twenty minutes rather than the better part of an hour.
 #
 # A pull request that touches the suite gets every scenario once per tool,
 # which fills every column of the table and is enough to say what each tool
@@ -70,7 +76,7 @@ on:
     - cron: '0 3 * * 1'
 
 # One run per branch. Pushing again while a run is going leaves the first one
-# measuring code nobody will merge, on seven runners, and leaves two summary
+# measuring code nobody will merge, on thirty-five runners, and leaves two summary
 # jobs racing to write the same section of the same comment. A run on `main`
 # or the schedule is left alone to finish, because what it publishes is the
 # repository's own claim rather than a preview of somebody's branch.
@@ -108,20 +114,18 @@ jobs:
           fi
 
   tools:
-    name: ${{ matrix.tool }}
+    name: ${{ matrix.tool }} / ${{ matrix.group }}
     needs: scope
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
-      # All seven at once. The scenarios do need a machine to themselves -
-      # two of them measure how long a tool takes to react, and a neighbour
-      # competing for CPU would read as a tool that cannot keep up with the
-      # head - and they get one: GitHub gives every matrix job its own runner
-      # VM, so the isolation is the runner's, not the queue's. Serialising
-      # them bought nothing and cost the wall clock of all seven in a row.
-      # A tool that fails is a result rather than a reason to stop measuring
-      # the others.
+      # Every tool against every column, all at once: GitHub gives each matrix
+      # job its own runner VM, so the isolation each scenario needs is the
+      # runner's rather than the queue's, and nothing is gained by making a
+      # tool wait for its own previous scenario. A job that fails is a result
+      # rather than a reason to stop measuring anything else, and the summary
+      # puts a tool's columns back together into one row.
       fail-fast: false
       matrix:
         # Kept in step with RELIABILITY_TOOLS in reliability/lib/tools.ts by
@@ -134,10 +138,18 @@ jobs:
           - sqd-rpc
           - subgraph
           - subquery
-    # Nine scenarios, each with a 45-minute backstop of its own. A healthy
-    # tool is far inside this; it is here so one that hangs cannot hold a
-    # runner all day. GitHub's own ceiling for a job is 360.
-    timeout-minutes: 350
+        # The table's columns, kept in step with GROUPS in
+        # reliability/lib/scenarios.ts by the same test.
+        group:
+          - crash-recovery
+          - reorgs
+          - rpc-faults
+          - data-fidelity
+          - head-latency
+    # At most three scenarios in a job, each with a 45-minute backstop of its
+    # own. A healthy tool is far inside this; it is here so one that hangs
+    # cannot hold a runner all day.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
@@ -154,6 +166,7 @@ jobs:
       - name: Run the reliability suite
         env:
           TOOL: ${{ matrix.tool }}
+          GROUP: ${{ matrix.group }}
           SCENARIOS: ${{ needs.scope.outputs.scenarios }}
           REPEATS: ${{ needs.scope.outputs.repeats }}
           SELECTED: ${{ inputs.tools }}
@@ -167,7 +180,7 @@ jobs:
           # An array, expanded quoted: `repeats` and `scenarios` are strings a
           # dispatch supplies, and an unquoted expansion would let a space or a
           # `*` in one of them add arguments of its own.
-          ARGS=("$TOOL" "--repeats=$REPEATS")
+          ARGS=("$TOOL" "--repeats=$REPEATS" "--group=$GROUP")
           # An `&&` list that comes out false is a failed command under
           # `set -e`, and "no scenarios named" means every scenario - the case
           # a pull request and the weekly run both take.
@@ -180,7 +193,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reliability-${{ matrix.tool }}
+          name: reliability-${{ matrix.tool }}-${{ matrix.group }}
           path: reliability-output.txt
           retention-days: 30
 

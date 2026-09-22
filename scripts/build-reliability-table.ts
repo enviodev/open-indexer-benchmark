@@ -25,7 +25,12 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { measuresOf, scoreTool, type ToolReliability } from "../reliability/lib/score.ts";
+import {
+  measuresOf,
+  mergeToolResults,
+  scoreTool,
+  type ToolReliability,
+} from "../reliability/lib/score.ts";
 import {
   buildReliabilityTable,
   parsePublishedReliability,
@@ -47,7 +52,11 @@ const README = resolve(ROOT, "README.md");
 const rows: ReliabilityRow[] = [];
 const fresh = new Set<string>();
 
-// One directory per job, named after the tool it ran.
+// One directory per job: a tool and the group of scenarios that job ran, since
+// CI shards the suite a column at a time. A tool therefore arrives in several
+// pieces, and they are put back together before anything is scored - a row is
+// a tool, not a runner.
+const collected: ToolReliability[] = [];
 const artifacts = existsSync(RESULTS_DIR) ? readdirSync(RESULTS_DIR).sort() : [];
 for (const dir of artifacts) {
   if (!dir.startsWith("reliability-")) continue;
@@ -58,16 +67,19 @@ for (const dir of artifacts) {
     .filter((line) => line.startsWith("RELIABILITY_RESULT "));
   if (lines.length === 0) continue;
   try {
-    const result: ToolReliability = JSON.parse(
-      lines[lines.length - 1].slice("RELIABILITY_RESULT ".length)
+    collected.push(
+      JSON.parse(lines[lines.length - 1].slice("RELIABILITY_RESULT ".length))
     );
-    const score = scoreTool(result);
-    const row = toReliabilityRow(score, measuresOf(score));
-    rows.push(row);
-    fresh.add(reliabilityRowKey(row));
   } catch (err) {
     console.error(`Could not parse a reliability result from ${file}: ${err}`);
   }
+}
+
+for (const result of mergeToolResults(collected)) {
+  const score = scoreTool(result);
+  const row = toReliabilityRow(score, measuresOf(score));
+  rows.push(row);
+  fresh.add(reliabilityRowKey(row));
 }
 
 const readme = existsSync(README) ? readFileSync(README, "utf8") : "";
