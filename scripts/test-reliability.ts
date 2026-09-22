@@ -355,6 +355,25 @@ check(
   table.includes("[0 / 10 · 2 restarts]") && table.includes("**25 / 35**"),
   table
 );
+// A row already being carried when it was published must still say so after a
+// round trip, or the next run republishes a stale result as a fresh one.
+const carriedTable = buildReliabilityTable([
+  { ...toReliabilityRow(scoreTool(perfect("Stale")), {}), carriedOver: true },
+]);
+const carriedBack = parsePublishedReliability(
+  `${RELIABILITY_START}\n${carriedTable}\n${RELIABILITY_END}`
+);
+check(
+  "a carried row still says it was carried after a round trip",
+  carriedBack[0]?.carriedOver === true,
+  JSON.stringify(carriedBack[0]?.carriedOver)
+);
+check(
+  "and re-rendering it keeps the stale mark",
+  buildReliabilityTable(carriedBack).includes("⚠️"),
+  buildReliabilityTable(carriedBack)
+);
+
 check(
   "every score cell links to its own section",
   GROUPS.every((group) => table.includes(`#${group.id})`)),

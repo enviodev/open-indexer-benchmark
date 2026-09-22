@@ -305,6 +305,10 @@ export function parsePublishedReliability(markdown: string): ReliabilityRow[] {
     if (cells.length < HEAD.length) continue;
     if (cells[0] === HEAD[0] || /^-+$/.test(cells[1] ?? "")) continue;
 
+    // The mark says this row was already being carried when it was published,
+    // and stripping it without keeping it would re-render a stale row as a
+    // fresh one - the row would quietly become a result of the latest run.
+    const carriedOver = /⚠️\s*$/.test(cells[0]);
     const label = cells[0].replace(/\s*⚠️\s*$/, "").trim();
     const name = linkText(label);
     if (!name) continue;
@@ -325,6 +329,7 @@ export function parsePublishedReliability(markdown: string): ReliabilityRow[] {
         ? { passed: Number(tally[1]), asked: Number(tally[2]) }
         : { passed: 0, asked: 0 },
       overallCell,
+      carriedOver,
       // Notes are not carried: they were numbered against the table that
       // published them, and re-rendering would point them at other rows.
       notes: [],
