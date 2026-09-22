@@ -1101,7 +1101,13 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
   // where a whole class of failure hides: a tool that indexes the event it
   // was written around and quietly ignores the other looks perfect in every
   // check above, because every check above reads transfers.
-  const owed = ctx.chain.metadataRows(furthest);
+  // Only the events in blocks there is evidence the tool went past. A tool
+  // that indexed nothing at all has not been shown one, and reading "no rows"
+  // there as a dropped event type publishes the harness's own bad afternoon
+  // as a finding about somebody else's software - which is exactly what it
+  // did the first time this check was run against a tool whose database had
+  // not come up.
+  const owed = ctx.chain.metadataRows(furthest).filter((row) => wentPast(row.block));
   const held = await ctx.observe.metadataRows().catch(() => null);
   if (owed.length === 0) {
     checks["second-event"] = na(
