@@ -158,18 +158,18 @@ const unsupportedRow = {
   cells: {
     tool: "[Rindexer](https://rindexer.xyz)",
     source: "[RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc)",
-    events: "-",
-    blocks: "-",
-    correctness: "-",
+    events: "—",
+    blocks: "—",
+    correctness: "—",
     correctnessDetail: "",
-    dbSize: "-",
+    dbSize: "—",
   },
 };
 const withUnsupported = buildTable([rows[0], unsupportedRow]);
 check(
   "an unsupported tool renders as dashes with a numbered note",
   withUnsupported.includes(
-    "| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | - | - | - | - (1) | - |"
+    "| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (1) | — |"
   ) && withUnsupported.includes("**(1)** Rindexer - no factory contract support"),
   withUnsupported
 );
@@ -184,7 +184,7 @@ const reparsed = parsePublishedTable(
 check(
   "an unsupported row round-trips with its reason",
   reparsed?.unsupported === "no factory contract support" &&
-    reparsed?.cells.events === "-",
+    reparsed?.cells.events === "—",
   JSON.stringify(reparsed)
 );
 

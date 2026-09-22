@@ -20,7 +20,7 @@ export interface ResultCells {
 }
 
 /** A metric cell with no value - an unsupported tool has one in every column. */
-const NO_VALUE = "-";
+const NO_VALUE = "—";
 
 export interface TableRow {
   /** Display name. Not unique - the same tool appears once per data source. */
@@ -70,13 +70,13 @@ export function formatRate(n: number): string {
 
 /** "29.5x slower" relative to the fastest row. */
 function relative(best: number, rate: number): string {
-  if (!Number.isFinite(rate) || rate <= 0) return "-";
+  if (!Number.isFinite(rate) || rate <= 0) return "—";
   // Round to the precision that gets displayed before deciding anything, so a
-  // ratio of 1.04 reads as "-" rather than as the nonsensical "1.0x slower",
+  // ratio of 1.04 reads as "—" rather than as the nonsensical "1.0x slower",
   // and a whole number drops its ".0" - testing `ratio % 1` on a raw rate ratio
   // never fired.
   const ratio = Math.round((best / rate) * 10) / 10;
-  if (ratio <= 1) return "-";
+  if (ratio <= 1) return "—";
   return `${Number.isInteger(ratio) ? ratio : ratio.toFixed(1)}x slower`;
 }
 
@@ -247,7 +247,7 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
 
 /** Human-readable byte size for the result tables. */
 export function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined) return "-";
+  if (bytes === null || bytes === undefined) return "—";
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB", "TB"];
   let value = bytes / 1024;

@@ -21,7 +21,7 @@ import { tallyRank, type Tally, type ToolScore } from "./score.ts";
 /** Where a score links to, relative to the repository README. */
 export const DETAIL_PAGE = "./reliability/README.md";
 
-const NO_VALUE = "-";
+const NO_VALUE = "—";
 
 /**
  * A note and the cell it is about.
@@ -181,7 +181,7 @@ function byReason(
  * link goes to the page that says what the chain is instead.
  */
 function sourceCell(source: string): string {
-  return source === "-" ? source : `[${source}](${SOURCE_URL})`;
+  return source === "—" ? source : `[${source}](${SOURCE_URL})`;
 }
 
 /**

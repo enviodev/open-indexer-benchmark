@@ -66,7 +66,7 @@ export function toTableRow(result: BenchmarkResult): TableRow {
       correctness: correctnessCell(result),
       correctnessDetail: result.correctness === "ok" ? "" : result.correctnessDetail,
       dbSize:
-        size === "-"
+        size === "—"
           ? size
           : `${result.storage} ${result.dbSizeEstimated ? "~" : ""}${size}`,
     },
