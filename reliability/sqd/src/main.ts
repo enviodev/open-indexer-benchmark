@@ -1,8 +1,8 @@
 import { TypeormDatabase } from "@subsquid/typeorm-store";
 import { In } from "typeorm";
-import { Account, Token, Transfer } from "./model";
+import { Account, MetadataUpdate, Token, Transfer } from "./model";
 import { CONTRACT_ADDRESS, processor, rpcClient } from "./processor";
-import { events, functions } from "./abi/ERC20";
+import { events, functions, metadataEvents } from "./abi/ERC20";
 
 /** The byte Postgres will not accept in a text column. */
 const NUL = String.fromCharCode(0);
@@ -59,6 +59,8 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
    * twice in a balance is worse than that, because it succeeds.
    */
   const transfers = new Map<string, Transfer>();
+  /** The second event, keyed the same way and for the same reason. */
+  const metadata = new Map<string, MetadataUpdate>();
   /** Balance changes this batch makes, applied to stored balances at the end. */
   const deltas = new Map<string, bigint>();
   const move = (id: string, delta: bigint) =>
@@ -66,8 +68,23 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
 
   for (const block of ctx.blocks) {
     for (const log of block.logs) {
-      if (log.topics[0] !== events.Transfer.topic) continue;
       const id = `${block.header.height}-${log.logIndex}`;
+      if (log.topics[0] === metadataEvents.MetadataUpdated.topic) {
+        if (metadata.has(id)) continue;
+        const decoded = metadataEvents.MetadataUpdated.decode(log);
+        metadata.set(
+          id,
+          new MetadataUpdate({
+            id,
+            blockNumber: BigInt(block.header.height),
+            logIndex: BigInt(log.logIndex),
+            symbol: clean(decoded.symbol),
+            name: clean(decoded.name),
+          })
+        );
+        continue;
+      }
+      if (log.topics[0] !== events.Transfer.topic) continue;
       if (transfers.has(id)) continue;
 
       const { from, to, value } = events.Transfer.decode(log);
@@ -89,6 +106,7 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
     }
   }
 
+  if (metadata.size > 0) await ctx.store.insert([...metadata.values()]);
   if (transfers.size === 0) return;
 
   // Balances are read, changed and written as a batch. Reading them one at a

@@ -24,6 +24,21 @@ export const account = onchainTable("account", (t) => ({
   balance: t.bigint().notNull(),
 }));
 
+/**
+ * One row per MetadataUpdated log: the second event the chain emits.
+ *
+ * It is here because a tool configured for two events that indexes one of
+ * them looks perfect in every check that reads transfers, which is most of
+ * them.
+ */
+export const metadataUpdate = onchainTable("metadata_update", (t) => ({
+  id: t.text().primaryKey(),
+  blockNumber: t.bigint().notNull(),
+  logIndex: t.bigint().notNull(),
+  symbol: t.text(),
+  name: t.text(),
+}));
+
 /** Written from a contract read whose answers are deliberately awkward. */
 export const token = onchainTable("token", (t) => ({
   id: t.hex().primaryKey(),

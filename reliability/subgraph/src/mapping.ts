@@ -1,6 +1,10 @@
 import { Address, BigInt } from "@graphprotocol/graph-ts";
-import { ERC20, Transfer as TransferEvent } from "../generated/ERC20/ERC20";
-import { Account, Token, Transfer } from "../generated/schema";
+import {
+  ERC20,
+  MetadataUpdated as MetadataUpdatedEvent,
+  Transfer as TransferEvent,
+} from "../generated/ERC20/ERC20";
+import { Account, MetadataUpdate, Token, Transfer } from "../generated/schema";
 
 /**
  * A metadata string as it should be stored, or null.
@@ -84,4 +88,16 @@ export function handleTransfer(event: TransferEvent): void {
   transfer.to = to;
   transfer.amount = event.params.value;
   transfer.save();
+}
+
+/** The other event the chain emits, stored as it arrives. */
+export function handleMetadataUpdated(event: MetadataUpdatedEvent): void {
+  const id =
+    event.block.number.toString() + "-" + event.logIndex.toString();
+  const row = new MetadataUpdate(id);
+  row.blockNumber = event.block.number;
+  row.logIndex = event.logIndex;
+  row.symbol = clean(event.params.symbol);
+  row.name = clean(event.params.name);
+  row.save();
 }

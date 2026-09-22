@@ -60,7 +60,9 @@ export const processor = new EvmBatchProcessor()
   })
   .addLog({
     address: [CONTRACT_ADDRESS],
-    topic0: [erc20Abi.events.Transfer.topic],
+    // Both events. A project configured for one of them cannot be asked
+    // whether it would have indexed the other.
+    topic0: [erc20Abi.events.Transfer.topic, erc20Abi.metadataEvents.MetadataUpdated.topic],
   });
 
 export type Fields = EvmBatchProcessorFields<typeof processor>;

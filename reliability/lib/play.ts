@@ -1095,6 +1095,33 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
     );
   }
 
+  // ── The other event type ──
+  //
+  // Every project here is configured for two events, and the second one is
+  // where a whole class of failure hides: a tool that indexes the event it
+  // was written around and quietly ignores the other looks perfect in every
+  // check above, because every check above reads transfers.
+  const owed = ctx.chain.metadataRows(furthest);
+  const held = await ctx.observe.metadataRows().catch(() => null);
+  if (owed.length === 0) {
+    checks["second-event"] = na(
+      `${noFurther}, so it was never shown a metadata event`
+    );
+  } else if (held === null) {
+    checks["second-event"] = fail(
+      `read ${owed.length} block(s) carrying a metadata event and wrote no table for them`
+    );
+  } else {
+    const missing = owed.filter(
+      (row) => !held.some((stored) => stored.block === row.block && stored.symbol === row.symbol)
+    );
+    checks["second-event"] = verdict(
+      missing.length === 0,
+      `indexed the transfers in ${owed.length} block(s) carrying a metadata event and ` +
+        `stored ${owed.length - missing.length} of those events`
+    );
+  }
+
   // ── And then the log indices near the 32-bit ceiling ──
   if (!ordinary) {
     checks["huge-log-index"] = na(

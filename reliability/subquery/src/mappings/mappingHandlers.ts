@@ -1,6 +1,9 @@
 import assert from "assert";
-import { Account, Token, Transfer } from "../types";
-import type { TransferLog } from "../types/abi-interfaces/Erc20Abi";
+import { Account, MetadataUpdate, Token, Transfer } from "../types";
+import type {
+  MetadataUpdatedLog,
+  TransferLog,
+} from "../types/abi-interfaces/Erc20Abi";
 import { Erc20Abi__factory } from "../types/contracts";
 
 /** The byte Postgres will not accept in a text column. */
@@ -76,5 +79,18 @@ export async function handleTransfer(log: TransferLog): Promise<void> {
     from,
     to,
     amount: value,
+  }).save();
+}
+
+/** The other event the chain emits, stored as it arrives. */
+export async function handleMetadataUpdated(log: MetadataUpdatedLog): Promise<void> {
+  assert(log.args, "No log.args");
+
+  await MetadataUpdate.create({
+    id: `${log.blockNumber}-${log.logIndex}`,
+    blockNumber: BigInt(log.blockNumber),
+    logIndex: BigInt(log.logIndex),
+    symbol: clean(log.args.symbol),
+    name: clean(log.args.name),
   }).save();
 }

@@ -537,6 +537,13 @@ export const SCENARIOS: Scenario[] = [
           "A symbol containing `\\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. Either the tool sanitises it or it fails that row explicitly; what it must not do is fail the whole batch forever and stall the indexer behind one token.",
       },
       {
+        id: "second-event",
+        label: "indexes both of the events it is configured for",
+        failing: "data loss: silently drops a whole event type",
+        detail:
+          "Every project in this suite handles two events - the transfers everything else here is about, and a MetadataUpdated the chain emits every twenty-five blocks - and both are stored. A tool that indexes the event it was written around and ignores the other passes every other check on this page, because every other check reads transfers. It is not a hypothetical failure: an earlier revision of this benchmark caught a no-code project doing exactly this, silently, with no error anywhere.",
+      },
+      {
         id: "huge-log-index",
         label: "a log index near the 32-bit ceiling",
         failing: "data loss: drops logs with a huge log index",

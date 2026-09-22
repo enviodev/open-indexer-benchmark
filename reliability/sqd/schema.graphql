@@ -18,3 +18,12 @@ type Token @entity {
   symbol: String
   name: String
 }
+
+"One row per MetadataUpdated log: the second event the chain emits."
+type MetadataUpdate @entity {
+  id: ID!
+  blockNumber: BigInt!
+  logIndex: BigInt!
+  symbol: String
+  name: String
+}

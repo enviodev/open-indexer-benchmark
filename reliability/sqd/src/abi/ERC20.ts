@@ -13,6 +13,14 @@ export const events = {
   ),
 };
 
+export const metadataEvents = {
+  MetadataUpdated: event(
+    "0x30f5c4b652f95e2a697bda3258896c421eee4f29adce8fe38060f47f7aed91ad",
+    "MetadataUpdated(string,string)",
+    { symbol: p.string, name: p.string }
+  ),
+};
+
 export const functions = {
   symbol: viewFun("0x95d89b41", "symbol()", {}, p.string),
   name: viewFun("0x06fdde03", "name()", {}, p.string),

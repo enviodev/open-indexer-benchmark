@@ -89,3 +89,18 @@ indexer.onEvent(
     });
   }
 );
+
+/** The other event the chain emits, stored as it arrives. */
+indexer.onEvent(
+  { contract: "ERC20", event: "MetadataUpdated" },
+  async ({ event, context }) => {
+    const clean = (value: string) => value.split(NUL).join("") || null;
+    context.MetadataUpdate.set({
+      id: `${event.block.number}-${event.logIndex}`,
+      blockNumber: BigInt(event.block.number),
+      logIndex: BigInt(event.logIndex),
+      symbol: clean(event.params.symbol),
+      name: clean(event.params.name),
+    });
+  }
+);

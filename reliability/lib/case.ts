@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import type { CaseConfig } from "../../cases/lib/case.ts";
 import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
 import type { ChainSpec } from "./chain-mock.ts";
-import { SELECTORS, encodeString } from "./chain-mock.ts";
+import { METADATA_TOPIC, SELECTORS, encodeString } from "./chain-mock.ts";
 
 export const RELIABILITY_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -100,7 +100,7 @@ export const RELIABILITY_CASE: CaseConfig = {
   contract: TOKEN,
   startBlock: START_BLOCK,
   verifyEndBlock: NO_END_BLOCK,
-  topics: [TRANSFER_TOPIC],
+  topics: [TRANSFER_TOPIC, METADATA_TOPIC],
 
   entities: [
     {
@@ -135,6 +135,25 @@ export const RELIABILITY_CASE: CaseConfig = {
         // Resolution uses these to pick between two tables that both match a
         // name candidate, so they earn their place even though the reliability
         // checks read the columns themselves rather than a checksum of them.
+        { role: "symbol", kind: "text", candidates: ["symbol"] },
+        { role: "name", kind: "text", candidates: ["name", "token_name"] },
+      ],
+    },
+    {
+      // The second event. Every project is configured for both, so a project
+      // whose metadata table is missing rows for blocks whose transfers it
+      // stored has dropped an event type - which is a thing indexers really
+      // do, silently, and which no amount of looking at transfers can see.
+      key: "metadata",
+      label: "metadata updates",
+      tableCandidates: [
+        "MetadataUpdate",
+        "metadata_update",
+        "MetadataUpdated",
+        "metadata_updated",
+        "metadata",
+      ],
+      fields: [
         { role: "symbol", kind: "text", candidates: ["symbol"] },
         { role: "name", kind: "text", candidates: ["name", "token_name"] },
       ],

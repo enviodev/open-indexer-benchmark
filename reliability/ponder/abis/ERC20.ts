@@ -1,4 +1,4 @@
-// Only what the reliability case touches: the Transfer log it indexes and the
+// Only what the reliability case touches: the two events it indexes and the
 // two metadata reads whose answers are the point of one of the scenarios.
 export const ERC20Abi = [
   {
@@ -8,6 +8,14 @@ export const ERC20Abi = [
       { indexed: true, name: "from", type: "address" },
       { indexed: true, name: "to", type: "address" },
       { indexed: false, name: "value", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "MetadataUpdated",
+    inputs: [
+      { indexed: false, name: "symbol", type: "string" },
+      { indexed: false, name: "name", type: "string" },
     ],
   },
   {

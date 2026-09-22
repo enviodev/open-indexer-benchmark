@@ -1,5 +1,5 @@
 import { ponder } from "ponder:registry";
-import { account, token, transfer } from "ponder:schema";
+import { account, metadataUpdate, token, transfer } from "ponder:schema";
 
 /** The byte Postgres will not accept in a text column. */
 const NUL = String.fromCharCode(0);
@@ -68,5 +68,23 @@ ponder.on("ERC20:Transfer", async ({ event, context }) => {
     from,
     to,
     amount: value,
+  });
+});
+
+/**
+ * The other event the chain emits.
+ *
+ * Nothing here is clever, and that is the point: a project that is configured
+ * for two events has to store both, and a tool that quietly indexes only the
+ * one the project was written around is what this exists to make visible.
+ */
+ponder.on("ERC20:MetadataUpdated", async ({ event, context }) => {
+  const clean = (value: string) => value.split(NUL).join("") || null;
+  await context.db.insert(metadataUpdate).values({
+    id: `${event.log.blockNumber}-${event.log.logIndex}`,
+    blockNumber: event.log.blockNumber,
+    logIndex: BigInt(event.log.logIndex),
+    symbol: clean(event.args.symbol),
+    name: clean(event.args.name),
   });
 });

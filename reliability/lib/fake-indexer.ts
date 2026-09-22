@@ -33,6 +33,10 @@
 //                       reaches for a JSON-RPC method the generated chain does
 //                       not implement, which stands for every real indexer
 //                       that uses something nobody thought to mock
+//   drops-second-event  handles the transfers and ignores the other event the
+//                       chain emits, which is what an indexer that was written
+//                       around one event and configured for two really does -
+//                       silently, with nothing in any log
 //   no-token-table      writes no token row at all, standing in for a project
 //                       that cannot read contract state - a no-code rindexer
 //                       project is exactly this, and the checks that read a
@@ -45,6 +49,30 @@
 import type { DriverFactory, Snapshot } from "../../cases/lib/drivers/index.ts";
 import { psql, sleep } from "../../cases/lib/process.ts";
 import { START_BLOCK, TOKEN } from "./case.ts";
+import { METADATA_TOPIC } from "./chain-mock.ts";
+import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
+
+/**
+ * The two strings a MetadataUpdated event carries.
+ *
+ * Hand-decoded rather than pulled from a library: this double exists to be
+ * the simplest correct implementation, and a decoder is ten lines - the head
+ * is two offsets, and each tail is a length and its padded bytes.
+ */
+/** Quoted for SQL, with the NUL Postgres refuses taken out. */
+function sanitise(value: string): string {
+  return value.replace(new RegExp(String.fromCharCode(0), "g"), "").replace(/'/g, "''");
+}
+
+function decodeTwoStrings(data: string): [string, string] {
+  const body = data.replace(/^0x/, "");
+  const at = (word: number) => Number(BigInt(`0x${body.slice(word * 64, word * 64 + 64)}`)) * 2;
+  const read = (offset: number) => {
+    const length = Number(BigInt(`0x${body.slice(offset, offset + 64)}`));
+    return Buffer.from(body.slice(offset + 64, offset + 64 + length * 2), "hex").toString("utf8");
+  };
+  return [read(at(0)), read(at(1))];
+}
 
 export type Defect =
   | "asks-for-an-unserved-method"
@@ -53,6 +81,7 @@ export type Defect =
   | "checkpoint-ahead"
   | "double-apply"
   | "die-on-db-error"
+  | "drops-second-event"
   | "stuck-after-db-error"
   | "no-sanitise";
 
@@ -138,10 +167,23 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       // is right and one that is doubled - the insert absorbs the second row
       // and the arithmetic does not.
       const seen = new Set<string>();
+      const metadata: string[] = [];
       for (const log of logs) {
         const identity = `${BigInt(log.blockNumber)}-${BigInt(log.logIndex)}`;
         if (seen.has(identity)) continue;
         seen.add(identity);
+        if (log.topics[0] === METADATA_TOPIC) {
+          if (defects.has("drops-second-event")) continue;
+          const block = Number(BigInt(log.blockNumber));
+          const logIndex = BigInt(log.logIndex).toString();
+          const [symbol, name] = decodeTwoStrings(log.data);
+          metadata.push(
+            `('${block}-${logIndex}', ${block}, ${logIndex}, ` +
+              `'${sanitise(symbol)}', '${sanitise(name)}')`
+          );
+          continue;
+        }
+        if (log.topics[0] !== TRANSFER_TOPIC) continue;
         const block = Number(BigInt(log.blockNumber));
         const logIndex = BigInt(log.logIndex).toString();
         const from = `0x${log.topics[1].slice(-40)}`;
@@ -177,6 +219,12 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
             `ON CONFLICT (id) DO UPDATE SET balance = account.balance + EXCLUDED.balance`
         );
       }
+      if (metadata.length > 0) {
+        statements.push(
+          `INSERT INTO metadata_update (id, block_number, log_index, symbol, name) ` +
+            `VALUES ${metadata.join(",")} ON CONFLICT (id) DO NOTHING`
+        );
+      }
       if (!skipCheckpoint) statements.push(`UPDATE progress SET block = ${upTo}`);
       statements.push("COMMIT");
       await sqlAlive(gen, statements.join("; "));
@@ -194,6 +242,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
           // Balances are rebuilt from the transfers that survive rather than
           // decremented, which is the simplest thing that is definitely right.
           `DELETE FROM transfer WHERE block_number > ${height}`,
+          `DELETE FROM metadata_update WHERE block_number > ${height}`,
           `DELETE FROM block WHERE number > ${height}`,
           "DELETE FROM account",
           `INSERT INTO account (id, balance) ` +
@@ -385,10 +434,13 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       async prepare() {
         await sql(
           [
-            "DROP TABLE IF EXISTS transfer, account, token, progress, block, stuck",
+            "DROP TABLE IF EXISTS transfer, account, token, metadata_update, progress, " +
+              "block, stuck",
             `CREATE TABLE transfer (id text PRIMARY KEY, block_number bigint, ` +
               `log_index numeric, "from" text, "to" text, amount numeric)`,
             "CREATE TABLE account (id text PRIMARY KEY, balance numeric)",
+            `CREATE TABLE metadata_update (id text PRIMARY KEY, block_number bigint, ` +
+              `log_index numeric, symbol text, name text)`,
             ...(defects.has("no-token-table")
               ? []
               : ["CREATE TABLE token (id text PRIMARY KEY, symbol text, name text)"]),

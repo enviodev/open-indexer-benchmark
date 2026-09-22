@@ -105,6 +105,14 @@ export class MissingSchema extends Error {}
  * envio `start -r`. A cached table name that no longer exists would turn a
  * successful recovery into a scenario-wide failure.
  */
+/** One metadata event as a tool stored it. */
+export interface StoredMetadata {
+  block: number;
+  logIndex: number;
+  symbol: string;
+  name: string;
+}
+
 export function observer(sql: SqlRunner) {
   let resolved: {
     transfer: {
@@ -118,6 +126,14 @@ export function observer(sql: SqlRunner) {
     };
     account: { qualified: string; predicate: string; address: string; balance: string } | null;
     token: { qualified: string; predicate: string; symbol: string; name: string | null } | null;
+    metadata: {
+      qualified: string;
+      predicate: string;
+      block: string;
+      logIndex: string;
+      symbol: string;
+      name: string;
+    } | null;
   } | null = null;
 
   /**
@@ -198,6 +214,28 @@ export function observer(sql: SqlRunner) {
         };
       }
     }
+    // The second event's table, absent in the same way: a tool that has not
+    // reached a block carrying one has not created it, which is not the same
+    // finding as a tool that read the block and stored only its transfers.
+    const metadataTable = await optionalTable("metadata");
+    let metadata = null;
+    if (metadataTable) {
+      const metadataColumns = await columnsOf(sql, metadataTable.qualified);
+      const metaBlock = pick(metadataColumns, COLUMNS.block);
+      const metaIndex = pick(metadataColumns, COLUMNS.logIndex);
+      const metaSymbol = pick(metadataColumns, COLUMNS.symbol);
+      const metaName = pick(metadataColumns, COLUMNS.name);
+      if (metaBlock && metaIndex && metaSymbol && metaName) {
+        metadata = {
+          qualified: metadataTable.qualified,
+          predicate: metadataTable.predicate,
+          block: metaBlock,
+          logIndex: metaIndex,
+          symbol: metaSymbol,
+          name: metaName,
+        };
+      }
+    }
     resolved = {
       transfer: {
         qualified: transferTable.qualified,
@@ -210,6 +248,7 @@ export function observer(sql: SqlRunner) {
       },
       account,
       token,
+      metadata,
     };
     return resolved;
   }
@@ -250,6 +289,39 @@ export function observer(sql: SqlRunner) {
               amount: BigInt(amount || "0"),
               from: from ?? "",
               to: to ?? "",
+            };
+          });
+      });
+    },
+
+    /**
+     * Every metadata event the tool holds, oldest first - or null when it has
+     * no table for them at all.
+     *
+     * Null and empty are different findings. A tool that has not reached a
+     * block carrying one of these events has neither; a tool that read such a
+     * block and stored only its transfers has the table and no rows in it.
+     */
+    metadataRows(): Promise<StoredMetadata[] | null> {
+      return withSchema(async ({ metadata }) => {
+        if (!metadata) return null;
+        const out = await sql(
+          `SELECT ${metadata.block}::text, ${metadata.logIndex}::text, ` +
+            `${metadata.symbol}, ${metadata.name} ` +
+            `FROM ${metadata.qualified}${whereClause(metadata.predicate)} ` +
+            `ORDER BY ${metadata.block}::numeric, ${metadata.logIndex}::numeric`
+        );
+        return out
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const [block, logIndex, symbol, name] = line.split("|");
+            return {
+              block: Number(block),
+              logIndex: Number(logIndex),
+              symbol: symbol ?? "",
+              name: name ?? "",
             };
           });
       });

@@ -170,7 +170,26 @@ const EXPECTATIONS: Expectation[] = [
       "during-backfill",
     ],
   },
-  { scenario: "awkward-values", passes: ["null-symbol", "nul-byte", "huge-log-index", "max-uint", "empty-blocks"] },
+  {
+    scenario: "awkward-values",
+    passes: [
+      "null-symbol",
+      "nul-byte",
+      "huge-log-index",
+      "max-uint",
+      "empty-blocks",
+      "second-event",
+    ],
+  },
+  // A tool that indexes the transfers and ignores the other event it is
+  // configured for: every other check in the scenario passes, which is what
+  // makes this one worth having.
+  {
+    scenario: "awkward-values",
+    defects: ["drops-second-event"],
+    fails: ["second-event"],
+    passes: ["max-uint", "empty-blocks"],
+  },
   { scenario: "process-kill", passes: ["resumes", "no-gap", "no-double-apply", "atomic-batch"] },
   { scenario: "graceful-shutdown", passes: ["exits-clean", "flushes"] },
   { scenario: "rpc-limits", passes: ["splits-range", "splits-results", "recovers-width"] },

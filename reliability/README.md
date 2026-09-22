@@ -353,7 +353,7 @@ The failure nobody plans for, because it should not happen and does: a load-bala
 
 Whether values that are unusual but entirely legal - an empty symbol, a log index near the 32-bit ceiling - are stored, refused, or fatal.
 
-One scenario, 5 checks.
+One scenario, 6 checks.
 
 <a id="awkward-values"></a>
 
@@ -367,6 +367,7 @@ Chain data is not the tidy subset a schema was designed around. A token's `symbo
 | --- | --- |
 | an empty symbol() is stored as null | `symbol()` returns `0x` - no data, which is what a token that does not implement it does. The row must exist with a null symbol. Decoding empty returndata as an empty string is acceptable; crashing, skipping the row, or storing the literal text "undefined" is not. |
 | a NUL byte in a string does not kill the write | A symbol containing `\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. Either the tool sanitises it or it fails that row explicitly; what it must not do is fail the whole batch forever and stall the indexer behind one token. |
+| indexes both of the events it is configured for | Every project in this suite handles two events - the transfers everything else here is about, and a MetadataUpdated the chain emits every twenty-five blocks - and both are stored. A tool that indexes the event it was written around and ignores the other passes every other check on this page, because every other check reads transfers. It is not a hypothetical failure: an earlier revision of this benchmark caught a no-code project doing exactly this, silently, with no error anywhere. |
 | a log index near the 32-bit ceiling | Logs with index `0xffffffe2`, as some providers emit for synthetic logs. Storing it in a signed 32-bit column overflows and halts the backfill outright - the failure reported in ponder-sh/ponder#2373. The check is that the range finishes and the index round-trips. |
 | an unsigned 256-bit maximum survives the round trip | A transfer of 2^256-1. The stored value must equal it exactly. Anything that goes through a double loses precision quietly, which is worse than failing. |
 | long empty stretches advance progress | Five hundred blocks with no logs at all. The tool has to come out the other side: either its own position moves through them, or it holds rows from beyond them. A tool that does neither has stalled on a stretch of chain that asked nothing of it. Both answers count because the benchmark reads position from the rows written for two of these tools, which is the harness's choice rather than theirs. |

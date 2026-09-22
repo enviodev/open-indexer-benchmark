@@ -20,6 +20,7 @@ dataSources:
       language: wasm/assemblyscript
       entities:
         - Account
+        - MetadataUpdate
         - Token
         - Transfer
       abis:
@@ -28,4 +29,8 @@ dataSources:
       eventHandlers:
         - event: Transfer(indexed address,indexed address,uint256)
           handler: handleTransfer
+        # The second event. A project configured for one of them cannot be
+        # asked whether it would have indexed the other.
+        - event: MetadataUpdated(string,string)
+          handler: handleMetadataUpdated
       file: ./src/mapping.ts

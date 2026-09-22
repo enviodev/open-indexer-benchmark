@@ -5,6 +5,9 @@ contracts:
   - name: ERC20
     events:
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+      # The second event. A project configured for one event cannot be asked
+      # whether it would have indexed the other.
+      - event: "MetadataUpdated(string symbol, string name)"
 chains:
   # The generated chain answers as mainnet: several tools treat an unknown
   # chain id as a configuration error rather than as a chain.

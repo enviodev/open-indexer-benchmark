@@ -36,6 +36,10 @@ contracts:
     abi: ./abis/ERC20.abi.json
     include_events:
       - Transfer
+      # The second event. A no-code project gets a table per included event,
+      # so this is the whole implementation - and a tool that is configured
+      # for two events and stores one is exactly what this is here to catch.
+      - MetadataUpdated
     tables:
       # The running balance. The only thing here that can come out wrong
       # without a row being missing, which is what makes a replayed batch or an

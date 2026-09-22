@@ -43,3 +43,17 @@ type Token @entity(immutable: false) {
   symbol: String
   name: String
 }
+
+"""
+One row per MetadataUpdated log - the second event the chain emits.
+
+A tool configured for two events that indexes one of them passes every check
+that reads transfers, which is most of them.
+"""
+type MetadataUpdate @entity(immutable: false) {
+  id: ID!
+  blockNumber: BigInt!
+  logIndex: BigInt!
+  symbol: String
+  name: String
+}

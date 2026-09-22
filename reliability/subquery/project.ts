@@ -58,6 +58,15 @@ const project: EthereumProject = {
               ],
             },
           },
+          // The second event. A project configured for one of them cannot be
+          // asked whether it would have indexed the other.
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleMetadataUpdated",
+            filter: {
+              topics: ["MetadataUpdated(string symbol, string name)"],
+            },
+          },
         ],
       },
     },

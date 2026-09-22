@@ -22,6 +22,25 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "symbol",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      }
+    ],
+    "name": "MetadataUpdated",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "symbol",
     "outputs": [

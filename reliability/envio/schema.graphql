@@ -13,6 +13,20 @@ type Account {
   balance: BigInt!
 }
 
+"""
+One row per MetadataUpdated log - the second event the chain emits.
+
+A tool configured for two events that indexes one of them passes every check
+that reads transfers, which is most of them.
+"""
+type MetadataUpdate {
+  id: ID!
+  blockNumber: BigInt!
+  logIndex: BigInt!
+  symbol: String
+  name: String
+}
+
 "Written from a contract read whose answers are deliberately awkward."
 type Token {
   id: ID!
