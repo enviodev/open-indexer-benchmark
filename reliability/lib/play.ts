@@ -1118,13 +1118,19 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
   // where a whole class of failure hides: a tool that indexes the event it
   // was written around and quietly ignores the other looks perfect in every
   // check above, because every check above reads transfers.
-  // Only the events in blocks there is evidence the tool went past. A tool
-  // that indexed nothing at all has not been shown one, and reading "no rows"
-  // there as a dropped event type publishes the harness's own bad afternoon
-  // as a finding about somebody else's software - which is exactly what it
-  // did the first time this check was run against a tool whose database had
-  // not come up.
-  const owed = ctx.chain.metadataRows(furthest).filter((row) => wentPast(row.block));
+  // Only the events in blocks whose transfers the tool actually stored.
+  //
+  // "Went past the block" is not good enough, and the difference is not
+  // theoretical: a tool running behind on a slow machine had stored transfers
+  // up to one height with gaps below it, and counting every metadata event
+  // under that height said it had dropped twelve events it had never been
+  // shown. What the check means is the narrow thing - for a block you
+  // indexed, did you store both of the events in it - so it asks only about
+  // blocks the tool demonstrably read.
+  const indexedBlocks = new Set(stored.map((row) => row.block));
+  const owed = ctx.chain
+    .metadataRows(furthest)
+    .filter((row) => indexedBlocks.has(row.block));
   const held = await ctx.observe.metadataRows().catch(() => null);
   if (owed.length === 0) {
     checks["second-event"] = na(
@@ -1132,16 +1138,17 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
     );
   } else if (held === null) {
     checks["second-event"] = fail(
-      `read ${owed.length} block(s) carrying a metadata event and wrote no table for them`
+      `stored the transfers in ${owed.length} block(s) that also carried a metadata ` +
+        `event, and wrote no table for those events at all`
     );
   } else {
     const missing = owed.filter(
-      (row) => !held.some((stored) => stored.block === row.block && stored.symbol === row.symbol)
+      (row) => !held.some((entry) => entry.block === row.block && entry.symbol === row.symbol)
     );
     checks["second-event"] = verdict(
       missing.length === 0,
-      `indexed the transfers in ${owed.length} block(s) carrying a metadata event and ` +
-        `stored ${owed.length - missing.length} of those events`
+      `stored the transfers in ${owed.length} block(s) that also carried a metadata ` +
+        `event, and ${owed.length - missing.length} of those events`
     );
   }
 
