@@ -235,7 +235,12 @@ jobs:
           # Counting non-empty lines, not newlines: the file has no trailing
           # one, so `wc -l` reports a tool short and every run would claim a
           # job had failed.
-          REPORTED=$(grep -c . /tmp/reliability-reported.txt 2>/dev/null || echo 0)
+          #
+          # The fallback is on the assignment, not inside it: `grep -c` on an
+          # empty file prints 0 AND exits 1, so `$(grep -c . f || echo 0)` is
+          # two lines, and `[ "0\n0" -eq 0 ]` is an error rather than true.
+          # That is how a run with no results published a table of dashes.
+          REPORTED=$(grep -c . /tmp/reliability-reported.txt 2>/dev/null) || REPORTED=0
           MISSING=$(( $(echo $TOOLS | wc -w) - REPORTED ))
 
           # A run where nothing reported has nothing to say, and saying it
@@ -280,7 +285,8 @@ jobs:
           # publish that as the repository's claim. The table builder carries
           # rows forward from the README, so a partial run is fine; a run with
           # no results at all is not a run.
-          if [ "$(grep -c . /tmp/reliability-reported.txt 2>/dev/null || echo 0)" -eq 0 ]; then
+          REPORTED=$(grep -c . /tmp/reliability-reported.txt 2>/dev/null) || REPORTED=0
+          if [ "$REPORTED" -eq 0 ]; then
             echo "No tool reported a result, so the README is left as it is."
             exit 0
           fi
