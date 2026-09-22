@@ -84,10 +84,21 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
   return null;
 }
 
-function scoreCell(group: string, tally: Tally, headline: string | null): string {
-  const link = `${DETAIL_PAGE}#${group}`;
-  if (tally.asked === 0) return `[${NO_VALUE}](${link})`;
-  return `[${tally.passed} / ${tally.asked}${headline ? ` · ${headline}` : ""}](${link})`;
+/**
+ * A tick for a column a tool passed whole, the tally for one it did not.
+ *
+ * Reading a row of "10 / 10, 6 / 6, 8 / 10" means dividing five fractions to
+ * find the one that is not one. A tick is nothing to read, so the fraction
+ * left among them is the finding, and it is the only thing the eye stops on.
+ *
+ * The link lives on the column heading rather than in every cell: the same URL
+ * seven times a column is most of the table's width and none of its meaning.
+ */
+function scoreCell(tally: Tally, headline: string | null): string {
+  const measure = headline ? ` ${headline}` : "";
+  if (tally.asked === 0) return NO_VALUE;
+  if (tally.passed === tally.asked) return `✅${measure}`;
+  return `**${tally.passed}/${tally.asked}**${measure}`;
 }
 
 /**
@@ -110,7 +121,7 @@ export function toReliabilityRow(
   for (const group of GROUPS) {
     const scored = score.groups.find((g) => g.group === group.id);
     const tally: Tally = scored ?? { passed: 0, asked: 0 };
-    cells[group.id] = scoreCell(group.id, tally, headlineOf(group.id, measures));
+    cells[group.id] = scoreCell(tally, headlineOf(group.id, measures));
 
     if (tally.asked === 0) {
       const why = scored?.scenarios
@@ -118,24 +129,25 @@ export function toReliabilityRow(
         .find(Boolean);
       notes.push({
         group: group.id,
-        text: `${group.title} was not measured${why ? `: ${why}` : ""}`,
+        text: `not measured${why ? ` - ${why}` : ""}`,
       });
       continue;
     }
 
-    // Every cell below full marks says why, check by check. A reader looking
-    // at "5 / 6" should not have to open another page to learn which one, and
-    // a check that was never asked is part of that answer too: it is missing
-    // from the denominator, which is invisible in the cell.
+    // Every cell below full marks says what broke, in the words of somebody
+    // who has to live with it rather than the words of the assertion. A
+    // reader looking at "5 / 6" should not have to open another page to learn
+    // which one, and a check that was never asked belongs here too: it is
+    // missing from the denominator, which is invisible in the cell.
     const failures = scored?.scenarios.flatMap((s) => s.failures) ?? [];
     const skipped = scored?.scenarios.flatMap((s) => s.skipped) ?? [];
     if (failures.length > 0 || skipped.length > 0) {
       notes.push({
         group: group.id,
-        text: [
-          ...byReason(failures).map(([labels, why]) => `${labels} - ${why}`),
-          ...byReason(skipped).map(([labels, why]) => `${labels} was not asked - ${why}`),
-        ].join("; "),
+        text: shorten([
+          ...unique(failures.map(phraseFor)),
+          ...unique(skipped.map((skip) => `${skip.label} was not asked`)),
+        ]),
       });
     }
   }
@@ -153,22 +165,38 @@ export function toReliabilityRow(
 }
 
 /**
- * Checks grouped by the reason they give, so a column that failed ten ways for
- * one reason says the reason once. A tool that exited when its database went
- * away fails every check in the group with that same sentence, and repeating
- * it ten times buries the one time it differs.
+ * What a failed check says under the table, and whether it said it every time.
+ *
+ * A check that failed on some repeats and not others is not a finding about
+ * the tool, it is a finding about the harness: something in it is timing
+ * dependent. Averaging that into a flat sentence is how a broken case gets
+ * missed, so the count travels with the phrase and whoever reads the table
+ * can see there is a race to go and fix.
  */
-function byReason(
-  checks: { label: string; detail: string }[]
-): [labels: string, reason: string][] {
-  const byDetail = new Map<string, string[]>();
-  for (const check of checks) {
-    byDetail.set(check.detail, [...(byDetail.get(check.detail) ?? []), check.label]);
-  }
-  return [...byDetail].map(([detail, labels]) => [
-    labels.map((label) => `**${label}**`).join(", "),
-    detail,
-  ]);
+function phraseFor(failure: { failing: string; detail: string }): string {
+  const some = /\(failed (\d+) of (\d+) runs\)/.exec(failure.detail);
+  return some ? `${failure.failing} (only ${some[1]} of ${some[2]} runs)` : failure.failing;
+}
+
+/** In order, without repeats: two checks failing the same way say it once. */
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+/**
+ * The first few, and a count of the rest.
+ *
+ * A tool that exits the moment its database blinks fails all ten crash
+ * recovery checks, and printing ten phrases for one behaviour is a wall of
+ * text that hides the tools with one real problem. Three is enough to see
+ * what kind of failure it is; the count says how wide it goes.
+ */
+const SHOWN = 3;
+
+function shorten(phrases: string[]): string {
+  if (phrases.length <= SHOWN) return phrases.join("; ");
+  const rest = phrases.length - SHOWN;
+  return `${phrases.slice(0, SHOWN).join("; ")}, and ${rest} more`;
 }
 
 /**
@@ -181,7 +209,7 @@ function byReason(
  * link goes to the page that says what the chain is instead.
  */
 function sourceCell(source: string): string {
-  return source === "—" ? source : `[${source}](${SOURCE_URL})`;
+  return source;
 }
 
 /**
@@ -215,7 +243,16 @@ const SOURCE_URL =
 /** The key a row-level note is filed under, which no group uses. */
 const OVERALL = "overall";
 
-const HEAD = ["tool", "source", ...GROUPS.map((g) => g.title), OVERALL];
+/**
+ * The column headings carry the links, once each, rather than every cell
+ * carrying the same one.
+ */
+const HEAD = [
+  "tool",
+  `[source](${SOURCE_URL})`,
+  ...GROUPS.map((g) => `[${g.title}](${DETAIL_PAGE}#${g.id})`),
+  OVERALL,
+];
 
 export function buildReliabilityTable(rows: ReliabilityRow[]): string {
   if (rows.length === 0) return "_No reliability results collected._";
@@ -233,28 +270,34 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
     `| ${HEAD.join(" | ")} |`,
     `| ${HEAD.map(() => "---").join(" | ")} |`,
   ];
+  /**
+   * One line per tool, naming the column and then what broke in it.
+   *
+   * Numbered references were worse at the one job they had: a reader who
+   * wants to know what a tool does badly had to hold a number in their head,
+   * find it below, and do that again for each of five columns. A tool's
+   * failures are one thought, so they are one line, and the tools that fail
+   * nothing are simply not in the list.
+   */
   const notes: string[] = [];
   for (const row of sorted) {
-    /** Reference numbers by the cell that carries them. */
-    const marks = new Map<string, string[]>();
-    for (const note of row.notes) {
-      notes.push(`**(${notes.length + 1})** ${row.name} - ${note.text}`);
-      const on = note.group ?? OVERALL;
-      marks.set(on, [...(marks.get(on) ?? []), String(notes.length)]);
-    }
-    const mark = (cell: string, on: string) => {
-      const refs = marks.get(on);
-      return refs ? `${cell} (${refs.join(", ")})` : cell;
-    };
     const name = row.carriedOver ? `${row.tool} ⚠️` : row.tool;
     lines.push(
       `| ${[
         name,
         row.source,
-        ...GROUPS.map((g) => mark(row.cells[g.id] ?? NO_VALUE, g.id)),
-        mark(row.overallCell, OVERALL),
+        ...GROUPS.map((g) => row.cells[g.id] ?? NO_VALUE),
+        row.overallCell,
       ].join(" | ")} |`
     );
+    if (row.notes.length === 0) continue;
+    const said = row.notes
+      .map((note) => {
+        const group = GROUPS.find((g) => g.id === note.group);
+        return group ? `*${group.title}*: ${note.text}` : note.text;
+      })
+      .join(" · ");
+    notes.push(`**${row.name}** - ${said}`);
   }
   if (notes.length > 0) lines.push("", ...notes.map((note) => `> ${note}`));
 

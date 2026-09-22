@@ -603,13 +603,14 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
 
 export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
   const checks: Record<string, Outcome> = {};
+  const measures: Record<string, number> = {};
 
   ctx.chain.advance(600);
   await ctx.launch();
   if (!(await reaches(ctx, 60))) {
     return {
       checks: { survives: na("the tool indexed nothing before the faults began") },
-      measures: {},
+      measures,
     };
   }
 
@@ -653,13 +654,20 @@ export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
     // began has nothing to index when they stop, and would be failed for
     // being finished.
     ctx.chain.advance(50);
+    // Waiting the scenario's full patience rather than a short fixed window.
+    // A tool backing off exponentially can take minutes to look again, and
+    // cutting the wait short fails it for being slow rather than broken - how
+    // slow is the measure below.
+    const healedAt = performance.now();
+    const movedOn = await ctx.waitFor(
+      "indexing again once the node recovered",
+      async () => (await ctx.observe.count().catch(() => 0)) > before,
+      ctx.patience.reactMs
+    );
+    measures["resume-seconds"] = Math.round((performance.now() - healedAt) / 1_000);
     checks["resumes"] = verdict(
-      await ctx.waitFor(
-        "indexing again once the node recovered",
-        async () => (await ctx.observe.count().catch(() => 0)) > before,
-        30_000
-      ),
-      "indexed nothing for thirty seconds after the node recovered"
+      movedOn,
+      `indexed nothing for ${Math.round(ctx.patience.reactMs / 1_000)}s after the node recovered`
     );
   }
 
@@ -670,7 +678,7 @@ export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
     result.missing.length === 0 && result.wrong.length === 0,
     `a failed request cost data: ${result.summary}`
   );
-  return { checks, measures: {} };
+  return { checks, measures };
 }
 
 export async function rpcLimits(ctx: Ctx): Promise<ScenarioResult> {

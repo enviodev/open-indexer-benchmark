@@ -284,9 +284,15 @@ Providers rate limit, time out, return 502s from a load balancer, and occasional
 | check | what a pass means |
 | --- | --- |
 | survives every fault without exiting | The process is still running after all four windows. The stall is the one that catches tools out: an error comes back and can be reacted to, while a request that is simply never answered needs a client-side timeout to exist at all. |
-| resumes promptly once the node recovers | Progress moves again within thirty seconds of the endpoint healing. A tool that backed off exponentially without a ceiling is technically fine and practically down. |
+| resumes promptly once the node recovers | Progress moves again within the scenario's patience of the endpoint healing. A tool that backed off exponentially without a ceiling is technically fine and practically down; how long it took is reported as a measure rather than judged at an arbitrary cut. |
 | loses nothing to a failed request | The finished range matches ground truth. A range whose request failed has to be retried, not skipped - and a tool that treats an error body as an empty result set records the blocks it never read as blocks that held nothing. |
 | backs off rather than hammering | Requests during a fault window stay under twenty times the tool's own healthy rate. Not a correctness property, but the difference between a provider that recovers and one that stays down because every indexer pointed at it is retrying in a tight loop. |
+
+Reported alongside the score, and not part of it:
+
+| measure | unit | what it says |
+| --- | --- | --- |
+| time to resume | s | Seconds from the endpoint answering again to the tool's progress moving again. This is where a backoff with no ceiling shows up: the tool is not broken, it is just not looking yet. |
 
 <a id="rpc-limits"></a>
 

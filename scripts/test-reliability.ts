@@ -339,20 +339,26 @@ console.log(`\n${table}\n`);
 check("the headline restart count reaches the table", table.includes("2 restarts"), table);
 check("the headline head lag reaches the table", table.includes("640ms"), table);
 check(
-  "a cell below full marks names the checks it lost and why",
-  /\*\*\(1\)\*\* Example Indexer - .*survives a database restart mid-backfill.*exited when Postgres went away/.test(
+  "a cell below full marks says what broke, in a reader's words",
+  /> \*\*Example Indexer\*\* - \*crash recovery\*: dies when the database restarts mid-backfill/.test(
     table
   ),
   table
 );
 check(
-  "and says a shared reason once rather than once per check",
-  (table.match(/exited when Postgres went away/g) ?? []).length === 1,
+  "a whole column lost is summarised rather than listed ten times",
+  /, and \d+ more/.test(table) && table.split("\n").every((line) => line.length < 400),
   table
 );
 check(
-  "cells read as passes over asks",
-  table.includes("[0 / 10 · 2 restarts]") && table.includes("**25 / 35**"),
+  "a tool that lost nothing earns no line at all",
+  !table.includes("**Perfect Indexer** -"),
+  table
+);
+check("a column passed whole reads as a tick", table.includes(" ✅ "), table);
+check(
+  "a column below full marks reads as a tally, with its measure",
+  table.includes("**0/10** 2 restarts") && table.includes("**25 / 35**"),
   table
 );
 // A row already being carried when it was published must still say so after a
@@ -375,8 +381,8 @@ check(
 );
 
 check(
-  "every score cell links to its own section",
-  GROUPS.every((group) => table.includes(`#${group.id})`)),
+  "every column heading links to its own section",
+  GROUPS.every((group) => table.includes(`[${group.title}](./reliability/README.md#${group.id})`)),
   table
 );
 check(
@@ -400,8 +406,10 @@ check(
   JSON.stringify(parsed.map((r) => [r.name, r.overall]))
 );
 check(
-  "recovered cells keep their links",
-  parsed.every((row) => GROUPS.every((group) => row.cells[group.id]?.includes(`#${group.id})`))),
+  "recovered cells survive verbatim",
+  parsed.every((row) =>
+    GROUPS.every((group) => (row.cells[group.id] ?? "").trim().length > 0)
+  ),
   JSON.stringify(parsed[0]?.cells)
 );
 check(

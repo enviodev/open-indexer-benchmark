@@ -68,7 +68,7 @@ export interface Tally {
 export interface ScenarioScore extends Tally {
   scenario: string;
   /** Checks that failed, for the notes under the table. */
-  failures: { label: string; detail: string }[];
+  failures: { label: string; failing: string; detail: string }[];
   /** Checks the run could not put, so the reader knows what is missing. */
   skipped: { label: string; detail: string }[];
   measures: Record<string, number>;
@@ -106,7 +106,11 @@ function scoreScenario(scenario: Scenario, run: ScenarioRun | undefined): Scenar
     }
     asked++;
     if (outcome.status === "pass") passed++;
-    else failures.push({ label: check.label, detail: outcome.detail });
+    else failures.push({
+      label: check.label,
+      failing: check.failing,
+      detail: outcome.detail,
+    });
   }
 
   return {
