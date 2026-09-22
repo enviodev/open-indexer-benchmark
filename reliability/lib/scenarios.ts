@@ -308,7 +308,7 @@ export const SCENARIOS: Scenario[] = [
         label: "a reorg deeper than the unfinalised window",
         failing: "wrong data after a reorg deeper than its rollback window",
         detail:
-          "Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it.",
+          "Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it.",
       },
       {
         id: "while-down",

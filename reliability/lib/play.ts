@@ -669,8 +669,32 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     ctx.chain.reorg({ depth: 2, logs: "changed" })
   );
 
-  // Deeper than any tool's rollback window. Being unable to handle it is
-  // acceptable; carrying on as though nothing happened is not.
+  // A rewrite below the head, at a height the tool has already indexed but is
+  // still working towards - the one a head-only reorg check walks past.
+  checks["during-backfill"] = await reconciles(
+    "reorg behind the head during a backfill",
+    () => ctx.chain.reorg({ depth: 4, extend: 250, logs: "changed" }),
+    0
+  );
+
+  const measures: Record<string, number> = {};
+  if (recoveries.length > 0) {
+    measures["reorg-recovery-seconds"] =
+      Math.round((recoveries.reduce((a, b) => a + b, 0) / recoveries.length) * 10) / 10;
+  }
+  // Deeper than any tool's rollback window, and last for that reason.
+  //
+  // This is the one case a tool is allowed to answer by refusing: Ponder
+  // stops with "unrecoverable reorg beyond finalized block" and is scored a
+  // pass for it. What it leaves behind is a database holding rows the chain
+  // no longer has, from blocks the tool had already called final, and a
+  // restart resumes from the checkpoint rather than going back for them. That
+  // is correct behaviour and it is also a database nothing else can be
+  // measured in: run before the backfill case, it failed that one too, with
+  // the same rows in the message. One event, scored once, at the end.
+  //
+  // Being unable to handle it is acceptable; carrying on as though nothing
+  // happened is not.
   //
   // Eighty rather than the sixty this used to be, because sixty was not past
   // every window it claimed to be past: Ponder holds sixty-five blocks
@@ -689,8 +713,11 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     // is the honest answer to a reorg past what it can undo.
     checks["deep"] = pass;
     ctx.log(`  ${DEEP_REORG}-block reorg: the indexer stopped rather than carry on`);
+    // Started again so the restart is counted and the run leaves nothing
+    // half-dead, but not waited on: nothing is measured after this, and a
+    // tool that has just refused a reorg it cannot undo will not reconcile
+    // however long it is given.
     await ctx.manualRestart("stopped on a reorg deeper than its rollback window");
-    await synced(ctx);
   } else {
     checks["deep"] = fail(
       `still running with data that does not match the chain after a ` +
@@ -699,22 +726,8 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     );
     await ctx.stopTool();
     await ctx.launch();
-    await synced(ctx);
   }
 
-  // A rewrite below the head, at a height the tool has already indexed but is
-  // still working towards - the one a head-only reorg check walks past.
-  checks["during-backfill"] = await reconciles(
-    "reorg behind the head during a backfill",
-    () => ctx.chain.reorg({ depth: 4, extend: 250, logs: "changed" }),
-    0
-  );
-
-  const measures: Record<string, number> = {};
-  if (recoveries.length > 0) {
-    measures["reorg-recovery-seconds"] =
-      Math.round((recoveries.reduce((a, b) => a + b, 0) / recoveries.length) * 10) / 10;
-  }
   return { checks, measures };
 }
 
