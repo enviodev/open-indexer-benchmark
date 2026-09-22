@@ -223,6 +223,32 @@ async function synced(
   }
 }
 
+/**
+ * The tool's data against the chain, given a moment to agree.
+ *
+ * `synced` returns the instant a comparison came back clean - and the chain it
+ * was comparing against has been moving the whole time, because these
+ * scenarios keep a heartbeat running so the tools have a live head to follow.
+ * By the time the next comparison runs, one or two more blocks exist and the
+ * tool has not written them yet, so a verdict taken straight after a
+ * successful sync reads as rows missing at the head.
+ *
+ * That is not a finding about an indexer, it is a race in the harness, and it
+ * published one: an indexer that came back from a frozen database correctly
+ * was marked down for two transfers it wrote a second later. So a verdict
+ * waits for the first clean reading, and only a tool that never produces one
+ * fails - which is the same rule the reorg cases have used all along.
+ */
+async function settled(ctx: Ctx, timeoutMs = ctx.patience.reactMs): Promise<Comparison> {
+  let result = await compare(ctx);
+  const deadline = performance.now() + timeoutMs;
+  while (!result.clean && performance.now() < deadline) {
+    await sleep(RECONCILE_POLL_MS);
+    result = await compare(ctx);
+  }
+  return result;
+}
+
 /** Wait for the tool to hold at least this many transfers. */
 async function reaches(ctx: Ctx, transfers: number, timeoutMs = ctx.patience.syncMs) {
   return ctx.waitFor(
@@ -427,7 +453,7 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   // ── What it holds once it is allowed to finish ──
   ctx.chain.advance(20);
   const caughtUp = await synced(ctx);
-  const result = await compare(ctx);
+  const result = await settled(ctx);
   checks["no-loss"] = verdict(
     result.missing.length === 0 && result.wrong.length === 0,
     caughtUp ? result.summary : `never caught up: ${result.summary}`
@@ -505,7 +531,7 @@ export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
 
   ctx.chain.advance(20);
   const caughtUp = await synced(ctx);
-  const result = await compare(ctx);
+  const result = await settled(ctx);
   checks["resumes"] = verdict(
     caughtUp,
     ctx.alive()
@@ -553,7 +579,7 @@ export async function gracefulShutdown(ctx: Ctx): Promise<ScenarioResult> {
   // Whatever it wrote has to be consistent with the chain, whether it stopped
   // on the signal or had to be killed: the next start reads this state.
   await ctx.stopTool();
-  const result = await compare(ctx);
+  const result = await settled(ctx);
   checks["flushes"] = verdict(
     result.wrong.length === 0 &&
       result.duplicates === 0 &&
@@ -590,12 +616,7 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     // So the comparison is given the same patience the rest of the scenario
     // has, and the first clean reading wins. A tool that never agrees still
     // fails, which is the thing being asked.
-    let result = await compare(ctx);
-    const deadline = performance.now() + ctx.patience.reactMs;
-    while (!result.clean && performance.now() < deadline) {
-      await sleep(RECONCILE_POLL_MS);
-      result = await compare(ctx);
-    }
+    const result = await settled(ctx);
 
     // Timed to when the data agreed, not to when the position did, because
     // that is what "recovered from the reorg" means.
@@ -771,7 +792,7 @@ export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
 
   ctx.chain.advance(20);
   await synced(ctx);
-  const result = await compare(ctx);
+  const result = await settled(ctx);
   checks["no-loss"] = verdict(
     result.missing.length === 0 && result.wrong.length === 0,
     `a failed request cost data: ${result.summary}`
@@ -853,7 +874,7 @@ export async function rpcChaos(ctx: Ctx): Promise<ScenarioResult> {
   // range it says it finished is the range the chain holds.
   ctx.chain.advance(20);
   const caughtUp = await synced(ctx);
-  const result = await compare(ctx);
+  const result = await settled(ctx);
   checks["catches-up"] = verdict(
     caughtUp,
     `never caught up once the endpoint was healthy again: ${result.summary}`
@@ -974,7 +995,7 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   ctx.chain.fail(null);
   ctx.chain.advance(10);
   const pastPhantom = await synced(ctx);
-  const phantom = await compare(ctx);
+  const phantom = await settled(ctx);
   checks["missing-block"] = verdict(
     ctx.alive() && pastPhantom && phantom.clean,
     !ctx.alive()
@@ -990,7 +1011,7 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   ctx.chain.reorg({ depth: 6, logs: "changed" });
   ctx.chain.advance(10);
   const afterStale = await synced(ctx);
-  const stale = await compare(ctx);
+  const stale = await settled(ctx);
   checks["stale-hash"] = verdict(
     ctx.alive() && afterStale && stale.clean,
     !ctx.alive()
@@ -1133,8 +1154,18 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
     .filter((row) => indexedBlocks.has(row.block));
   const held = await ctx.observe.metadataRows().catch(() => null);
   if (owed.length === 0) {
+    // Two different absences, and they are not the same finding. A tool that
+    // never reached a block carrying one of these events was not asked; a
+    // tool that stored transfers but none in such a block has gaps, and the
+    // checks about those gaps are the ones that say so.
+    const everShown = ctx.chain.metadataRows(furthest).length > 0;
     checks["second-event"] = na(
-      `${noFurther}, so it was never shown a metadata event`
+      everShown
+        ? `it stored no transfers in any of the ${
+            ctx.chain.metadataRows(furthest).length
+          } block(s) below ${furthest} that carried a metadata event, so there is ` +
+          `nothing to say about whether it would have stored the event`
+        : `${noFurther}, so it was never shown a metadata event`
     );
   } else if (held === null) {
     checks["second-event"] = fail(
