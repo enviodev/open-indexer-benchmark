@@ -67,6 +67,14 @@ export interface Patience {
  * for a tool that is not coming back, not a budget a working one should feel.
  */
 /** How often a reorg's aftermath is re-read while it is still settling. */
+/**
+ * How deep the deep reorg goes.
+ *
+ * Past the unfinalised window of every tool the suite measures. Ponder's is
+ * sixty-five blocks on mainnet, which is the one that sets this floor.
+ */
+const DEEP_REORG = 80;
+
 const RECONCILE_POLL_MS = 500;
 
 export const DEFAULT_PATIENCE: Patience = { syncMs: 300_000, reactMs: 120_000 };
@@ -642,8 +650,16 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
 
   // Deeper than any tool's rollback window. Being unable to handle it is
   // acceptable; carrying on as though nothing happened is not.
-  const deep = await reconciles("sixty-block reorg", () =>
-    ctx.chain.reorg({ depth: 60, logs: "changed" })
+  //
+  // Eighty rather than the sixty this used to be, because sixty was not past
+  // every window it claimed to be past: Ponder holds sixty-five blocks
+  // unfinalised on mainnet, so a sixty-block rewrite is one it rolls back
+  // like any other and the check was never put to it. The earlier revision of
+  // this benchmark went ten blocks past the endpoint's declared finality and
+  // found Ponder carrying on with a hundred and forty-eight rows from
+  // orphaned blocks, which is the finding this depth exists to reach.
+  const deep = await reconciles("eighty-block reorg", () =>
+    ctx.chain.reorg({ depth: DEEP_REORG, logs: "changed" })
   );
   if (deep.status === "pass") {
     checks["deep"] = deep;
@@ -651,12 +667,13 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     // It stopped rather than going on with data it could not reconcile, which
     // is the honest answer to a reorg past what it can undo.
     checks["deep"] = pass;
-    ctx.log("  sixty-block reorg: the indexer stopped rather than carry on");
+    ctx.log(`  ${DEEP_REORG}-block reorg: the indexer stopped rather than carry on`);
     await ctx.manualRestart("stopped on a reorg deeper than its rollback window");
     await synced(ctx);
   } else {
     checks["deep"] = fail(
-      `still running with data that does not match the chain after a sixty-block reorg: ` +
+      `still running with data that does not match the chain after a ` +
+        `${DEEP_REORG}-block reorg: ` +
         `${deep.status === "fail" ? deep.detail : ""}`
     );
     await ctx.stopTool();

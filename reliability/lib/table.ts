@@ -98,7 +98,10 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
  * seven times a column is most of the table's width and none of its meaning.
  */
 function scoreCell(tally: Tally, headline: string | null): string {
-  const measure = headline ? ` ${headline}` : "";
+  // Bracketed, because it is not part of the score: "10/11 2 restarts" reads
+  // as one number said twice, where "10/11 (2 restarts)" reads as a score and
+  // a thing worth knowing about living with it.
+  const measure = headline ? ` (${headline})` : "";
   if (tally.asked === 0) return NO_VALUE;
   const count = `${tally.passed}/${tally.asked}`;
   if (tally.passed === tally.asked) return `✅ ${count}${measure}`;
@@ -260,13 +263,13 @@ const HEAD = [
 export function buildReliabilityTable(rows: ReliabilityRow[]): string {
   if (rows.length === 0) return "_No reliability results collected._";
 
-  // Best share first, then most checks passed. A row nothing ran for sorts
-  // last: ranking an absence among results would be meaningless either way it
-  // went, and tallyRank gives it a share of -1 to keep it there.
+  // Most checks passed first, then the share of what each was asked. A row
+  // nothing ran for sorts last: ranking an absence among results would be
+  // meaningless either way it went, and tallyRank gives it a share of -1.
   const sorted = [...rows].sort((a, b) => {
-    const [shareA, passedA] = tallyRank(a.overall);
-    const [shareB, passedB] = tallyRank(b.overall);
-    return shareB - shareA || passedB - passedA;
+    const [passedA, shareA] = tallyRank(a.overall);
+    const [passedB, shareB] = tallyRank(b.overall);
+    return passedB - passedA || shareB - shareA;
   });
 
   const lines = [

@@ -264,10 +264,10 @@ export const SCENARIOS: Scenario[] = [
       },
       {
         id: "flushes",
-        label: "leaves its checkpoint consistent with its data",
-        failing: "corrupt state: its checkpoint disagrees with its own rows",
+        label: "leaves correct data behind when it stops",
+        failing: "wrong rows survive a clean stop, and the restart keeps them",
         detail:
-          "After the clean stop, the tool's own recorded position and the rows in the database agree: nothing is written past the checkpoint and nothing the checkpoint covers is missing. This is what makes the next start correct.",
+          "What is in the database after the stop matches the chain: no duplicated rows, no amounts that were never on the chain, no balances left half-applied. This is the state the next start reads and builds on, so whatever is wrong here is wrong from then on - a restart continues from it rather than rechecking it, and the error is still there weeks later with nothing in any log to say where it came from.",
       },
     ],
   },
@@ -308,7 +308,7 @@ export const SCENARIOS: Scenario[] = [
         label: "a reorg deeper than the unfinalised window",
         failing: "wrong data after a reorg deeper than its rollback window",
         detail:
-          "Sixty blocks are rewritten - past the depth most tools keep rollback information for. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one.",
+          "Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it.",
       },
       {
         id: "while-down",

@@ -209,13 +209,22 @@ export function measuresOf(score: ToolScore): Record<string, number> {
 }
 
 /**
- * How a tally sorts against another. Ratio first, so that a tool asked fewer
- * questions is not flattered by the ones it was spared; the raw pass count
- * breaks a tie, so a tool that answered more of them ranks above one that
- * answered the same share of fewer.
+ * How a tally sorts against another. Checks passed first, then the share.
+ *
+ * The share came first once, so that a tool asked fewer questions was not
+ * flattered by the ones it was spared. It flattered them anyway, and worse: a
+ * tool that answered four questions out of four sorted above one that answered
+ * forty out of forty-three, which reads as a ranking of the tools and is a
+ * ranking of how much each one was asked. Counting instead says what a reader
+ * takes from the table anyway - this tool passed more of these checks than
+ * that one - and the share still breaks a tie, so two tools with the same
+ * count are separated by how much each was asked to earn it.
+ *
+ * A tool nothing was asked of sorts last rather than first, which is what the
+ * -1 is for: no questions is not a perfect score.
  */
 export function tallyRank(tally: Tally): [number, number] {
-  return [tally.asked > 0 ? tally.passed / tally.asked : -1, tally.passed];
+  return [tally.passed, tally.asked > 0 ? tally.passed / tally.asked : -1];
 }
 
 export { checkCount };

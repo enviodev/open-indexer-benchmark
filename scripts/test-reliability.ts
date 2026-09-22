@@ -353,8 +353,9 @@ check(
   `${unmeasured.passed}/${unmeasured.asked} of ${ALL_CHECKS}`
 );
 
-// A tool asked fewer questions must not outrank one that answered more of them
-// only because the ones it was spared would have been failures.
+// A tool asked two questions and spared the rest must not outrank one that
+// answered forty-three: two out of two is the same share and a far smaller
+// claim, and a table sorted the other way ranks how much each tool was asked.
 {
   const partialRun = scoreTool({
     ...perfect("Sparse"),
@@ -365,12 +366,25 @@ check(
       },
     ],
   });
-  const [sparseShare] = tallyRank(partialRun);
-  const [flawlessShare, flawlessPassed] = tallyRank(flawless);
+  const [sparsePassed, sparseShare] = tallyRank(partialRun);
+  const [flawlessPassed, flawlessShare] = tallyRank(flawless);
   check(
-    "a perfect run over two checks ties on share but loses on count",
-    sparseShare === flawlessShare && flawlessPassed > partialRun.passed,
+    "a perfect run over two checks ties on share and sorts below on count",
+    sparseShare === flawlessShare && flawlessPassed > sparsePassed,
     `${partialRun.passed}/${partialRun.asked} vs ${flawless.passed}/${flawless.asked}`
+  );
+}
+
+// Same count, different denominators: the one asked less sorts first, because
+// it failed nothing while the other failed something.
+{
+  const [, thoroughShare] = tallyRank({ passed: 10, asked: 12 });
+  const [, spotlessShare] = tallyRank({ passed: 10, asked: 10 });
+  check("a tie on count is broken by the share", spotlessShare > thoroughShare);
+  const [nothingPassed, nothingShare] = tallyRank({ passed: 0, asked: 0 });
+  check(
+    "and a tool nothing was asked of sorts last rather than first",
+    nothingPassed === 0 && nothingShare === -1
   );
 }
 
@@ -414,8 +428,12 @@ const rows = [perfect("Perfect Indexer"), crashed].map((tool) => {
 const table = buildReliabilityTable(rows);
 console.log(`\n${table}\n`);
 
-check("the headline restart count reaches the table", table.includes("2 restarts"), table);
-check("the headline head lag reaches the table", table.includes("640ms"), table);
+check(
+  "the headline restart count reaches the table, bracketed",
+  table.includes("(2 restarts)"),
+  table
+);
+check("the headline head lag reaches the table", table.includes("(640ms)"), table);
 check(
   "a failure is one line of its own, under the column it belongs to",
   /\n- \*\*Example Indexer\*\*\n  - \*crash recovery\*\n    - stops indexing for good after a database restart\n    - stops following the chain after a database restart\n/.test(
@@ -445,7 +463,7 @@ check(
 );
 check(
   "a column below full marks reads as a tally, with its measure",
-  table.includes(`**0/${CRASH_CHECKS}** 2 restarts`) &&
+  table.includes(`**0/${CRASH_CHECKS}** (2 restarts)`) &&
     table.includes(`**${ALL_CHECKS - CRASH_CHECKS} / ${ALL_CHECKS}**`),
   table
 );
