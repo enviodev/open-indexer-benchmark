@@ -37,7 +37,7 @@ import {
   type ChainSpec,
 } from "./chain-mock.ts";
 import { NO_END_BLOCK, RELIABILITY_CASE, baseChainSpec } from "./case.ts";
-import { NoDatabaseContainer, restartDatabase } from "./db-control.ts";
+import { NoDatabaseContainer, pauseDatabase, restartDatabase } from "./db-control.ts";
 import { ensureEnvioDb, needsEnvioDb } from "./envio-db.ts";
 import { observer } from "./observe.ts";
 import {
@@ -150,7 +150,8 @@ export async function runOnce(
   attempt: number,
   log: (message: string) => void,
   restartDb: typeof restartDatabase = restartDatabase,
-  patience: Patience = DEFAULT_PATIENCE
+  patience: Patience = DEFAULT_PATIENCE,
+  pauseDb: typeof pauseDatabase = pauseDatabase
 ): Promise<ScenarioResult> {
   const play = PLAYS[scenario];
   if (!play) return allUnmeasured(scenario, `no implementation for scenario "${scenario}"`);
@@ -228,6 +229,10 @@ export async function runOnce(
       async restartDb(downMs: number) {
         const { container, downMs: actual } = await restartDb(activeDriver.dbUrl, downMs);
         log(`  stopped ${container} for ${(actual / 1_000).toFixed(1)}s`);
+      },
+      async pauseDb(downMs: number) {
+        const { container, downMs: actual } = await pauseDb(activeDriver.dbUrl, downMs);
+        log(`  froze ${container} for ${(actual / 1_000).toFixed(1)}s`);
       },
     };
 
@@ -429,7 +434,8 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
             attempt,
             log,
             restartDatabase,
-            options.patience ?? DEFAULT_PATIENCE
+            options.patience ?? DEFAULT_PATIENCE,
+            pauseDatabase
           )
         );
         console.log(

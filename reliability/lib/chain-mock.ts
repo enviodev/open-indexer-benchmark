@@ -35,6 +35,9 @@ import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
  */
 export const CHAIN_PORT = 19_879;
 
+/** The methods a "missing" fault answers with null. */
+const BLOCK_LOOKUPS = ["eth_getBlockByNumber", "eth_getBlockByHash"];
+
 const JSON_HEADERS = { "content-type": "application/json" };
 
 /**
@@ -158,7 +161,32 @@ export interface ChainSpec {
    * scenario can single out one block without flattening the rest.
    */
   amountOf?: (block: number, index: number) => bigint | null;
+  /**
+   * The strings a `MetadataUpdated` event carries, given the block it is in.
+   *
+   * The chain emits one every `METADATA_EVERY` blocks, as the last log of the
+   * block. It exists because a tool that is configured for two events and
+   * quietly indexes one is invisible to a suite that only ever looks at the
+   * other - and a tool really did that, silently, in an earlier revision of
+   * this benchmark. The strings are ordinary by default; a scenario that
+   * wants hostile ones overrides this.
+   */
+  metadataOf?: (block: number) => { symbol: string; name: string };
 }
+
+/**
+ * `MetadataUpdated(string,string)`, the second event the chain emits.
+ *
+ * keccak256 of the signature, written down rather than computed: the chain
+ * has no keccak of its own (its hashes are sha256, which no indexer checks),
+ * and a topic that disagreed with the one in the projects' ABIs would fail
+ * every tool at once with nobody able to tell which side was wrong.
+ */
+export const METADATA_TOPIC =
+  "0x30f5c4b652f95e2a697bda3258896c421eee4f29adce8fe38060f47f7aed91ad";
+
+/** How often the chain emits one, in blocks. */
+export const METADATA_EVERY = 25;
 
 /** `symbol()`, `name()`, `decimals()`, `totalSupply()`. */
 export const SELECTORS = {
@@ -186,6 +214,23 @@ function word(value: string | bigint): string {
   return raw.padStart(64, "0");
 }
 
+/**
+ * ABI-encodes two `string` arguments as one event data field.
+ *
+ * Both are dynamic, so the head is two offsets and the tail is the two
+ * lengths and their padded bytes, which is what every decoder in every one of
+ * these tools expects to find.
+ */
+export function encodeTwoStrings(first: string, second: string): string {
+  const body = (value: string) => {
+    const bytes = Buffer.from(value, "utf8");
+    const padded = Buffer.concat([bytes, Buffer.alloc((32 - (bytes.length % 32)) % 32)]);
+    return `${word(BigInt(bytes.length))}${padded.toString("hex")}`;
+  };
+  const head = body(first);
+  return `0x${word(64n)}${word(BigInt(64 + head.length / 2))}${head}${body(second)}`;
+}
+
 /** ABI-encodes a `string` return value, for a token metadata answer. */
 export function encodeString(value: string): string {
   const bytes = Buffer.from(value, "utf8");
@@ -207,12 +252,36 @@ export interface Fault {
    *   timeout   - the request is accepted and never answered, which is the
    *               failure mode a retry policy is least likely to survive
    *   close     - the socket is destroyed mid-request
+   *   truncated - HTTP 200, the right Content-Type, and a body that stops
+   *               in the middle of the JSON. A client that trusts a 200
+   *               without checking that the body parses treats this as an
+   *               empty result set, which is silent data loss rather than
+   *               an error to retry
+   *   missing   - a well-formed `null` for a block that does exist, which
+   *               is what a load-balanced endpoint answers when the head was
+   *               announced by one machine and asked of another behind it
+   *
+   * "missing" is a fault about a block rather than about a request, so it
+   * answers eth_getBlockByNumber and eth_getBlockByHash and leaves every
+   * other method alone.
    */
-  kind: "error" | "status" | "timeout" | "close";
+  kind: "error" | "status" | "timeout" | "close" | "truncated" | "missing";
   /** Methods to break. Unset breaks every method. */
   methods?: string[];
   /** How many requests to break before healing. Unset means until cleared. */
   count?: number;
+  /**
+   * Share of requests to break, from 0 to 1. Unset breaks every one.
+   *
+   * A provider does not fail every request and then stop failing any: it
+   * fails some of them, for a while, and the difference is the whole point -
+   * a retry that works because the next attempt succeeds is a different code
+   * path from one that has to wait out a total outage. The dice are seeded,
+   * so a run that finds something can be run again.
+   */
+  rate?: number;
+  /** Seed for the dice, so a partial fault is a repeatable one. */
+  seed?: number;
   status?: number;
   code?: number;
   message?: string;
@@ -261,12 +330,32 @@ export interface ChainControl {
    *               deleted rather than merely overwritten, which is the case
    *               an upsert-only rollback silently fails
    */
-  reorg(opts: { depth: number; extend?: number; logs?: "changed" | "dropped" }): {
+  reorg(opts: {
+    depth: number;
+    /**
+     * Blocks the replacement chain has, beyond or short of the ones it
+     * replaces. Negative makes the chain genuinely shorter than it was, which
+     * a real chain does whenever the heavier fork is the shorter one - and
+     * which an indexer that only ever moves its head forward cannot express.
+     */
+    extend?: number;
+    logs?: "changed" | "dropped";
+  }): {
     from: number;
     to: number;
   };
   /** The block at a height on the current chain, or null if it is not there. */
   blockAt(height: number): MockBlock | null;
+  /**
+   * Every metadata event the chain currently holds, oldest first.
+   *
+   * The second event type's ground truth, kept apart from `rows` because the
+   * two are compared against different tables. A tool configured for both
+   * events that indexes only the transfers is wrong in a way no amount of
+   * looking at transfers can see, and that is not hypothetical: it is what an
+   * earlier revision of this benchmark found a no-code project doing.
+   */
+  metadataRows(upToHeight?: number): MetadataRow[];
   /**
    * Every log the chain currently holds, oldest first - the ground truth a
    * scenario compares an indexer's tables against.
@@ -311,6 +400,14 @@ export interface ChainRow {
   to: string;
 }
 
+/** One MetadataUpdated event, as the chain holds it. */
+export interface MetadataRow {
+  block: number;
+  logIndex: number;
+  symbol: string;
+  name: string;
+}
+
 export interface ChainMock {
   /** What the indexers are pointed at. */
   url: string;
@@ -342,6 +439,8 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   const chain: MockBlock[] = [];
   let stats = emptyStats();
   let fault: Fault | null = null;
+  /** State of the dice a partial fault rolls. */
+  let faultSeed = 0x9e_37_79_b9;
 
   function emptyStats(): ChainStats {
     return { requests: 0, faulted: 0, methods: {}, widestRange: 0, refused: {} };
@@ -374,10 +473,42 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
    * scenario tell "rolled the reorg back and re-indexed" apart from "kept the
    * row it already had": the two differ in value, not merely in count.
    */
+  /** The metadata event a block carries, if it is one of the blocks that do. */
+  function metadataOf(block: MockBlock): { symbol: string; name: string } | null {
+    if (!block.logs) return null;
+    if ((block.number - spec.startBlock) % METADATA_EVERY !== 0) return null;
+    return (
+      spec.metadataOf?.(block.number) ?? {
+        symbol: `RLB${block.number % 1_000}`,
+        name: `Reliability Token ${block.number}`,
+      }
+    );
+  }
+
   function logsOf(block: MockBlock) {
     if (!block.logs) return [];
     const empty = spec.emptyRange;
     if (empty && block.number >= empty.from && block.number <= empty.to) return [];
+    const metadata = metadataOf(block);
+    const extra = metadata
+      ? [
+          {
+            address: spec.contract,
+            topics: [METADATA_TOPIC],
+            data: encodeTwoStrings(metadata.symbol, metadata.name),
+            blockNumber: quantity(block.number),
+            blockHash: block.hash,
+            transactionHash: hex32("tx", block.number, block.epoch, spec.logsPerBlock),
+            transactionIndex: quantity(spec.logsPerBlock),
+            logIndex: quantity(
+              (block.number >= (spec.firstLogIndexFrom ?? spec.startBlock)
+                ? firstLogIndex
+                : 0) + spec.logsPerBlock
+            ),
+            removed: false,
+          },
+        ]
+      : [];
     return Array.from({ length: spec.logsPerBlock }, (_, i) => {
       const logIndex =
         block.number >= (spec.firstLogIndexFrom ?? spec.startBlock) ? firstLogIndex + i : i;
@@ -399,7 +530,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         logIndex: quantity(logIndex),
         removed: false,
       };
-    });
+    }).concat(extra);
   }
 
   /**
@@ -676,10 +807,30 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     };
   }
 
+  /**
+   * Seeded dice, so a partial fault is reproducible.
+   *
+   * mulberry32: four lines, no dependency, and good enough to decide whether
+   * this request is one of the unlucky ones. A run that finds data loss at a
+   * five percent fault rate has to be runnable again with the same rolls, or
+   * the finding is an anecdote.
+   */
+  function roll(): number {
+    faultSeed = (faultSeed + 0x6d_2b_79_f5) >>> 0;
+    let t = faultSeed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  }
+
   /** Whether the injected fault applies to this request, and consumes it. */
   function takeFault(methods: string[]): Fault | null {
     if (!fault) return null;
     if (fault.methods && !methods.some((m) => fault!.methods!.includes(m))) return null;
+    // The dice are rolled before the count is spent, so a rate and a count
+    // together mean "break this many, one in every so often" rather than
+    // "break the first few and then roll".
+    if (fault.rate !== undefined && roll() >= fault.rate) return null;
     if (fault.count !== undefined) {
       if (fault.count <= 0) return null;
       fault.count--;
@@ -713,6 +864,38 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       if (injected) {
         if (injected.kind === "timeout") return; // Never answered, socket held.
         if (injected.kind === "close") return void res.destroy();
+        if (injected.kind === "missing") {
+          // A block that exists, answered as though it does not. Only the
+          // block lookups: a provider behind a load balancer serves this from
+          // a replica that is a second behind, and everything else it answers
+          // is fine. eth_getLogs is deliberately left alone, so the tool is
+          // told about logs in a block it is then told does not exist.
+          const answers = entries.map((entry) => ({
+            jsonrpc: "2.0",
+            id: entry?.id ?? null,
+            result: BLOCK_LOOKUPS.includes(entry?.method ?? "") ? null : handle(entry),
+          }));
+          res
+            .writeHead(200, JSON_HEADERS)
+            .end(JSON.stringify(Array.isArray(payload) ? answers : answers[0]));
+          return;
+        }
+        if (injected.kind === "truncated") {
+          // A 200, the right content type, and a body that stops mid-object.
+          // Content-Length is deliberately not sent: a chunked response that
+          // ends early is what a proxy timing out mid-stream produces, and a
+          // client that never checks the parse reads it as nothing at all.
+          const answers = entries.map((entry) => {
+            try {
+              return { jsonrpc: "2.0", id: entry?.id ?? null, result: handle(entry) };
+            } catch {
+              return { jsonrpc: "2.0", id: entry?.id ?? null, result: null };
+            }
+          });
+          const whole = JSON.stringify(Array.isArray(payload) ? answers : answers[0]);
+          res.writeHead(200, JSON_HEADERS).end(whole.slice(0, Math.ceil(whole.length / 2)));
+          return;
+        }
         if (injected.kind === "status") {
           res
             .writeHead(injected.status ?? 503, JSON_HEADERS)
@@ -783,18 +966,38 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       const head = chain[chain.length - 1];
       if (!head) throw new Error("cannot reorg an empty chain");
       const cut = Math.min(depth, chain.length - 1);
+      // At least one block back, however short the replacement was asked to
+      // be: a fork that replaces blocks with nothing is not a fork.
+      const replacements = Math.max(1, cut + extend);
       const from = head.number - cut + 1;
       const epoch = head.epoch + 1;
       chain.length = chain.length - cut;
-      for (let i = 0; i < cut + extend; i++) append(epoch, logs !== "dropped");
+      for (let i = 0; i < replacements; i++) append(epoch, logs !== "dropped");
       return { from, to: chain[chain.length - 1].number };
     },
     blockAt,
+    metadataRows(upToHeight) {
+      const out: MetadataRow[] = [];
+      for (const block of chain) {
+        if (upToHeight !== undefined && block.number > upToHeight) break;
+        const metadata = metadataOf(block);
+        if (!metadata) continue;
+        const log = logsOf(block).find((entry) => entry.topics[0] === METADATA_TOPIC);
+        if (!log) continue;
+        out.push({
+          block: block.number,
+          logIndex: Number(BigInt(log.logIndex)),
+          ...metadata,
+        });
+      }
+      return out;
+    },
     rows(upToHeight) {
       const out: ChainRow[] = [];
       for (const block of chain) {
         if (upToHeight !== undefined && block.number > upToHeight) break;
         for (const log of logsOf(block)) {
+          if (log.topics[0] !== TRANSFER_TOPIC) continue;
           out.push({
             block: block.number,
             logIndex: Number(BigInt(log.logIndex)),
@@ -808,6 +1011,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     },
     fail(next) {
       fault = next;
+      if (next?.seed !== undefined) faultSeed = next.seed >>> 0;
     },
     setLimits(limits) {
       maxBlockRange = limits.maxBlockRange;

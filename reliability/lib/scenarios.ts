@@ -141,7 +141,7 @@ export const SCENARIOS: Scenario[] = [
     summary:
       "Postgres restarts. It happens for maintenance, for a failover, for an OOM kill, and it happens without warning to the process connected to it. What separates tools here is not whether they notice - everyone notices - but what they do next: reconnect and carry on, or exit and wait for a human. An indexer that needs a human is an indexer that is down until someone is awake.",
     method:
-      "The tool indexes a fixed range from the mock chain. A third of the way in, its Postgres container is stopped for ten seconds and started again. The tool is left alone: nothing restarts it, and whatever it does next is the measurement. Once the range is finished - by the tool, or by the harness restarting it after it gave up - the data is checked against ground truth. The whole thing is then repeated with the tool tracking the head rather than backfilling, because a tool holding a batch of head blocks in memory has more to lose than one that can simply re-fetch.",
+      "The tool indexes a fixed range from the mock chain. A third of the way in, its Postgres container is stopped for ten seconds and started again. The tool is left alone: nothing restarts it, and whatever it does next is the measurement. Once the range is finished - by the tool, or by the harness restarting it after it gave up - the data is checked against ground truth. The whole thing is then repeated with the tool tracking the head rather than backfilling, because a tool holding a batch of head blocks in memory has more to lose than one that can simply re-fetch. Finally the container is frozen rather than stopped, for twenty seconds, which leaves its connections open and answers nothing on them.",
     checks: [
       {
         id: "recovers-backfill",
@@ -156,6 +156,13 @@ export const SCENARIOS: Scenario[] = [
         failing: "stops following the chain after a database restart",
         detail:
           "The same, while tracking the head. Separate from the backfill check because the two are different code paths in most tools, and because at the head a lost in-flight batch is data an indexer will not naturally come back for.",
+      },
+      {
+        id: "recovers-pause",
+        label: "notices when a frozen database thaws",
+        failing: "hangs for ever when the database stops answering",
+        detail:
+          "The database is frozen rather than stopped - SIGSTOP, so the connections stay open and no query is ever answered - and the tool starts indexing again by itself once it is thawed. This is the one outage where needing a restart is the finding rather than a cost: nothing crashed, no error was raised, and every health check still answers, so nothing tells anybody there is something to restart. A tool with a statement timeout comes back on its own; one without waits in the silence until somebody notices the data is an hour old.",
       },
       {
         id: "no-loss",
@@ -283,6 +290,13 @@ export const SCENARIOS: Scenario[] = [
           "The head block is replaced with one carrying different transfer amounts. Afterwards the stored amounts are the new ones. The baseline case: a tool that fails here has no reorg handling at all.",
       },
       {
+        id: "shortening",
+        label: "a fork that leaves the chain shorter",
+        failing: "stale data: keeps blocks a shorter fork left behind",
+        detail:
+          "Six blocks are replaced by three, so the canonical chain is shorter than the one the tool has already stored and its head has to move backwards. An indexer that only ever moves forward - overwriting each block as it reads it, never deleting - handles every other reorg on this page and silently keeps three blocks' worth of rows that are on no chain at all.",
+      },
+      {
         id: "removes-event",
         label: "a reorg that removes an event entirely",
         failing: "stale data: keeps an event the chain removed",
@@ -379,6 +393,54 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    id: "rpc-chaos",
+    title: "Everything wrong at once",
+    group: "rpc-faults",
+    summary:
+      "A provider having a bad hour does not fail every request and then stop. It fails one in ten, in several different ways, while an indexer is in the middle of a backfill - and the retry paths that each work on their own start interacting. This is the scenario that finds an indexer finishing its range hundreds of rows short without ever exiting, logging an error, or noticing.",
+    method:
+      "For two minutes, one request in eight is broken while the chain keeps producing. The way it breaks changes every ten seconds, through JSON-RPC errors, HTTP 429, HTTP 502, a truncated body, a dropped socket, a block wrongly answered as missing, and getLogs requests that are never answered. The dice are seeded, so a run that finds something can be run again. Then the endpoint is left alone and the tool is given the scenario's full patience to finish the range, which is compared against ground truth.",
+    checks: [
+      {
+        id: "survives",
+        label: "stays up through a bad hour",
+        failing: "goes down when a provider starts failing some requests",
+        detail:
+          "The process is still running after two minutes of mixed faults. Every one of them is a condition a provider really produces, none of them lasts, and a tool that exits has turned a provider's bad hour into an outage of its own.",
+      },
+      {
+        id: "catches-up",
+        label: "finishes the range once the endpoint is healthy",
+        failing: "never catches up after a provider's bad hour",
+        detail:
+          "The tool reaches the head within the scenario's patience after the faults stop. A tool whose backoff has no ceiling, or that is still retrying a request the endpoint dropped, is indistinguishable from one that is down.",
+      },
+      {
+        id: "no-loss",
+        label: "loses nothing to the faults",
+        failing: "data loss: rows missing after a provider's bad hour",
+        detail:
+          "Every row the chain holds is in the database. This is the check the scenario exists for: a truncated body and a null block are both answers a careless client reads as \"nothing there\", and a tool that advances its cursor past them finishes looking finished, with holes nothing will come back for.",
+      },
+      {
+        id: "no-duplicates",
+        label: "writes nothing twice while retrying",
+        failing: "wrong balances: retries write some rows twice",
+        detail:
+          "No row appears twice and no balance is off. The mirror of the check above: a request that fails after the node has served it is retried, and a tool that applies what comes back without checking what it already has doubles exactly the range it retried.",
+      },
+    ],
+    measures: [
+      {
+        id: "faulted-requests",
+        label: "requests broken",
+        unit: "count",
+        detail:
+          "How many requests the endpoint broke during the scenario. Reported so a row that passed can be read as \"passed with this much thrown at it\" rather than \"passed\", since the count depends on how hard the tool was working at the time.",
+      },
+    ],
+  },
+  {
     id: "rpc-limits",
     title: "The node refuses the question",
     group: "rpc-faults",
@@ -432,6 +494,13 @@ export const SCENARIOS: Scenario[] = [
         failing: "wrong balances: a block counted twice when the node repeats it",
         detail:
           "The same logs arriving a second time produce no second row and no doubled aggregate. Idempotent ingestion, tested by asking for it rather than hoping.",
+      },
+      {
+        id: "missing-block",
+        label: "gets past a block the endpoint says is not there",
+        failing: "data loss: skips a block the endpoint wrongly calls missing",
+        detail:
+          "Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as \"no such block\" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself.",
       },
       {
         id: "stale-hash",

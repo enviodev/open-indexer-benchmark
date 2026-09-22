@@ -108,6 +108,29 @@ function connectionOutage(name: string) {
   };
 }
 
+/**
+ * Makes every write hang, without a container.
+ *
+ * The real thing is `docker pause`: the connections stay open and nothing
+ * sent on them is answered. An exclusive lock on the tables the indexer
+ * writes is the same experience from where the indexer is sitting - its
+ * statement blocks, no error is raised, and it waits. Which is what the check
+ * is about: whether a tool that is given silence rather than an error ever
+ * comes back by itself.
+ */
+function frozenTables(dbUrl: string) {
+  return async (_dbUrl: string, downMs: number) => {
+    const seconds = Math.ceil(downMs / 1_000);
+    await run("psql", [
+      dbUrl,
+      "-c",
+      `BEGIN; LOCK TABLE transfer, account IN ACCESS EXCLUSIVE MODE; ` +
+        `SELECT pg_sleep(${seconds}); COMMIT`,
+    ]);
+    return { downMs, container: `${dbUrl.split("/").pop()} (writes frozen)` };
+  };
+}
+
 const status = (outcome: Outcome | undefined) => outcome?.status ?? "missing";
 const detailOf = (outcome: Outcome | undefined) =>
   outcome && outcome.status !== "pass" ? outcome.detail : "";
@@ -137,21 +160,42 @@ const EXPECTATIONS: Expectation[] = [
   // ── A correct indexer passes ──
   {
     scenario: "reorg-cases",
-    passes: ["shallow", "removes-event", "while-down", "storm", "deep", "during-backfill"],
+    passes: [
+      "shallow",
+      "shortening",
+      "removes-event",
+      "while-down",
+      "storm",
+      "deep",
+      "during-backfill",
+    ],
   },
   { scenario: "awkward-values", passes: ["null-symbol", "nul-byte", "huge-log-index", "max-uint", "empty-blocks"] },
   { scenario: "process-kill", passes: ["resumes", "no-gap", "no-double-apply", "atomic-batch"] },
   { scenario: "graceful-shutdown", passes: ["exits-clean", "flushes"] },
   { scenario: "rpc-limits", passes: ["splits-range", "splits-results", "recovers-width"] },
-  { scenario: "db-restart", outage: true, passes: ["recovers-backfill", "no-loss", "no-duplicates"] },
-  { scenario: "rpc-inconsistency", passes: ["head-goes-backwards", "duplicate-delivery", "stale-hash"], slow: true },
+  {
+    scenario: "db-restart",
+    outage: true,
+    passes: ["recovers-backfill", "recovers-pause", "no-loss", "no-duplicates"],
+  },
+  {
+    scenario: "rpc-inconsistency",
+    passes: ["head-goes-backwards", "duplicate-delivery", "stale-hash", "missing-block"],
+    slow: true,
+  },
+  {
+    scenario: "rpc-chaos",
+    passes: ["survives", "catches-up", "no-loss", "no-duplicates"],
+    slow: true,
+  },
   { scenario: "rpc-outage", passes: ["survives", "resumes", "no-loss", "backs-off"], slow: true },
 
   // ── And a defective one fails the check its defect is about ──
   {
     scenario: "reorg-cases",
     defects: ["no-reorg-handling"],
-    fails: ["shallow", "removes-event", "while-down"],
+    fails: ["shallow", "shortening", "removes-event", "while-down"],
   },
   {
     scenario: "process-kill",
@@ -235,7 +279,8 @@ for (const expectation of EXPECTATIONS) {
     1,
     () => {},
     expectation.outage ? connectionOutage(name) : undefined,
-    PATIENCE
+    PATIENCE,
+    expectation.outage ? frozenTables(dbUrl) : undefined
   );
   const seconds = ((Date.now() - startedAt) / 1_000).toFixed(0);
 

@@ -25,7 +25,7 @@
 
 import type { Driver, Snapshot } from "../../cases/lib/drivers/index.ts";
 import { sleep } from "../../cases/lib/process.ts";
-import type { ChainControl, ChainRow } from "./chain-mock.ts";
+import type { ChainControl, ChainRow, Fault } from "./chain-mock.ts";
 import { LOGS_PER_BLOCK, START_BLOCK } from "./case.ts";
 import {
   balancesOf,
@@ -72,6 +72,15 @@ const RECONCILE_POLL_MS = 500;
 export const DEFAULT_PATIENCE: Patience = { syncMs: 300_000, reactMs: 120_000 };
 /** How long the database stays down when it is taken away. */
 const DB_DOWN_MS = 10_000;
+/**
+ * How long the database is frozen rather than stopped.
+ *
+ * Longer than the stop, because the failure being staged is a wait rather
+ * than an error: a tool whose statement timeout is thirty seconds has to be
+ * given the chance to hit it, and one with no timeout at all has to be given
+ * the chance to sit through the whole thing and prove it.
+ */
+const PAUSE_MS = 20_000;
 
 /** The NUL the token's name carries, which Postgres will not store in text. */
 const NUL = String.fromCharCode(0);
@@ -112,6 +121,12 @@ export interface Ctx {
   waitFor(label: string, holds: () => Promise<boolean>, timeoutMs: number): Promise<boolean>;
   /** Restart the tool's database container. Throws when there is none. */
   restartDb(downMs: number): Promise<void>;
+  /**
+   * Freeze the tool's database container rather than stopping it, so its
+   * connections stay open and nothing it sends is answered. Throws when there
+   * is no container.
+   */
+  pauseDb(downMs: number): Promise<void>;
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────
@@ -373,6 +388,34 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   await producing;
   await reviveIfNeeded(ctx, "exited during the second database restart");
 
+  // ── Frozen rather than stopped ──
+  //
+  // docker pause is SIGSTOP: the connections the tool holds stay open and
+  // nothing it sends is ever answered. There is no error for a driver to see,
+  // so a tool without a statement timeout waits in the silence indefinitely -
+  // up, healthy by every external sign, and not indexing. Unlike the two
+  // outages above, a restart is the finding rather than an acceptable cost:
+  // nothing crashed, so nothing tells anybody to restart it.
+  const frozenBefore = await ctx.observe.count();
+  const producingFrozen = produce(ctx, 20, 500);
+  try {
+    await ctx.pauseDb(PAUSE_MS);
+    checks["recovers-pause"] = verdict(
+      await ctx.waitFor(
+        "indexing again after the database was unfrozen",
+        async () => (await ctx.observe.count().catch(() => 0)) > frozenBefore,
+        ctx.patience.reactMs
+      ),
+      ctx.alive()
+        ? "waits for ever on a frozen database: no error, no exit, and no rows"
+        : "exited while its database was frozen"
+    );
+  } catch (err) {
+    checks["recovers-pause"] = na(String((err as Error).message));
+  }
+  await producingFrozen;
+  await reviveIfNeeded(ctx, "exited while its database was frozen");
+
   // ── What it holds once it is allowed to finish ──
   ctx.chain.advance(20);
   const caughtUp = await synced(ctx);
@@ -569,6 +612,16 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     ctx.chain.reorg({ depth: 3, logs: "dropped" })
   );
 
+  // Six blocks replaced by three, so the chain is genuinely shorter than what
+  // the tool has already stored and its head has to move backwards. Every
+  // other reorg here can be handled by an indexer that only ever moves
+  // forward, overwriting as it goes; this one cannot.
+  checks["shortening"] = await reconciles(
+    "six blocks replaced by three",
+    () => ctx.chain.reorg({ depth: 6, extend: -3, logs: "changed" }),
+    0
+  );
+
   // A reorg the tool can only see by noticing that a block it already stored
   // is no longer on the chain, since it was not watching when it happened.
   await ctx.stopTool();
@@ -709,6 +762,100 @@ export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
   return { checks, measures };
 }
 
+/**
+ * Everything wrong at once, for the whole backfill, the way a bad provider is.
+ *
+ * The other RPC scenarios ask one clean question each: what does a tool do
+ * when every request fails for thirty seconds, and does it come back. That is
+ * a fair question and it is not the one that loses people data. A provider
+ * having a bad hour does not fail every request and then stop - it fails some
+ * of them, in several different ways, while the tool is in the middle of a
+ * backfill, and the retry paths that work one at a time start interacting.
+ * The earlier revision of this suite ran exactly this and found an indexer
+ * finishing its range hundreds of rows short without ever exiting or
+ * reporting an error, which none of the single-fault windows here noticed.
+ *
+ * The dice are seeded, so a run that finds something can be run again with
+ * the same rolls.
+ */
+export async function rpcChaos(ctx: Ctx): Promise<ScenarioResult> {
+  const checks: Record<string, Outcome> = {};
+  const measures: Record<string, number> = {};
+
+  /** One in this many requests is broken, in one of the ways below. */
+  const FAULT_RATE = 0.12;
+  /** How long the endpoint misbehaves before it is left alone to be finished. */
+  const CHAOS_MS = 120_000;
+  /** How long each kind of fault holds the floor before the next takes over. */
+  const TURN_MS = 10_000;
+
+  const kinds: Fault[] = [
+    { kind: "error", message: "internal error" },
+    { kind: "status", status: 429, message: "rate limited" },
+    { kind: "status", status: 502, message: "bad gateway" },
+    { kind: "truncated" },
+    { kind: "close" },
+    { kind: "missing" },
+    { kind: "timeout", methods: ["eth_getLogs"] },
+  ];
+
+  ctx.chain.advance(1_500);
+  await ctx.launch();
+  if (!(await reaches(ctx, 20))) {
+    return {
+      checks: { survives: na("the tool indexed nothing before the faults began") },
+      measures,
+    };
+  }
+
+  const startedAt = performance.now();
+  let turn = 0;
+  while (performance.now() - startedAt < CHAOS_MS && ctx.alive()) {
+    const kind = kinds[turn % kinds.length];
+    // A seed per turn, derived from the turn, so the whole sequence is one
+    // reproducible run rather than seven independent ones.
+    ctx.chain.fail({ ...kind, rate: FAULT_RATE, seed: 1_000 + turn });
+    turn++;
+    await sleep(TURN_MS);
+    // The chain keeps moving underneath: a tool that stalls on a fault has
+    // more to catch up on, which is what makes the stall visible later.
+    ctx.chain.advance(20);
+  }
+  ctx.chain.fail(null);
+  measures["faulted-requests"] = ctx.chain.stats().faulted;
+  ctx.log(`  ${ctx.chain.stats().faulted} of ${ctx.chain.stats().requests} requests broken`);
+
+  checks["survives"] = verdict(
+    ctx.alive(),
+    `exited while ${Math.round(FAULT_RATE * 100)}% of requests were failing`
+  );
+  await reviveIfNeeded(ctx, "exited while the endpoint was misbehaving");
+
+  // Healthy again, and given the scenario's full patience to finish. What is
+  // being asked is not whether it was fast under load; it is whether the
+  // range it says it finished is the range the chain holds.
+  ctx.chain.advance(20);
+  const caughtUp = await synced(ctx);
+  const result = await compare(ctx);
+  checks["catches-up"] = verdict(
+    caughtUp,
+    `never caught up once the endpoint was healthy again: ${result.summary}`
+  );
+  checks["no-loss"] = verdict(
+    result.missing.length === 0 && result.wrong.length === 0,
+    caughtUp
+      ? `finished the range with data missing: ${result.summary}`
+      : `did not finish the range: ${result.summary}`
+  );
+  checks["no-duplicates"] = verdict(
+    result.duplicates === 0 &&
+      result.extra.length === 0 &&
+      (result.balances === null || result.balances.length === 0),
+    `retries left rows behind twice over: ${result.summary}`
+  );
+  return { checks, measures };
+}
+
 export async function rpcLimits(ctx: Ctx): Promise<ScenarioResult> {
   const checks: Record<string, Outcome> = {};
 
@@ -795,6 +942,31 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
       ? `wrote the duplicated logs: ${doubled.summary}`
       : `did not get through a range whose logs were served twice: ${doubled.summary}`
   );
+
+  // ── A block the endpoint says is not there ──
+  //
+  // The logs are still served; only the block lookups come back null, which
+  // is exactly what a load-balanced endpoint does when the head was announced
+  // by one machine and asked of another a second behind it. A tool that takes
+  // the null as "no such block" and moves on has a hole; one that takes it as
+  // fatal is down for a condition that resolves itself.
+  ctx.chain.advance(30);
+  const beforePhantom = await ctx.observe.count().catch(() => 0);
+  ctx.chain.fail({ kind: "missing", rate: 0.5, seed: 11 });
+  await sleep(20_000);
+  ctx.chain.fail(null);
+  ctx.chain.advance(10);
+  const pastPhantom = await synced(ctx);
+  const phantom = await compare(ctx);
+  checks["missing-block"] = verdict(
+    ctx.alive() && pastPhantom && phantom.clean,
+    !ctx.alive()
+      ? "exited when the endpoint answered null for a block it has"
+      : (await ctx.observe.count().catch(() => 0)) === beforePhantom
+        ? "stopped indexing when the endpoint answered null for a block it has"
+        : `lost data to a block the endpoint said was missing: ${phantom.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when a block came back null");
 
   // ── A hash that stops existing under a request ──
   ctx.chain.advance(20);
@@ -1087,6 +1259,7 @@ export const PLAYS: Record<string, (ctx: Ctx) => Promise<ScenarioResult>> = {
   "reorg-cases": reorgCases,
   "rpc-outage": rpcOutage,
   "rpc-limits": rpcLimits,
+  "rpc-chaos": rpcChaos,
   "rpc-inconsistency": rpcInconsistency,
   "awkward-values": awkwardValues,
   "block-to-row": blockToRow,

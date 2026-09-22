@@ -302,9 +302,10 @@ halfReorgs.runs = halfReorgs.runs.map((run) =>
 );
 const half = scoreTool(halfReorgs);
 const halfReorgTally = half.groups.find((g) => g.group === "reorgs");
+const REORG_CHECKS = scenariosIn("reorgs").reduce((n, s) => n + checkCount(s), 0);
 check(
   "a failed check costs exactly one check",
-  halfReorgTally?.passed === 5 && halfReorgTally?.asked === 6,
+  halfReorgTally?.passed === REORG_CHECKS - 1 && halfReorgTally?.asked === REORG_CHECKS,
   JSON.stringify(halfReorgTally && [halfReorgTally.passed, halfReorgTally.asked])
 );
 check(
@@ -330,7 +331,7 @@ skipped.runs = skipped.runs.map((run) =>
 const skippedReorgs = scoreTool(skipped).groups.find((g) => g.group === "reorgs");
 check(
   "an unmeasured check leaves the fraction rather than failing",
-  skippedReorgs?.passed === 5 && skippedReorgs?.asked === 5,
+  skippedReorgs?.passed === REORG_CHECKS - 1 && skippedReorgs?.asked === REORG_CHECKS - 1,
   JSON.stringify(skippedReorgs && [skippedReorgs.passed, skippedReorgs.asked])
 );
 
@@ -436,14 +437,16 @@ check(
   !table.includes("**Perfect Indexer**\n"),
   table
 );
+const CRASH_CHECKS = scenariosIn("crash-recovery").reduce((n, s) => n + checkCount(s), 0);
 check(
   "a column passed whole keeps its count beside the tick",
-  table.includes("✅ 10/10"),
+  table.includes(`✅ ${CRASH_CHECKS}/${CRASH_CHECKS}`),
   table
 );
 check(
   "a column below full marks reads as a tally, with its measure",
-  table.includes("**0/10** 2 restarts") && table.includes("**25 / 35**"),
+  table.includes(`**0/${CRASH_CHECKS}** 2 restarts`) &&
+    table.includes(`**${ALL_CHECKS - CRASH_CHECKS} / ${ALL_CHECKS}**`),
   table
 );
 // A row already being carried when it was published must still say so after a
@@ -487,7 +490,7 @@ check(
 const recovered = parsed.find((row) => row.name === "Example Indexer")?.overall;
 check(
   "the recovered overall matches what was published",
-  recovered?.passed === 25 && recovered?.asked === 35,
+  recovered?.passed === ALL_CHECKS - CRASH_CHECKS && recovered?.asked === ALL_CHECKS,
   JSON.stringify(parsed.map((r) => [r.name, r.overall]))
 );
 check(

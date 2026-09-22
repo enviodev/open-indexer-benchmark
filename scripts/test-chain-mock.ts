@@ -15,10 +15,13 @@
 
 import {
   encodeString,
+  METADATA_EVERY,
+  METADATA_TOPIC,
   SELECTORS,
   startChainMock,
   type ChainMock,
 } from "../reliability/lib/chain-mock.ts";
+import { TRANSFER_TOPIC } from "../cases/lib/hypersync.ts";
 
 let failures = 0;
 
@@ -36,6 +39,16 @@ const START = 1_000_000;
 
 let mock: ChainMock | null = null;
 
+/** Whether a body is JSON at all, which a truncated one is not. */
+function parses(body: string): boolean {
+  try {
+    JSON.parse(body);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function rpc(method: string, params: unknown[] = []): Promise<any> {
   const res = await fetch(mock!.url, {
     method: "POST",
@@ -45,11 +58,20 @@ async function rpc(method: string, params: unknown[] = []): Promise<any> {
   return res.json();
 }
 
+/**
+ * The transfer amounts in a range.
+ *
+ * Filtered by topic, because the chain emits two events now and an unfiltered
+ * getLogs answers with both - which is the point of the second one, and would
+ * otherwise read here as a block carrying more transfers than it has.
+ */
 const amountsAt = async (from: number, to: number): Promise<bigint[]> => {
   const { result } = await rpc("eth_getLogs", [
     { fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}`, address: CONTRACT },
   ]);
-  return (result as { data: string }[]).map((log) => BigInt(log.data));
+  return (result as { data: string; topics: string[] }[])
+    .filter((log) => log.topics[0] === TRANSFER_TOPIC)
+    .map((log) => BigInt(log.data));
 };
 
 try {
@@ -203,7 +225,118 @@ try {
     { fromBlock: `0x${START.toString(16)}`, toBlock: `0x${(START + 1).toString(16)}` },
   ]);
   check("a counted fault heals itself", !healed.error, JSON.stringify(healed).slice(0, 120));
+  // A body that stops halfway: a 200 a client cannot parse, which is the
+  // failure a client that only checks the status code reads as an empty
+  // result set.
+  mock.control.fail({ kind: "truncated", methods: ["eth_getLogs"] });
+  const cut = await fetch(mock.url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_getLogs",
+      params: [{ fromBlock: `0x${START.toString(16)}`, toBlock: `0x${(START + 2).toString(16)}` }],
+    }),
+  });
+  const cutBody = await cut.text();
+  check(
+    "a truncated fault answers 200 with a body that does not parse",
+    cut.status === 200 && cutBody.length > 0 && !parses(cutBody),
+    `${cut.status}: ${cutBody.slice(0, 80)}`
+  );
   mock.control.fail(null);
+
+  // A block that exists, answered as though it does not - and only the block
+  // lookups, because the rest of what that replica serves is fine.
+  mock.control.fail({ kind: "missing", methods: ["eth_getBlockByNumber"] });
+  const phantom = await rpc("eth_getBlockByNumber", [`0x${START.toString(16)}`, false]);
+  check(
+    "a missing fault answers null for a block that is there",
+    phantom.result === null && !phantom.error,
+    JSON.stringify(phantom).slice(0, 120)
+  );
+  mock.control.fail(null);
+  const back = await rpc("eth_getBlockByNumber", [`0x${START.toString(16)}`, false]);
+  check("and the block is there again once it heals", !!back.result);
+
+  // A share of requests rather than all of them, and the same share twice
+  // from the same seed: a partial fault nobody can reproduce is an anecdote.
+  const sample = async (seed: number) => {
+    mock!.control.fail({ kind: "error", methods: ["eth_blockNumber"], rate: 0.5, seed });
+    let broke = 0;
+    for (let i = 0; i < 40; i++) {
+      const answer = await rpc("eth_blockNumber");
+      if (answer.error) broke++;
+    }
+    mock!.control.fail(null);
+    return broke;
+  };
+  const rolled = await sample(7);
+  const rolledAgain = await sample(7);
+  check(
+    "a rated fault breaks some requests and spares others",
+    rolled > 5 && rolled < 35,
+    `${rolled} of 40`
+  );
+  check(
+    "and the same seed breaks the same ones",
+    rolled === rolledAgain,
+    `${rolled} then ${rolledAgain}`
+  );
+
+  // ── A chain that gets shorter ──
+  const tall = mock.control.head();
+  const shorter = mock.control.reorg({ depth: 6, extend: -3 });
+  check(
+    "a reorg can leave the chain shorter than it was",
+    mock.control.head() === tall - 3 && shorter.to === tall - 3,
+    `${tall} -> ${mock.control.head()}`
+  );
+  check(
+    "and the blocks above the new head are gone",
+    mock.control.blockAt(tall) === null,
+    JSON.stringify(mock.control.blockAt(tall))
+  );
+  mock.control.advance(3);
+
+  // ── The second event ──
+  //
+  // A tool configured for both events that indexes only the transfers is
+  // wrong in a way no amount of looking at transfers can see, so the chain
+  // has to really emit the other one, at a topic the tools' own ABIs hash to.
+  // A short span: the endpoint in this test caps a response at fifty logs,
+  // which is a cap the suite tests elsewhere and not the subject here.
+  const spanTo = mock.control.head();
+  const spanFrom = Math.max(START, spanTo - 20);
+  const { result: everything } = await rpc("eth_getLogs", [
+    { fromBlock: `0x${spanFrom.toString(16)}`, toBlock: `0x${spanTo.toString(16)}` },
+  ]);
+  const metadataLogs = (everything as { topics: string[]; data: string }[]).filter(
+    (log) => log.topics[0] === METADATA_TOPIC
+  );
+  const expected = mock.control
+    .metadataRows(spanTo)
+    .filter((row) => row.block >= spanFrom);
+  check(
+    "the chain emits a metadata event every so many blocks",
+    metadataLogs.length === expected.length && expected.length > 0,
+    `${metadataLogs.length} served, ${expected.length} in ground truth, every ${METADATA_EVERY}`
+  );
+  check(
+    "its two strings decode to what ground truth says",
+    metadataLogs.every((log, i) => {
+      const data = log.data.slice(2);
+      const at = (word: number) => Number(BigInt(`0x${data.slice(word * 64, word * 64 + 64)}`));
+      const read = (offset: number) => {
+        const start = (offset / 32) * 64;
+        const length = Number(BigInt(`0x${data.slice(start, start + 64)}`));
+        return Buffer.from(data.slice(start + 64, start + 64 + length * 2), "hex").toString("utf8");
+      };
+      return read(at(0)) === expected[i].symbol && read(at(1)) === expected[i].name;
+    }),
+    JSON.stringify(expected[0])
+  );
 
   // ── An unimplemented method is an error, never a silent empty answer ──
   const unknown = await rpc("eth_getProof", []);

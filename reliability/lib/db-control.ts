@@ -89,6 +89,36 @@ export async function restartDatabase(
   return { downMs: performance.now() - startedAt, container };
 }
 
+/**
+ * Freeze the tool's database, hold it frozen, and thaw it.
+ *
+ * `docker pause` is SIGSTOP: the container's processes stop running and its
+ * sockets stay open. Every connection the tool holds is still established and
+ * nothing it sends is ever answered, which is a different failure from the
+ * one `restartDatabase` stages - there, connections are closed and a query
+ * fails immediately with an error a driver can see. Here there is no error at
+ * all, only silence, and a tool without a statement timeout waits in it
+ * forever. That is the outage that pages people: the process is up, its
+ * health check answers, and it has not written a row in an hour.
+ */
+export async function pauseDatabase(
+  dbUrl: string,
+  downMs: number
+): Promise<RestartOutcome> {
+  const container = await containerFor(dbUrl);
+  const startedAt = performance.now();
+  await run("docker", ["pause", container]);
+  try {
+    await sleep(downMs);
+  } finally {
+    // Unpaused whatever happened while it was frozen: a container left paused
+    // takes every later scenario in the run down with it.
+    await run("docker", ["unpause", container]).catch(() => {});
+  }
+  await waitPg(dbUrl, "SELECT 1", 60_000);
+  return { downMs: performance.now() - startedAt, container };
+}
+
 /** Whether the database is answering right now. */
 export async function databaseUp(dbUrl: string): Promise<boolean> {
   try {
