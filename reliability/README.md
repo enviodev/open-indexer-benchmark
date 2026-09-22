@@ -188,8 +188,8 @@ Postgres restarts. It happens for maintenance, for a failover, for an OOM kill, 
 
 | check | what a pass means |
 | --- | --- |
-| survives a database restart mid-backfill | The indexer process is still running two minutes after Postgres comes back, and its progress has moved since. A tool that exited scores nothing here, whatever it does on the next launch. |
-| survives a database restart at the head | The same, while tracking the head. Separate from the backfill check because the two are different code paths in most tools, and because at the head a lost in-flight batch is data an indexer will not naturally come back for. |
+| indexes again after a database restart mid-backfill | Progress has moved since Postgres came back - on its own, or after the harness started the tool again. Exiting is a real cost and it is published beside this score as "restarts needed" rather than counted twice: a tool that comes back and gets the data right recovered, however ungracefully, and the checks below are what say whether the data is right. What fails here is the tool that indexes nothing more, restart or no restart. |
+| follows the head again after a database restart | The same, while tracking the head. Separate from the backfill check because the two are different code paths in most tools, and because at the head a lost in-flight batch is data an indexer will not naturally come back for. |
 | loses nothing across the restart | Once the range is complete - restarting the tool by hand if it will not restart itself - every row matches ground truth. This is scored separately from survival because the two failures are unrelated: a tool can crash and recover perfectly, and a tool can stay up while quietly skipping the batch it was mid-write on. |
 | writes no duplicates across the restart | The other half of the same question. A batch retried after a failed commit must not land twice: the row count matches ground truth exactly, and no aggregate - a balance, a running total - has been applied more than once. |
 

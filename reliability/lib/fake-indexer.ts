@@ -21,6 +21,12 @@
 //   double-apply        applies a batch's balance changes twice on restart,
 //                       the classic replay bug an append-only table hides
 //   die-on-db-error     exits the moment a query fails, instead of retrying
+//   stuck-after-db-error
+//                       survives a failed query and never indexes another row,
+//                       for good: the state is written down, so starting it
+//                       again does not unstick it. An indexer that exits is
+//                       restarted by whatever supervises it; this is the one
+//                       that stays down without anyone noticing it is up
 //   no-sanitise         writes strings through unchanged, so a NUL byte in
 //                       one reaches Postgres and fails the insert
 //   asks-for-an-unserved-method
@@ -47,6 +53,7 @@ export type Defect =
   | "checkpoint-ahead"
   | "double-apply"
   | "die-on-db-error"
+  | "stuck-after-db-error"
   | "no-sanitise";
 
 export interface FakeOptions {
@@ -75,6 +82,8 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
 
   return ({ rpcUrl }) => {
     let running = false;
+    /** Indexing nothing from here on, restart or no restart. */
+    let stuck = false;
     let exited = false;
     let checkpoint = START_BLOCK - 1;
     /**
@@ -312,6 +321,15 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         // The token read is not what keeps an indexer alive.
       }
       while (running && gen === generation) {
+        if (stuck) {
+          // Up, connected, and indexing nothing, for ever. Recorded so that
+          // starting it again does not quietly fix it.
+          await sql("CREATE TABLE IF NOT EXISTS stuck (noted timestamptz)").catch(() => {});
+          await sql("INSERT INTO stuck (noted) SELECT now() WHERE NOT EXISTS " +
+            "(SELECT 1 FROM stuck)").catch(() => {});
+          await sleep(1_000);
+          continue;
+        }
         try {
           if (defects.has("checkpoint-ahead")) {
             // Progress is recorded before the rows it covers, so a crash
@@ -341,6 +359,10 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
             await step(gen);
           }
         } catch (err) {
+          if (defects.has("stuck-after-db-error") && /psql|connection/i.test(String(err))) {
+            if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] stuck: ${err}`);
+            stuck = true;
+          }
           if (defects.has("die-on-db-error") && /psql|connection/i.test(String(err))) {
             if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] dying: ${err}`);
             running = false;
@@ -363,7 +385,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       async prepare() {
         await sql(
           [
-            "DROP TABLE IF EXISTS transfer, account, token, progress, block",
+            "DROP TABLE IF EXISTS transfer, account, token, progress, block, stuck",
             `CREATE TABLE transfer (id text PRIMARY KEY, block_number bigint, ` +
               `log_index numeric, "from" text, "to" text, amount numeric)`,
             "CREATE TABLE account (id text PRIMARY KEY, balance numeric)",
@@ -378,12 +400,19 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         checkpoint = START_BLOCK - 1;
         batch = options.batchBlocks ?? 500;
         exited = false;
+        stuck = false;
       },
       async launch() {
         // The checkpoint is read back rather than assumed, so a relaunch after
         // a kill resumes where the database says it got to.
         const stored = await sql("SELECT block::text FROM progress").catch(() => "");
         checkpoint = Number(stored.trim()) || START_BLOCK - 1;
+        // Stuck is stuck: the restart reads it back rather than starting over
+        // on a clean slate, because the failure being modelled is a tool that
+        // a restart does not fix.
+        stuck = Boolean(
+          (await sql("SELECT count(*)::text FROM stuck").catch(() => "0")).trim().match(/^[1-9]/)
+        );
         // A new generation, so any loop left over from a kill stops rather
         // than resuming alongside this one.
         generation++;

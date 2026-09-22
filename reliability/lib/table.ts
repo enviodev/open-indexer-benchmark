@@ -35,7 +35,8 @@ const NO_VALUE = "—";
 export interface ReliabilityNote {
   /** The group whose cell carries the reference, or the row when absent. */
   group?: string;
-  text: string;
+  /** One line each, in the words of somebody living with the tool. */
+  phrases: string[];
 }
 
 export interface ReliabilityRow {
@@ -85,11 +86,13 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
 }
 
 /**
- * A tick for a column a tool passed whole, the tally for one it did not.
+ * The tally, with a tick on the columns a tool passed whole.
  *
- * Reading a row of "10 / 10, 6 / 6, 8 / 10" means dividing five fractions to
- * find the one that is not one. A tick is nothing to read, so the fraction
- * left among them is the finding, and it is the only thing the eye stops on.
+ * Reading a row of "10/10, 6/6, 8/10" means dividing five fractions to find
+ * the one that is not one. The tick does that division for the reader, so the
+ * fractions left bare are the findings - but the count stays, because "8/10"
+ * next to a tick says nothing about how much was asked unless the tick says it
+ * too.
  *
  * The link lives on the column heading rather than in every cell: the same URL
  * seven times a column is most of the table's width and none of its meaning.
@@ -97,8 +100,9 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
 function scoreCell(tally: Tally, headline: string | null): string {
   const measure = headline ? ` ${headline}` : "";
   if (tally.asked === 0) return NO_VALUE;
-  if (tally.passed === tally.asked) return `✅${measure}`;
-  return `**${tally.passed}/${tally.asked}**${measure}`;
+  const count = `${tally.passed}/${tally.asked}`;
+  if (tally.passed === tally.asked) return `✅ ${count}${measure}`;
+  return `**${count}**${measure}`;
 }
 
 /**
@@ -129,7 +133,7 @@ export function toReliabilityRow(
         .find(Boolean);
       notes.push({
         group: group.id,
-        text: `not measured${why ? ` - ${why}` : ""}`,
+        phrases: [`not measured${why ? ` - ${why}` : ""}`],
       });
       continue;
     }
@@ -144,10 +148,10 @@ export function toReliabilityRow(
     if (failures.length > 0 || skipped.length > 0) {
       notes.push({
         group: group.id,
-        text: shorten([
+        phrases: [
           ...unique(failures.map(phraseFor)),
           ...unique(skipped.map((skip) => `${skip.label} was not asked`)),
-        ]),
+        ],
       });
     }
   }
@@ -184,20 +188,19 @@ function unique(values: string[]): string[] {
 }
 
 /**
- * The first few, and a count of the rest.
+ * How many findings a tool's list shows before it says how many are left.
  *
- * A tool that exits the moment its database blinks fails all ten crash
- * recovery checks, and printing ten phrases for one behaviour is a wall of
- * text that hides the tools with one real problem. Three is enough to see
- * what kind of failure it is; the count says how wide it goes.
+ * A tool that exits the moment its database blinks fails most of the suite,
+ * and a line for each is a wall of text that hides the tools with one real
+ * problem. Six is enough to see what kind of tool it is; the count says how
+ * much more there was, and the scenario page has all of it. They are taken a
+ * few at a time from each column rather than all from the first, so a tool
+ * with one problem in every column does not read as a tool with one broken
+ * column.
  */
-const SHOWN = 3;
+const SHOWN = 6;
 
-function shorten(phrases: string[]): string {
-  if (phrases.length <= SHOWN) return phrases.join("; ");
-  const rest = phrases.length - SHOWN;
-  return `${phrases.slice(0, SHOWN).join("; ")}, and ${rest} more`;
-}
+
 
 /**
  * What a tool read through, linked to what that means here.
@@ -232,7 +235,7 @@ export function unrunRow(
     cells: Object.fromEntries(GROUPS.map((group) => [group.id, NO_VALUE])),
     overall: { passed: 0, asked: 0 },
     overallCell: NO_VALUE,
-    notes: [{ text: reason }],
+    notes: [{ phrases: [reason] }],
   };
 }
 
@@ -271,13 +274,16 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
     `| ${HEAD.map(() => "---").join(" | ")} |`,
   ];
   /**
-   * One line per tool, naming the column and then what broke in it.
+   * A list per tool: the tool, then one line per finding, naming the column
+   * it belongs to and what it costs whoever runs the tool.
    *
    * Numbered references were worse at the one job they had: a reader who
    * wants to know what a tool does badly had to hold a number in their head,
-   * find it below, and do that again for each of five columns. A tool's
-   * failures are one thought, so they are one line, and the tools that fail
-   * nothing are simply not in the list.
+   * find it below, and do that again for each of five columns. Running the
+   * findings together in one sentence was not much better - three problems
+   * separated by semicolons read as one long problem. One line each, so the
+   * count of lines is the count of things wrong. Tools that fail nothing are
+   * simply not in the list.
    */
   const notes: string[] = [];
   for (const row of sorted) {
@@ -291,15 +297,38 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
       ].join(" | ")} |`
     );
     if (row.notes.length === 0) continue;
-    const said = row.notes
-      .map((note) => {
-        const group = GROUPS.find((g) => g.id === note.group);
-        return group ? `*${group.title}*: ${note.text}` : note.text;
-      })
-      .join(" · ");
-    notes.push(`**${row.name}** - ${said}`);
+    const total = row.notes.reduce((n, note) => n + note.phrases.length, 0);
+    // One from each column in turn, so a tool with a problem in every column
+    // does not read as a tool with one broken column.
+    const shown = new Map<ReliabilityNote, string[]>(row.notes.map((note) => [note, []]));
+    let taken = 0;
+    for (let depth = 0; taken < SHOWN; depth++) {
+      let any = false;
+      for (const note of row.notes) {
+        if (taken >= SHOWN) break;
+        const phrase = note.phrases[depth];
+        if (phrase === undefined) continue;
+        shown.get(note)!.push(phrase);
+        taken++;
+        any = true;
+      }
+      if (!any) break;
+    }
+
+    notes.push(`- **${row.name}**`);
+    for (const note of row.notes) {
+      const lines = shown.get(note) ?? [];
+      if (lines.length === 0) continue;
+      const group = GROUPS.find((g) => g.id === note.group);
+      if (!group) {
+        notes.push(...lines.map((phrase) => `  - ${phrase}`));
+        continue;
+      }
+      notes.push(`  - *${group.title}*`, ...lines.map((phrase) => `    - ${phrase}`));
+    }
+    if (total > taken) notes.push(`  - and ${total - taken} more`);
   }
-  if (notes.length > 0) lines.push("", ...notes.map((note) => `> ${note}`));
+  if (notes.length > 0) lines.push("", ...notes);
 
   const carried = sorted.filter((row) => row.carriedOver).map((row) => row.name);
   if (carried.length > 0) {

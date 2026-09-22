@@ -278,7 +278,7 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   await ctx.launch();
   if (!(await reaches(ctx, 400))) {
     return {
-      checks: { "survives-backfill": na("the tool indexed nothing to restart under") },
+      checks: { "recovers-backfill": na("the tool indexed nothing to restart under") },
       measures,
     };
   }
@@ -296,7 +296,7 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     await ctx.restartDb(DB_DOWN_MS);
   } catch (err) {
     await producingThrough;
-    return { checks: { "survives-backfill": na(String((err as Error).message)) }, measures };
+    return { checks: { "recovers-backfill": na(String((err as Error).message)) }, measures };
   }
   await producingThrough;
   // There has to be work left for "it started indexing again" to mean
@@ -311,14 +311,28 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     ctx.patience.reactMs
   );
   measures["resume-seconds"] = Math.round((performance.now() - backAt) / 1_000);
-  checks["survives-backfill"] = verdict(
-    ctx.alive() && movedOn,
-    ctx.alive()
-      ? `stayed up but indexed nothing for ${Math.round(ctx.patience.reactMs / 1_000)}s ` +
-        `after the database came back`
-      : "exited when the database went away"
+  // A tool that exited is started again and asked the same question. Exiting
+  // is a real cost and it is published - as "restarts needed", in the cell
+  // beside this score - but it is not a second finding on top of whatever the
+  // data turns out to be. What this check is for is the tool that never
+  // indexes another row, with or without help; a tool that comes back and
+  // gets the data right did recover, however ungracefully.
+  const revived = await reviveIfNeeded(ctx, "exited when the database went away");
+  const indexingAgain =
+    movedOn ||
+    (revived &&
+      (await ctx.waitFor(
+        "indexing again after being restarted by hand",
+        async () => (await ctx.observe.count().catch(() => 0)) > before,
+        ctx.patience.reactMs
+      )));
+  checks["recovers-backfill"] = verdict(
+    indexingAgain,
+    revived
+      ? "exited when the database went away and indexed nothing after a restart"
+      : `indexed nothing for ${Math.round(ctx.patience.reactMs / 1_000)}s after the ` +
+        `database came back`
   );
-  await reviveIfNeeded(ctx, "exited when the database went away");
 
   // ── At the head ──
   await synced(ctx);
@@ -328,19 +342,33 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   const producing = produce(ctx, 20, 2_000);
   try {
     await ctx.restartDb(DB_DOWN_MS);
-    const survivedHead = await ctx.waitFor(
+    const followedOn = await ctx.waitFor(
       "indexing again at the head",
       async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
       ctx.patience.reactMs
     );
-    checks["survives-head"] = verdict(
-      ctx.alive() && survivedHead,
-      ctx.alive()
-        ? "stayed up but stopped following the head after the database came back"
-        : "exited when the database went away while tracking the head"
+    // Same rule as the backfill above: restarted by hand if it has to be, and
+    // asked again.
+    const restarted = await reviveIfNeeded(
+      ctx,
+      "exited when the database went away while tracking the head"
+    );
+    const following =
+      followedOn ||
+      (restarted &&
+        (await ctx.waitFor(
+          "following the head again after being restarted by hand",
+          async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
+          ctx.patience.reactMs
+        )));
+    checks["recovers-head"] = verdict(
+      following,
+      restarted
+        ? "exited at the head and stopped following the chain even after a restart"
+        : "stopped following the head after the database came back"
     );
   } catch (err) {
-    checks["survives-head"] = na(String((err as Error).message));
+    checks["recovers-head"] = na(String((err as Error).message));
   }
   await producing;
   await reviveIfNeeded(ctx, "exited during the second database restart");

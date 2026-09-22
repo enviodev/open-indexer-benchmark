@@ -416,23 +416,31 @@ console.log(`\n${table}\n`);
 check("the headline restart count reaches the table", table.includes("2 restarts"), table);
 check("the headline head lag reaches the table", table.includes("640ms"), table);
 check(
-  "a cell below full marks says what broke, in a reader's words",
-  /> \*\*Example Indexer\*\* - \*crash recovery\*: dies when the database restarts mid-backfill/.test(
+  "a failure is one line of its own, under the column it belongs to",
+  /\n- \*\*Example Indexer\*\*\n  - \*crash recovery\*\n    - stops indexing for good after a database restart\n    - stops following the chain after a database restart\n/.test(
     table
   ),
   table
 );
 check(
   "a whole column lost is summarised rather than listed ten times",
-  /, and \d+ more/.test(table) && table.split("\n").every((line) => line.length < 400),
+  /^  - and \d+ more$/m.test(table) &&
+    table
+      .split("\n")
+      .filter((line) => line.startsWith("  "))
+      .every((line) => line.length < 120),
   table
 );
 check(
   "a tool that lost nothing earns no line at all",
-  !table.includes("**Perfect Indexer** -"),
+  !table.includes("**Perfect Indexer**\n"),
   table
 );
-check("a column passed whole reads as a tick", table.includes(" ✅ "), table);
+check(
+  "a column passed whole keeps its count beside the tick",
+  table.includes("✅ 10/10"),
+  table
+);
 check(
   "a column below full marks reads as a tally, with its measure",
   table.includes("**0/10** 2 restarts") && table.includes("**25 / 35**"),

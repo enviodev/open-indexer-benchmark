@@ -143,7 +143,7 @@ const EXPECTATIONS: Expectation[] = [
   { scenario: "process-kill", passes: ["resumes", "no-gap", "no-double-apply", "atomic-batch"] },
   { scenario: "graceful-shutdown", passes: ["exits-clean", "flushes"] },
   { scenario: "rpc-limits", passes: ["splits-range", "splits-results", "recovers-width"] },
-  { scenario: "db-restart", outage: true, passes: ["survives-backfill", "no-loss", "no-duplicates"] },
+  { scenario: "db-restart", outage: true, passes: ["recovers-backfill", "no-loss", "no-duplicates"] },
   { scenario: "rpc-inconsistency", passes: ["head-goes-backwards", "duplicate-delivery", "stale-hash"], slow: true },
   { scenario: "rpc-outage", passes: ["survives", "resumes", "no-loss", "backs-off"], slow: true },
 
@@ -164,11 +164,20 @@ const EXPECTATIONS: Expectation[] = [
     defects: ["double-apply"],
     fails: ["no-double-apply"],
   },
+  // A tool that exits and comes back with the right data is not marked down
+  // for exiting - the restart is published as a measure instead - so the
+  // defect that fails this check is the one a restart does not fix.
+  {
+    scenario: "db-restart",
+    defects: ["stuck-after-db-error"],
+    outage: true,
+    fails: ["recovers-backfill"],
+  },
   {
     scenario: "db-restart",
     defects: ["die-on-db-error"],
     outage: true,
-    fails: ["survives-backfill"],
+    passes: ["recovers-backfill"],
   },
 
   // ── A project that cannot implement an entity loses only its checks ──
