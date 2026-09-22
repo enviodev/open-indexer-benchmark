@@ -64,8 +64,16 @@ const POLL_MS = 500;
  * Generous on purpose: the scenarios themselves impose the deadlines that
  * mean anything, and this one exists only so a tool that hangs cannot hold the
  * whole suite. A scenario stopped here reports its checks as unmeasured.
+ *
+ * Twenty-five minutes was not generous enough, and cost a real column. The
+ * reorg scenario asks a tool to catch up seven times, and rindexer's live
+ * indexing takes one block per poll, about three seconds each — so the twenty
+ * blocks the harness adds between checks are a minute of chasing every time,
+ * before the reorg is even unwound. It was most of the way through when the
+ * ceiling stopped it, and published six unmeasured checks that it would have
+ * answered. A backstop that a working tool can hit is measuring the backstop.
  */
-const SCENARIO_TIMEOUT_MS = 25 * 60_000;
+const SCENARIO_TIMEOUT_MS = 45 * 60_000;
 
 export interface RunOptions {
   tools: ReliabilityTool[];

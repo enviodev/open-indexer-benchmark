@@ -134,7 +134,10 @@ jobs:
           - sqd-rpc
           - subgraph
           - subquery
-    timeout-minutes: 300
+    # Nine scenarios, each with a 45-minute backstop of its own. A healthy
+    # tool is far inside this; it is here so one that hangs cannot hold a
+    # runner all day. GitHub's own ceiling for a job is 360.
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with:

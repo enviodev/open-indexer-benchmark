@@ -339,8 +339,15 @@ console.log(`\n${table}\n`);
 check("the headline restart count reaches the table", table.includes("2 restarts"), table);
 check("the headline head lag reaches the table", table.includes("640ms"), table);
 check(
-  "a column the tool passed nothing in earns a numbered note",
-  /\*\*\(1\)\*\* Example Indexer — passed no crash recovery check/.test(table),
+  "a cell below full marks names the checks it lost and why",
+  /\*\*\(1\)\*\* Example Indexer — .*survives a database restart mid-backfill.*exited when Postgres went away/.test(
+    table
+  ),
+  table
+);
+check(
+  "and says a shared reason once rather than once per check",
+  (table.match(/exited when Postgres went away/g) ?? []).length === 1,
   table
 );
 check(

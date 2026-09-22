@@ -122,11 +122,20 @@ export function toReliabilityRow(
       });
       continue;
     }
-    if (tally.passed === 0) {
-      const worst = scored?.scenarios.flatMap((s) => s.failures)[0];
+
+    // Every cell below full marks says why, check by check. A reader looking
+    // at "5 / 6" should not have to open another page to learn which one, and
+    // a check that was never asked is part of that answer too: it is missing
+    // from the denominator, which is invisible in the cell.
+    const failures = scored?.scenarios.flatMap((s) => s.failures) ?? [];
+    const skipped = scored?.scenarios.flatMap((s) => s.skipped) ?? [];
+    if (failures.length > 0 || skipped.length > 0) {
       notes.push({
         group: group.id,
-        text: `passed no ${group.title} check${worst ? `, starting with: ${worst.detail}` : ""}`,
+        text: [
+          ...byReason(failures).map(([labels, why]) => `${labels} — ${why}`),
+          ...byReason(skipped).map(([labels, why]) => `${labels} was not asked — ${why}`),
+        ].join("; "),
       });
     }
   }
@@ -141,6 +150,25 @@ export function toReliabilityRow(
       score.asked === 0 ? NO_VALUE : `**${score.passed} / ${score.asked}**`,
     notes,
   };
+}
+
+/**
+ * Checks grouped by the reason they give, so a column that failed ten ways for
+ * one reason says the reason once. A tool that exited when its database went
+ * away fails every check in the group with that same sentence, and repeating
+ * it ten times buries the one time it differs.
+ */
+function byReason(
+  checks: { label: string; detail: string }[]
+): [labels: string, reason: string][] {
+  const byDetail = new Map<string, string[]>();
+  for (const check of checks) {
+    byDetail.set(check.detail, [...(byDetail.get(check.detail) ?? []), check.label]);
+  }
+  return [...byDetail].map(([detail, labels]) => [
+    labels.map((label) => `**${label}**`).join(", "),
+    detail,
+  ]);
 }
 
 /**
