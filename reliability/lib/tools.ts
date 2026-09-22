@@ -3,7 +3,7 @@
 // The scenarios work by lying to an indexer about a chain, which is only
 // possible where the benchmark is what the indexer is listening to. Every tool
 // reading plain RPC qualifies, and each of them is run here. A tool reading its
-// own network — HyperSync, SQD Network — does not: the benchmark cannot make
+// own network - HyperSync, SQD Network - does not: the benchmark cannot make
 // either of those serve a nine-block reorg on request, and pointing the tool at
 // the mock endpoint instead would measure its RPC path while labelling it as
 // the other one.
@@ -41,7 +41,7 @@ export const RELIABILITY_TOOLS = [
 
 /**
  * Drivers that read plain RPC and are waiting only on an implementation of the
- * reliability case for their framework — the project directory the driver
+ * reliability case for their framework - the project directory the driver
  * looks for, beside the others under reliability/.
  *
  * Empty, now that every RPC row has one. It is kept rather than deleted
@@ -92,7 +92,7 @@ export function runsHere(driver: string): driver is ReliabilityTool {
 /**
  * Every registered driver is either run or explained. Called by the suite's
  * tests and by the runner before it starts anything, so a driver added to the
- * throughput registry cannot quietly go unmentioned here — which would read,
+ * throughput registry cannot quietly go unmentioned here - which would read,
  * in the published table, as a tool nobody thought to measure.
  */
 export function unaccountedDrivers(): string[] {

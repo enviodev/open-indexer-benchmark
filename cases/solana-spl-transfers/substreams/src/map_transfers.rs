@@ -25,7 +25,7 @@ fn map_transfers(
     let mut data: Vec<Transfer> = Vec::new();
     // Rows are keyed on the transaction's signature and the instruction's path
     // within it, which is what the upstream package and solana-common's own
-    // instruction stream both do — the latter carries `tx_hash` and no index at
+    // instruction stream both do - the latter carries `tx_hash` and no index at
     // all. A signature travels with the transaction, so it survives the
     // server-side filter; the position within a block does not, because the
     // block is what the filter exists to avoid downloading. The other three
@@ -201,7 +201,7 @@ fn decode(
 /// The instruction names no mint, so the answer is only in the transaction's
 /// token balances, and it is read for the transfer's own two accounts rather
 /// than for the transaction as a whole. Asking whether *any* balance carries
-/// the mint — which is what the upstream Substreams package does — marks every
+/// the mint - which is what the upstream Substreams package does - marks every
 /// transfer in a swap as a transfer of whichever token the swap touched.
 ///
 /// Either account settles it, because SPL Token rejects a transfer between

@@ -7,7 +7,7 @@ This benchmark indexes raw ERC-20 `Transfer` events on the USDC token contract o
 The one project backs two benchmark rows: `rindexer` reads logs over plain
 RPC, and `rindexer-hypersync` reads them from
 [HyperSync](https://docs.envio.dev/docs/HyperSync/overview). The switch is the
-`RINDEXER_HYPERSYNC` variable substituted into `rindexer.yaml` — see
+`RINDEXER_HYPERSYNC` variable substituted into `rindexer.yaml` - see
 `.env.example` for the values each row runs with.
 
 ## Pre-requisites

@@ -4,7 +4,7 @@ package:
   version: v0.1.0
 
 imports:
-  # substreams-sink-sql resolves the sink type from this spkg — it does not
+  # substreams-sink-sql resolves the sink type from this spkg - it does not
   # bundle the descriptors. The `substreams` CLI does bundle them, so with this
   # import present its own commands (`run`, `protogen`) fail on an ambiguous
   # sf.substreams.sink.sql.v1.Service; comment it out for those, and see the

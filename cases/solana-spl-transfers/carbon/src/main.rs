@@ -49,7 +49,7 @@ const MAX_CONCURRENT_REQUESTS: usize = 10;
 /// fetching a block and decoding it, and the pipeline's, between the datasource
 /// and the processors.
 ///
-/// Both default to 1,000, and the datasource does not wait when one is full —
+/// Both default to 1,000, and the datasource does not wait when one is full -
 /// it `try_send`s, and on `Full` logs
 /// `Error sending transaction update: "Full(..)"` and abandons the rest of that
 /// block's transactions. There is no backpressure, so a queue that fills is
@@ -57,7 +57,7 @@ const MAX_CONCURRENT_REQUESTS: usize = 10;
 ///
 /// A thousand is marginal even at the default concurrency: over this range one
 /// run came through clean and the next dropped a block. This is what stops it,
-/// not the concurrency — at fifty the defaults lost 107 transfers, and at ten
+/// not the concurrency - at fifty the defaults lost 107 transfers, and at ten
 /// they lost 32 on the second of two runs. With the queues raised, ten and
 /// fifty both come out exact.
 const CHANNEL_BUFFER: usize = 100_000;
@@ -249,7 +249,7 @@ impl Processor<InstructionProcessorInputType<'_, TokenProgramInstruction>> for T
             // balances decide. Either account answers it, because SPL Token
             // rejects a transfer between different mints, and reading only the
             // source would lose the transfers whose source the transaction
-            // itself opened — such an account has no balance before it.
+            // itself opened - such an account has no balance before it.
             TokenProgramInstruction::Transfer { data, accounts, .. } => {
                 let key = (metadata.slot, metadata.index.unwrap_or_default());
                 if self.cached.as_ref().is_none_or(|cached| cached.key != key) {

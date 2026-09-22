@@ -9,7 +9,7 @@ export async function handleTransfer(log: TransferLog): Promise<void> {
   const to = log.args.to.toLowerCase();
   const value = log.args.value.toBigInt();
 
-  // Store the raw decoded Transfer event only — no balance aggregation.
+  // Store the raw decoded Transfer event only - no balance aggregation.
   const transferEvent = TransferEvent.create({
     id: `${log.blockNumber}-${log.logIndex}`,
     amount: value,

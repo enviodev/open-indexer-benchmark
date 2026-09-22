@@ -2,8 +2,8 @@
 //
 //   SECTION=reliability node scripts/pr-comment.ts /tmp/reliability-comment.md
 //
-// Two workflows have something to say about a pull request — what the tools do
-// when things go wrong, and how fast they are when they do not — and a reader
+// Two workflows have something to say about a pull request - what the tools do
+// when things go wrong, and how fast they are when they do not - and a reader
 // wants both in one place, in the order the README puts them. So every run
 // posts a new comment carrying both sections: its own, freshly measured, and
 // the other workflow's carried forward from the last such comment.

@@ -6,7 +6,7 @@
 // whole suite. "23 of 35" is a number a reader can take apart, because the
 // list it counts is on the page it links to.
 //
-// The alternative — points per check, scaled to a hundred — was tried first
+// The alternative - points per check, scaled to a hundred - was tried first
 // and thrown away. Weighting checks against each other means deciding, inside
 // the code, that losing rows is worth one and a half times taking a minute to
 // notice, and publishing that opinion as though it were a measurement. A
@@ -20,7 +20,7 @@
 // rather than corrected for: a correction would be the same buried opinion
 // coming back in through another door.
 //
-// A check may also be "n/a" — the run could not ask. It leaves both sides of
+// A check may also be "n/a" - the run could not ask. It leaves both sides of
 // the fraction rather than counting as a failure: a question that was never
 // put is not evidence about the tool. A scenario with nothing but n/a has no
 // result at all, and everything downstream renders it as a dash rather than as
@@ -166,8 +166,8 @@ export function scoreTool(tool: ToolReliability): ToolScore {
 
 /**
  * Every measure a tool reported, by id. Measures are defined per scenario but
- * read per tool — the table's head latency cell wants one number, not a walk
- * through the group tree — so this is the one place that flattening happens.
+ * read per tool - the table's head latency cell wants one number, not a walk
+ * through the group tree - so this is the one place that flattening happens.
  */
 export function measuresOf(score: ToolScore): Record<string, number> {
   const out: Record<string, number> = {};

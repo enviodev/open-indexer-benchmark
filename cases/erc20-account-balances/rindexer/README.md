@@ -5,7 +5,7 @@
 This benchmark indexes ERC-20 `Transfer` and `Approval` events on the Rocket Pool rETH token contract on Ethereum Mainnet from block 18,600,000, and aggregates account balances and allowances from them.
 
 It is a `no-code` project: the aggregation is declared in `rindexer.yaml` as
-table operations — credit the recipient, debit the sender, set the allowance.
+table operations - credit the recipient, debit the sender, set the allowance.
 For a while this case had to be a `rust` project instead, because rindexer's
 arithmetic upserts intermittently lost the debit when the credit created the
 row; that was fixed upstream in v0.42.1
@@ -15,7 +15,7 @@ so the declarative version is back.
 The one project backs two benchmark rows: `rindexer` reads logs over plain
 RPC, and `rindexer-hypersync` reads them from
 [HyperSync](https://docs.envio.dev/docs/HyperSync/overview). The switch is the
-`RINDEXER_HYPERSYNC` variable substituted into `rindexer.yaml` — see
+`RINDEXER_HYPERSYNC` variable substituted into `rindexer.yaml` - see
 `.env.example`. The HyperSync row needs rindexer v0.43.0 or newer (the release
 that shipped `networks[].hypersync`) and an `ENVIO_API_TOKEN`.
 

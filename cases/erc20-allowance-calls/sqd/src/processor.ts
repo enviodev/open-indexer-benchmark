@@ -84,7 +84,7 @@ export const processor = withSource(new EvmBatchProcessor())
  * The generated contract binding sends one HTTP request per read, which for a
  * batch of thousands costs more in sockets than the round trips it is waiting
  * on. This client's `batchCall` merges them into JSON-RPC batches of up to a
- * thousand instead, `capacity` requests of them in flight at a time — the same
+ * thousand instead, `capacity` requests of them in flight at a time - the same
  * calls, at the same blocks, carried by a couple of dozen requests rather than
  * thousands.
  *

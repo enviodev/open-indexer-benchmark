@@ -31,7 +31,7 @@ async function readString(selector: StringFunction): Promise<string | null> {
     return clean(selector.decodeResult(data));
   } catch {
     // A revert, or returndata that does not decode as a string, is the token
-    // not answering — which is a null, not a failed batch.
+    // not answering - which is a null, not a failed batch.
     return null;
   }
 }
@@ -53,7 +53,7 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
    * Transfers by id, rather than a list.
    *
    * A batch arrives whole, and a log identified by its block and index within
-   * it can appear in one twice — a provider stitching two backends together
+   * it can appear in one twice - a provider stitching two backends together
    * will serve it that way. Two rows with the same primary key in one
    * statement is something Postgres refuses outright, and counting the value
    * twice in a balance is worse than that, because it succeeds.

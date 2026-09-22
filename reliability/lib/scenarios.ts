@@ -1,6 +1,6 @@
 // What the reliability suite asks of an indexer, and what it has yet to ask.
 //
-// The performance scenarios ask one question — how fast — and the answer is a
+// The performance scenarios ask one question - how fast - and the answer is a
 // number the run produces on its own. Reliability has no such number. What it
 // has is a list of things that go wrong in production, each of which an indexer
 // either survives or does not, so the suite is written as that list: scenarios,
@@ -11,8 +11,8 @@
 // weights behind every published number, and the page a reader lands on when
 // they follow a score all come from here, so a check cannot be scored without
 // being explained, and cannot be explained differently from the way it is
-// scored. Adding a scenario is adding an entry here; everything downstream —
-// the detail page, the columns, the totals — follows.
+// scored. Adding a scenario is adding an entry here; everything downstream -
+// the detail page, the columns, the totals - follows.
 //
 // Every scenario runs against the chain in ../chain-mock.ts rather than a real
 // network. The whole point is arranging moments that a real chain will not
@@ -58,7 +58,7 @@ export const GROUPS: Group[] = [
     id: "data-fidelity",
     title: "data fidelity",
     blurb:
-      "Whether values that are unusual but entirely legal — an empty symbol, a log index near the 32-bit ceiling — are stored, refused, or fatal.",
+      "Whether values that are unusual but entirely legal - an empty symbol, a log index near the 32-bit ceiling - are stored, refused, or fatal.",
   },
   {
     id: "head-latency",
@@ -72,8 +72,8 @@ export const GROUPS: Group[] = [
  * One claim about a tool that a run makes true or false.
  *
  * Checks are not weighted against each other. A weighting would be a second
- * opinion buried inside the arithmetic — someone deciding that losing rows is
- * worth twice as much as taking a minute to notice — and it would leave a
+ * opinion buried inside the arithmetic - someone deciding that losing rows is
+ * worth twice as much as taking a minute to notice - and it would leave a
  * published number that no reader can reconstruct. Counting instead makes the
  * score exactly as strong as the list it is drawn from: "4 of 6" is a claim
  * about which four, and the page behind it names them.
@@ -91,7 +91,7 @@ export interface Check {
 }
 
 /**
- * A published measurement that is reported but not scored — the number a
+ * A published measurement that is reported but not scored - the number a
  * reader wants after the verdict. How many times a tool had to be restarted by
  * hand is the clearest example: the score says it did not survive, and this
  * says what surviving it would have cost an operator.
@@ -130,9 +130,9 @@ export const SCENARIOS: Scenario[] = [
     title: "The database goes away",
     group: "crash-recovery",
     summary:
-      "Postgres restarts. It happens for maintenance, for a failover, for an OOM kill, and it happens without warning to the process connected to it. What separates tools here is not whether they notice — everyone notices — but what they do next: reconnect and carry on, or exit and wait for a human. An indexer that needs a human is an indexer that is down until someone is awake.",
+      "Postgres restarts. It happens for maintenance, for a failover, for an OOM kill, and it happens without warning to the process connected to it. What separates tools here is not whether they notice - everyone notices - but what they do next: reconnect and carry on, or exit and wait for a human. An indexer that needs a human is an indexer that is down until someone is awake.",
     method:
-      "The tool indexes a fixed range from the mock chain. A third of the way in, its Postgres container is stopped for ten seconds and started again. The tool is left alone: nothing restarts it, and whatever it does next is the measurement. Once the range is finished — by the tool, or by the harness restarting it after it gave up — the data is checked against ground truth. The whole thing is then repeated with the tool tracking the head rather than backfilling, because a tool holding a batch of head blocks in memory has more to lose than one that can simply re-fetch.",
+      "The tool indexes a fixed range from the mock chain. A third of the way in, its Postgres container is stopped for ten seconds and started again. The tool is left alone: nothing restarts it, and whatever it does next is the measurement. Once the range is finished - by the tool, or by the harness restarting it after it gave up - the data is checked against ground truth. The whole thing is then repeated with the tool tracking the head rather than backfilling, because a tool holding a batch of head blocks in memory has more to lose than one that can simply re-fetch.",
     checks: [
       {
         id: "survives-backfill",
@@ -150,13 +150,13 @@ export const SCENARIOS: Scenario[] = [
         id: "no-loss",
         label: "loses nothing across the restart",
         detail:
-          "Once the range is complete — restarting the tool by hand if it will not restart itself — every row matches ground truth. This is scored separately from survival because the two failures are unrelated: a tool can crash and recover perfectly, and a tool can stay up while quietly skipping the batch it was mid-write on.",
+          "Once the range is complete - restarting the tool by hand if it will not restart itself - every row matches ground truth. This is scored separately from survival because the two failures are unrelated: a tool can crash and recover perfectly, and a tool can stay up while quietly skipping the batch it was mid-write on.",
       },
       {
         id: "no-duplicates",
         label: "writes no duplicates across the restart",
         detail:
-          "The other half of the same question. A batch retried after a failed commit must not land twice: the row count matches ground truth exactly, and no aggregate — a balance, a running total — has been applied more than once.",
+          "The other half of the same question. A batch retried after a failed commit must not land twice: the row count matches ground truth exactly, and no aggregate - a balance, a running total - has been applied more than once.",
       },
     ],
     measures: [
@@ -183,15 +183,15 @@ export const SCENARIOS: Scenario[] = [
     title: "The indexer is killed mid-batch",
     group: "crash-recovery",
     summary:
-      "A deploy, an OOM, a node draining — the process disappears without getting to finish what it was writing. Restart correctness is the property that decides whether that is a non-event or a silent corruption, and it is close to unobservable from the outside: a tool that resumes two blocks early looks exactly like one that resumed correctly, until an aggregate is compared against ground truth.",
+      "A deploy, an OOM, a node draining - the process disappears without getting to finish what it was writing. Restart correctness is the property that decides whether that is a non-event or a silent corruption, and it is close to unobservable from the outside: a tool that resumes two blocks early looks exactly like one that resumed correctly, until an aggregate is compared against ground truth.",
     method:
-      "The tool indexes a fixed range and is sent SIGKILL — no chance to flush, no shutdown hook — partway through, then started again against the same database with no other change. This is done at three different moments, one of them chosen to land while a batch is being committed. The final data is compared against ground truth, and the tool's own progress marker against where it actually resumed from.",
+      "The tool indexes a fixed range and is sent SIGKILL - no chance to flush, no shutdown hook - partway through, then started again against the same database with no other change. This is done at three different moments, one of them chosen to land while a batch is being committed. The final data is compared against ground truth, and the tool's own progress marker against where it actually resumed from.",
     checks: [
       {
         id: "resumes",
         label: "resumes without being told to",
         detail:
-          "The restarted process continues from its own recorded position rather than starting over or refusing to start. A tool that re-indexes the range from scratch passes this check — it is correct, just expensive — and the cost shows up as re-indexed blocks in the measures below.",
+          "The restarted process continues from its own recorded position rather than starting over or refusing to start. A tool that re-indexes the range from scratch passes this check - it is correct, just expensive - and the cost shows up as re-indexed blocks in the measures below.",
       },
       {
         id: "no-gap",
@@ -209,7 +209,7 @@ export const SCENARIOS: Scenario[] = [
         id: "atomic-batch",
         label: "never exposes a half-written batch",
         detail:
-          "The database is read immediately after the kill, before the restart. Either the batch is entirely there or entirely absent — a partial batch visible to a reader means anything querying the indexer during a crash gets an inconsistent answer.",
+          "The database is read immediately after the kill, before the restart. Either the batch is entirely there or entirely absent - a partial batch visible to a reader means anything querying the indexer during a crash gets an inconsistent answer.",
       },
     ],
     measures: [
@@ -227,7 +227,7 @@ export const SCENARIOS: Scenario[] = [
     title: "The indexer is asked to stop",
     group: "crash-recovery",
     summary:
-      "The ordinary case, and the one most likely to be assumed rather than tested: SIGTERM, the signal every orchestrator sends before it kills. A tool that treats it as an abort is doing the crash path on every deploy — which is fine if the crash path is sound, and a slow leak of duplicated aggregates if it is not.",
+      "The ordinary case, and the one most likely to be assumed rather than tested: SIGTERM, the signal every orchestrator sends before it kills. A tool that treats it as an abort is doing the crash path on every deploy - which is fine if the crash path is sound, and a slow leak of duplicated aggregates if it is not.",
     method:
       "The tool is sent SIGTERM while indexing, and given fifteen seconds. What it does with them, its exit code, and the state it leaves behind are recorded, then it is restarted and the range finished.",
     checks: [
@@ -254,7 +254,7 @@ export const SCENARIOS: Scenario[] = [
     summary:
       "Every indexer claims to handle reorgs, and a one-block reorg where an event's value changes is genuinely easy. The cases that separate tools are the ones that are hard to arrange on a real chain and therefore rarely tested: a reorg that removes an event rather than changing it, a reorg deeper than the tool's unfinalised window, a reorg that happens while the tool is offline, and a second reorg arriving while the first is still being unwound. Each is one check below, because a tool can pass any of them and fail the rest.",
     method:
-      "The tool tracks the head of the mock chain while the chain is rewritten to order. Each case rewrites a stated depth, either replacing the events in those blocks with different ones or dropping them entirely, and then the chain is advanced past the rewrite and left alone until the tool has caught up. The data is compared against the chain as it finally stands — the check is not that the tool noticed, it is that what it holds is what is on the chain.",
+      "The tool tracks the head of the mock chain while the chain is rewritten to order. Each case rewrites a stated depth, either replacing the events in those blocks with different ones or dropping them entirely, and then the chain is advanced past the rewrite and left alone until the tool has caught up. The data is compared against the chain as it finally stands - the check is not that the tool noticed, it is that what it holds is what is on the chain.",
     checks: [
       {
         id: "shallow",
@@ -272,19 +272,19 @@ export const SCENARIOS: Scenario[] = [
         id: "deep",
         label: "a reorg deeper than the unfinalised window",
         detail:
-          "Sixty blocks are rewritten — past the depth most tools keep rollback information for. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one.",
+          "Sixty blocks are rewritten - past the depth most tools keep rollback information for. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one.",
       },
       {
         id: "while-down",
         label: "a reorg that happens while the indexer is down",
         detail:
-          "The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg — the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists.",
+          "The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg - the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists.",
       },
       {
         id: "storm",
         label: "reorgs arriving faster than they can be unwound",
         detail:
-          "Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion — a rollback that is not itself atomic — leaves a mixture of two branches.",
+          "Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion - a rollback that is not itself atomic - leaves a mixture of two branches.",
       },
       {
         id: "during-backfill",
@@ -330,7 +330,7 @@ export const SCENARIOS: Scenario[] = [
         id: "no-loss",
         label: "loses nothing to a failed request",
         detail:
-          "The finished range matches ground truth. A range whose request failed has to be retried, not skipped — and a tool that treats an error body as an empty result set records the blocks it never read as blocks that held nothing.",
+          "The finished range matches ground truth. A range whose request failed has to be retried, not skipped - and a tool that treats an error body as an empty result set records the blocks it never read as blocks that held nothing.",
       },
       {
         id: "backs-off",
@@ -359,13 +359,13 @@ export const SCENARIOS: Scenario[] = [
         id: "splits-results",
         label: "narrows when the result set is too large",
         detail:
-          "The same for the result-count cap, which needs a different response — a narrower range for the same span — and is the one more often left unhandled.",
+          "The same for the result-count cap, which needs a different response - a narrower range for the same span - and is the one more often left unhandled.",
       },
       {
         id: "recovers-width",
         label: "widens again once it can",
         detail:
-          "After a refused range, the tool does not spend the rest of the run at its smallest range. Scored because the alternative — collapsing to single-block queries forever after one refusal — turns a transient limit into a permanent throughput cost.",
+          "After a refused range, the tool does not spend the rest of the run at its smallest range. Scored because the alternative - collapsing to single-block queries forever after one refusal - turns a transient limit into a permanent throughput cost.",
       },
     ],
   },
@@ -376,7 +376,7 @@ export const SCENARIOS: Scenario[] = [
     summary:
       "The failure nobody plans for, because it should not happen and does: a load-balanced endpoint answering from two nodes at different heights, so the head goes backwards; a block hash that was valid a second ago and is not now; the same block served twice. A tool that trusts the endpoint's answers unconditionally will happily record any of it.",
     method:
-      "The chain is made to answer from behind for a while — a head lower than one already reported — and to serve a block range twice in succession, and a hash the tool has already used is reorged out from under a request in flight.",
+      "The chain is made to answer from behind for a while - a head lower than one already reported - and to serve a block range twice in succession, and a hash the tool has already used is reorged out from under a request in flight.",
     checks: [
       {
         id: "head-goes-backwards",
@@ -405,7 +405,7 @@ export const SCENARIOS: Scenario[] = [
     title: "Legal values that break things",
     group: "data-fidelity",
     summary:
-      "Chain data is not the tidy subset a schema was designed around. A token's `symbol()` returns nothing at all; a string field holds a byte Postgres will not store in a text column; a provider emits a log index near the top of an unsigned 32-bit integer. None of these are corrupt data and all of them have stopped an indexer dead — the last one is exactly what ponder-sh/ponder#2373 was opened about. Every check here is a value that must land in the database as itself, or be refused loudly, but never take the process down.",
+      "Chain data is not the tidy subset a schema was designed around. A token's `symbol()` returns nothing at all; a string field holds a byte Postgres will not store in a text column; a provider emits a log index near the top of an unsigned 32-bit integer. None of these are corrupt data and all of them have stopped an indexer dead - the last one is exactly what ponder-sh/ponder#2373 was opened about. Every check here is a value that must land in the database as itself, or be refused loudly, but never take the process down.",
     method:
       "The mock chain serves a token whose metadata calls answer awkwardly and blocks whose logs carry awkward values, and the case's handlers read that metadata and store it. The database is then read directly: the check is what is in the column, not what the tool logged.",
     checks: [
@@ -413,7 +413,7 @@ export const SCENARIOS: Scenario[] = [
         id: "null-symbol",
         label: "an empty symbol() is stored as null",
         detail:
-          "`symbol()` returns `0x` — no data, which is what a token that does not implement it does. The row must exist with a null symbol. Decoding empty returndata as an empty string is acceptable; crashing, skipping the row, or storing the literal text \"undefined\" is not.",
+          "`symbol()` returns `0x` - no data, which is what a token that does not implement it does. The row must exist with a null symbol. Decoding empty returndata as an empty string is acceptable; crashing, skipping the row, or storing the literal text \"undefined\" is not.",
       },
       {
         id: "nul-byte",
@@ -425,7 +425,7 @@ export const SCENARIOS: Scenario[] = [
         id: "huge-log-index",
         label: "a log index near the 32-bit ceiling",
         detail:
-          "Logs with index `0xffffffe2`, as some providers emit for synthetic logs. Storing it in a signed 32-bit column overflows and halts the backfill outright — the failure reported in ponder-sh/ponder#2373. The check is that the range finishes and the index round-trips.",
+          "Logs with index `0xffffffe2`, as some providers emit for synthetic logs. Storing it in a signed 32-bit column overflows and halts the backfill outright - the failure reported in ponder-sh/ponder#2373. The check is that the range finishes and the index round-trips.",
       },
       {
         id: "max-uint",
@@ -448,7 +448,7 @@ export const SCENARIOS: Scenario[] = [
     title: "From block to row",
     group: "head-latency",
     summary:
-      "Backfill throughput says how long a tool takes to catch up once. Head latency says what it is like to live with afterwards: the gap between a block being published and its rows being readable is the staleness of everything built on the indexer. It is a distribution rather than a number — the median is the ordinary experience, and the tail is the one that shows up as a bug report.",
+      "Backfill throughput says how long a tool takes to catch up once. Head latency says what it is like to live with afterwards: the gap between a block being published and its rows being readable is the staleness of everything built on the indexer. It is a distribution rather than a number - the median is the ordinary experience, and the tail is the one that shows up as a bug report.",
     method:
       "The mock chain publishes a block every two seconds for five minutes, stamping the wall clock as each becomes the head. The harness polls the tool's own tables and records when each block's rows first become readable. The difference is the latency; the distribution is reported rather than an average, because a tool that batches every thirty seconds and one that writes continuously can share a mean while feeling nothing alike. The last minute repeats the exercise across a reorg, since that is when staleness costs the most.",
     checks: [
@@ -519,7 +519,7 @@ export function checkCount(scenario: Scenario): number {
  *
  * A score is a claim about a list, so the list is the argument. Publishing it
  * without also publishing what it leaves out invites the reading it cannot
- * support — that a tool scoring 6 of 6 is reliable, rather than that it passed
+ * support - that a tool scoring 6 of 6 is reliable, rather than that it passed
  * six specific checks. These are the ones already identified as fair game,
  * kept here rather than in an issue tracker so that the page a reader lands on
  * from a score is honest about its own edges, and so that adding one is a
@@ -547,7 +547,7 @@ export const CANDIDATES: Candidate[] = [
   {
     title: "A handler that throws",
     group: "crash-recovery",
-    why: "User code fails — a bad decode, a null where one was not expected, a division by zero on an empty pool. What the tool does then is a design decision that is rarely documented and never the same twice: retry the event, skip it, stop the indexer, or write the row without it. Each is defensible; silently skipping is the one that loses data without saying so.",
+    why: "User code fails - a bad decode, a null where one was not expected, a division by zero on an empty pool. What the tool does then is a design decision that is rarely documented and never the same twice: retry the event, skip it, stop the indexer, or write the row without it. Each is defensible; silently skipping is the one that loses data without saying so.",
     how: "Serve a block whose log decodes to a value the case's handler divides by, and watch what reaches the database and what reaches the exit code.",
   },
   {
@@ -560,12 +560,12 @@ export const CANDIDATES: Candidate[] = [
     title: "Crash-loop on poison state",
     group: "crash-recovery",
     why: "The worst outage shape there is: a tool that crashes on something in its own database, restarts, reads it again, and crashes again, forever, with no way through short of wiping and re-indexing.",
-    how: "Combine two checks the suite already has — the NUL byte in a string, and the process kill — so the tool restarts into the row it died on, then count restarts before progress moves.",
+    how: "Combine two checks the suite already has - the NUL byte in a string, and the process kill - so the tool restarts into the row it died on, then count restarts before progress moves.",
   },
   {
     title: "Reading the indexer while it is reorging",
     group: "reorgs",
-    why: "Correct data eventually is not the same as correct data throughout. An application querying an indexer mid-rollback can see a state that was never on the chain — the old rows deleted and the new ones not yet written — which is a consistency claim most tools have never had to make out loud.",
+    why: "Correct data eventually is not the same as correct data throughout. An application querying an indexer mid-rollback can see a state that was never on the chain - the old rows deleted and the new ones not yet written - which is a consistency claim most tools have never had to make out loud.",
     how: "Poll the tool's own API, not its tables, across a reorg, and check that every response is a state the chain actually held.",
   },
   {
@@ -578,7 +578,7 @@ export const CANDIDATES: Candidate[] = [
     title: "Multi-chain skew",
     group: "new",
     why: "Most production indexers read more than one chain, and the interesting failure is one chain stalling: does the other keep going, or does a shared checkpoint hold it back until both are stuck?",
-    how: "Serve two mock chains and stall one. Cheap to arrange, and needs a second network in every tool's project — the reason it is not in the first cut.",
+    how: "Serve two mock chains and stall one. Cheap to arrange, and needs a second network in every tool's project - the reason it is not in the first cut.",
   },
   {
     title: "Disk exhaustion",

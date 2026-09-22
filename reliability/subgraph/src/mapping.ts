@@ -45,7 +45,7 @@ function ensureToken(address: Address): void {
   const contract = ERC20.bind(address);
 
   // `try_` rather than a plain call: returndata that does not decode as a
-  // string is the token not answering, which is a value this row carries —
+  // string is the token not answering, which is a value this row carries -
   // not a reason to fail the block.
   const symbol = contract.try_symbol();
   token.symbol = symbol.reverted ? null : clean(symbol.value);

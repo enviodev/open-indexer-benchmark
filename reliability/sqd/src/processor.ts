@@ -14,8 +14,8 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 // The harness always supplies an end block, the same way the throughput runner
-// does. It is a block no scenario reaches — the suite is about what happens at
-// the head — so this runs as an open-ended head follower. The variable is
+// does. It is a block no scenario reaches - the suite is about what happens at
+// the head - so this runs as an open-ended head follower. The variable is
 // still required rather than defaulted: a processor silently running unbounded
 // looks exactly like a working one.
 function requireEndBlock(): number {
@@ -39,8 +39,8 @@ const rpcEndpoint = assertNotNull(
 /**
  * The client the token metadata is read through.
  *
- * Reliability is only measured over RPC — the benchmark cannot make SQD
- * Network reorg or fail on demand — so there is no gateway here at all, and
+ * Reliability is only measured over RPC - the benchmark cannot make SQD
+ * Network reorg or fail on demand - so there is no gateway here at all, and
  * this is the regime SQD documents for chains its network does not cover.
  * `setFinalityConfirmation` is what decides how far back the processor will
  * unwind when the chain rewrites itself, which is most of what the reorg

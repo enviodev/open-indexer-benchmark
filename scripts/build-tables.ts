@@ -113,16 +113,16 @@ for (const benchCase of cases) {
   const carried: string[] = [];
   for (const prior of parsePublishedTable(readme, benchCase)) {
     if (fresh.has(rowKey(prior))) continue;
-    // A local-only row is carried by design — it has no job that could have
-    // failed — so it is marked stale in the table rather than warned about.
+    // A local-only row is carried by design - it has no job that could have
+    // failed - so it is marked stale in the table rather than warned about.
     const isLocal = localOnly.has(rowKey(prior));
     rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
     if (!isLocal) carried.push(`${prior.name} via ${prior.cells.source}`);
   }
-  // A run scoped to part of the matrix — a pull request — carries most rows
+  // A run scoped to part of the matrix - a pull request - carries most rows
   // forward by design, so annotating those as failures would cry wolf on
   // every pull request. An indexer that was selected and still reported
-  // nothing is a failed job, and has to stay loud even on such a run — not
+  // nothing is a failed job, and has to stay loud even on such a run - not
   // only in this log, but in the PR comment, whose scope note would otherwise
   // pass the failure off as a benign carry-forward. The comment step cannot
   // import this module, so the list is handed over as a file, like the table.
@@ -132,7 +132,7 @@ for (const benchCase of cases) {
   }
   if (carried.length > 0) {
     const message =
-      `${title}: no fresh result for ${carried.join(", ")} this run — ` +
+      `${title}: no fresh result for ${carried.join(", ")} this run - ` +
       `carried forward the last published value(s).`;
     if (failed === null || failed.length > 0) {
       const detail = failed === null ? "" : ` Selected but reported nothing: ${failed.join(", ")}.`;
@@ -153,7 +153,7 @@ for (const benchCase of cases) {
   writeFileSync(join(OUT_DIR, `benchmark-table-${benchCase}.md`), table);
   // The README publishes results; the pull request comment reports on a run.
   // Which rows this particular run happened to re-measure is the second thing,
-  // not the first — a reader of the README wants the numbers, and a row marked
+  // not the first - a reader of the README wants the numbers, and a row marked
   // stale forever because its tool is measured by hand reads as a defect. The
   // correctness and unsupported notes stay in both: those are about the data,
   // not about which job produced it.

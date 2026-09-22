@@ -2,31 +2,31 @@
 //
 //   CHANGED_FILES="$(git diff --name-only base...head)" node scripts/select-scope.ts
 //
-// A full run is one job per indexer per scenario — forty-four at the time of
+// A full run is one job per indexer per scenario - forty-four at the time of
 // writing, each up to 45 minutes against shared data endpoints, most of them
 // re-measuring code the pull request never touched. On a pull request the run
 // is narrowed to what changed:
 //
 //   cases/<case>/<indexer>/**   that indexer, in that scenario only
-//   cases/<case>/<anything>     the whole scenario — the case's run logic
+//   cases/<case>/<anything>     the whole scenario - the case's run logic
 //                               (config, expected output) is shared by every
 //                               indexer in it, so every indexer is re-measured
 //   cases/lib/drivers/<x>.ts    that indexer, in every scenario
 //   cases/lib/rpc-mock.ts       every indexer, but only the scenarios whose
 //                               handlers read contract state through it
-//   reliability/**              nothing — the reliability suite is a project of
+//   reliability/**              nothing - the reliability suite is a project of
 //                               its own, on no throughput job's execution path,
 //                               with its own runner and its own CI workflow
 //   cases/lib/**                every indexer, every scenario
 //   .github/workflows/**        every indexer, every scenario
-//   this file, build-tables.ts  every indexer, every scenario — they are the
+//   this file, build-tables.ts  every indexer, every scenario - they are the
 //                               CI pipeline itself, and their only execution
 //                               is in it: a narrowed run would ship them to
 //                               main unexercised
 //
 // Documentation and the known local-only scripts run nothing. Any file the
-// filter does not recognize — say a root package.json that does not exist
-// today — runs everything: over-running only costs runner time, while
+// filter does not recognize - say a root package.json that does not exist
+// today - runs everything: over-running only costs runner time, while
 // under-running publishes a stale row as a fresh one. Emits JSON on stdout:
 //
 //   {"cases":["erc20-transfer-events"],
@@ -41,7 +41,7 @@
 
 /**
  * Indexers whose project directory is not named after them. The Envio Subgraph
- * variants have no directory of their own at all — they run the Subgraph tool's
+ * variants have no directory of their own at all - they run the Subgraph tool's
  * `subgraph/` project unchanged, so a change to it re-runs them too.
  */
 export const INDEXER_DIRS: Record<string, string> = {
@@ -72,8 +72,8 @@ const SHARED_DRIVERS = new Set(["common", "index"]);
  * scenarios those are. Everything else under lib is harness every scenario runs
  * through, so it selects everything.
  *
- * Like DRIVER_INDEXERS this duplicates a fact the case configs own — which of
- * them declare `ethCall` — and test-scope.ts pins the two together, so a second
+ * Like DRIVER_INDEXERS this duplicates a fact the case configs own - which of
+ * them declare `ethCall` - and test-scope.ts pins the two together, so a second
  * scenario reading contract state cannot leave this map quietly narrowing a run
  * that should have been full.
  */
@@ -115,7 +115,7 @@ const LOCAL_SCRIPTS = new Set([
 /**
  * The reliability suite, which is a project of its own under reliability/: its
  * own chain, its own indexer projects, its own runner and its own workflow. It
- * reads from cases/ — the drivers know how to start each tool — but nothing in
+ * reads from cases/ - the drivers know how to start each tool - but nothing in
  * cases/ reads from it, so no throughput job executes a line of it.
  * Re-measuring forty-four throughput rows because a reorg check was reworded
  * would be pure runner time.
@@ -177,8 +177,8 @@ export function selectScope(
       continue;
     }
 
-    // A file the filter cannot place — a root config file, a new top-level
-    // directory — is presumed to affect every job, the failure mode that only
+    // A file the filter cannot place - a root config file, a new top-level
+    // directory - is presumed to affect every job, the failure mode that only
     // costs runner time. Selecting nothing here would ship it unexercised.
     if (parts[0] !== "cases") {
       addEverywhere(allIndexers);

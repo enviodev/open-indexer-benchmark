@@ -3,7 +3,7 @@
 //   node scripts/test-reliability.ts
 //
 // Three things are load-bearing here. The catalog, because a check that is
-// scored without being explained — or explained without being scored — is a
+// scored without being explained - or explained without being scored - is a
 // number nobody can check. The arithmetic, because every published score is a
 // claim about a tool and the way it is reached is the only defence of it. And
 // the parser, because a failed reliability job would otherwise delete a tool's
@@ -11,7 +11,7 @@
 // job failed".
 //
 // It needs no credentials and starts nothing: the observations are written by
-// hand, which is the point — the scoring has to be checkable without a run.
+// hand, which is the point - the scoring has to be checkable without a run.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -178,7 +178,7 @@ for (const [tool, reason] of Object.entries(AWAITING_PROJECT)) {
   check(
     `${tool} is still waiting on its project`,
     !hasProject(directory),
-    `reliability/${directory} exists now — move ${tool} from AWAITING_PROJECT into ` +
+    `reliability/${directory} exists now - move ${tool} from AWAITING_PROJECT into ` +
       `RELIABILITY_TOOLS in reliability/lib/tools.ts (its note reads "${reason}")`
   );
 }
@@ -340,7 +340,7 @@ check("the headline restart count reaches the table", table.includes("2 restarts
 check("the headline head lag reaches the table", table.includes("640ms"), table);
 check(
   "a cell below full marks names the checks it lost and why",
-  /\*\*\(1\)\*\* Example Indexer — .*survives a database restart mid-backfill.*exited when Postgres went away/.test(
+  /\*\*\(1\)\*\* Example Indexer - .*survives a database restart mid-backfill.*exited when Postgres went away/.test(
     table
   ),
   table

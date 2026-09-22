@@ -3,7 +3,7 @@
 // `rindexer codegen indexer` generates a handler that inserts each Approval
 // into the event table rindexer derives from the ABI. That table has columns
 // for the event's own arguments and nothing else, and this case's row also
-// carries the allowance the token reports afterwards — which is not in the log.
+// carries the allowance the token reports afterwards - which is not in the log.
 // So the two tables the case verifies are created and written here, and
 // codegen's insert into `erc_20indexer_erc_20.approval` is dropped rather than
 // kept alongside them: leaving it in would make rindexer the only
@@ -14,7 +14,7 @@
 // alloy than this project, so the provider it hands the handler does not
 // implement the `Provider` trait as this crate sees it, and its helper takes
 // the block to read at anyway. What matters is that the calls for a batch are
-// issued together — a rust project gets the batch, so the 200ms round trips
+// issued together - a rust project gets the batch, so the 200ms round trips
 // overlap instead of adding up.
 use alloy::{
     primitives::{Address, U256},
@@ -67,7 +67,7 @@ async fn ensure_case_tables(database: &Arc<PostgresClient>) -> Result<(), String
                 // Column types match the ones rindexer picks for the same
                 // values in the tables it generates: an address is CHAR(42), a
                 // uint256 its decimal string, a block number NUMERIC. They have
-                // to — the bulk insert writes binary, so a column whose type
+                // to - the bulk insert writes binary, so a column whose type
                 // differs from the wrapper's is rejected outright.
                 // `block_number` is what the benchmark reads progress from.
                 format!(
@@ -118,8 +118,8 @@ async fn approval_handler(manifest_path: &PathBuf, registry: &mut EventCallbackR
             let provider = get_ethereum_provider_cache().await;
 
             // The batch's allowance reads are issued together, up to
-            // MAX_IN_FLIGHT of them at a time. An approval of zero revokes it —
-            // a revoked allowance is zero whatever the token reports — so those
+            // MAX_IN_FLIGHT of them at a time. An approval of zero revokes it -
+            // a revoked allowance is zero whatever the token reports - so those
             // need no call at all.
             //
             // The window matters because rindexer hands the handler however
@@ -174,7 +174,7 @@ async fn approval_handler(manifest_path: &PathBuf, registry: &mut EventCallbackR
             let mut postgres_bulk_data: Vec<Vec<EthereumSqlTypeWrapper>> = vec![];
             // An allowance is overwritten by the latest Approval for its
             // (token, owner, spender) triple. Collapsing the batch first keeps
-            // the upsert to one row per triple — Postgres rejects an ON
+            // the upsert to one row per triple - Postgres rejects an ON
             // CONFLICT statement that touches the same row twice.
             let mut latest: HashMap<(Address, Address, Address), U256> = HashMap::new();
 

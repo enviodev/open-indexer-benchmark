@@ -1,9 +1,9 @@
 // The reliability table, and reading it back.
 //
 // Same shape and the same rules as the throughput tables in
-// ../../cases/lib/table.ts — rows
+// ../../cases/lib/table.ts - rows
 // are tools, a tool appears once per source, a run that produced no fresh
-// result keeps its last published row rather than vanishing — because the two
+// result keeps its last published row rather than vanishing - because the two
 // tables sit on the same page and a reader should not have to learn them
 // separately. What differs is what a cell holds. There, a cell is a
 // measurement. Here it is "4 / 6": the checks a tool passed over the checks it
@@ -21,7 +21,7 @@ import { tallyRank, type Tally, type ToolScore } from "./score.ts";
 /** Where a score links to, relative to the repository README. */
 export const DETAIL_PAGE = "./reliability/README.md";
 
-const NO_VALUE = "—";
+const NO_VALUE = "-";
 
 /**
  * A note and the cell it is about.
@@ -29,7 +29,7 @@ const NO_VALUE = "—";
  * The reference number goes on that cell rather than on the overall tally: a
  * reader following "(3)" from the end of the row has to work out which of six
  * columns it was about, and the one thing the note exists to say is which.
- * Notes with no group are about the row itself — a tool nothing ran for — and
+ * Notes with no group are about the row itself - a tool nothing ran for - and
  * those do go on the overall cell, because that is what they are about.
  */
 export interface ReliabilityNote {
@@ -62,7 +62,7 @@ function formatValue(value: number, unit: string): string {
   return value.toLocaleString("en-US");
 }
 
-/** "2 restarts", "1 restart", "no restarts" — the singular matters at a glance. */
+/** "2 restarts", "1 restart", "no restarts" - the singular matters at a glance. */
 function formatHeadline(value: number, unit: string, abbr?: string): string {
   if (!abbr) return formatValue(value, unit);
   if (value === 0) return `no ${abbr}`;
@@ -133,8 +133,8 @@ export function toReliabilityRow(
       notes.push({
         group: group.id,
         text: [
-          ...byReason(failures).map(([labels, why]) => `${labels} — ${why}`),
-          ...byReason(skipped).map(([labels, why]) => `${labels} was not asked — ${why}`),
+          ...byReason(failures).map(([labels, why]) => `${labels} - ${why}`),
+          ...byReason(skipped).map(([labels, why]) => `${labels} was not asked - ${why}`),
         ].join("; "),
       });
     }
@@ -181,7 +181,7 @@ function byReason(
  * link goes to the page that says what the chain is instead.
  */
 function sourceCell(source: string): string {
-  return source === "—" ? source : `[${source}](${SOURCE_URL})`;
+  return source === "-" ? source : `[${source}](${SOURCE_URL})`;
 }
 
 /**
@@ -189,8 +189,8 @@ function sourceCell(source: string): string {
  *
  * A tool missing from a table is indistinguishable from a tool whose job
  * failed, and the reasons here are worth reading: some are facts about the
- * benchmark that will not change — a source that cannot be made to reorg on
- * request — and some are work not yet done. Either way the row is present and
+ * benchmark that will not change - a source that cannot be made to reorg on
+ * request - and some are work not yet done. Either way the row is present and
  * says which.
  */
 export function unrunRow(
@@ -238,7 +238,7 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
     /** Reference numbers by the cell that carries them. */
     const marks = new Map<string, string[]>();
     for (const note of row.notes) {
-      notes.push(`**(${notes.length + 1})** ${row.name} — ${note.text}`);
+      notes.push(`**(${notes.length + 1})** ${row.name} - ${note.text}`);
       const on = note.group ?? OVERALL;
       marks.set(on, [...(marks.get(on) ?? []), String(notes.length)]);
     }
@@ -264,7 +264,7 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
       "",
       `> ⚠️ ${carried.join(
         ", "
-      )} — carried forward from a previous run; the latest run produced no fresh result.`
+      )} - carried forward from a previous run; the latest run produced no fresh result.`
     );
   }
   return lines.join("\n");
@@ -308,7 +308,7 @@ export function parsePublishedReliability(markdown: string): ReliabilityRow[] {
     const label = cells[0].replace(/\s*⚠️\s*$/, "").trim();
     const name = linkText(label);
     if (!name) continue;
-    // "**23 / 35** (1, 2)" — the note references belong to the run that
+    // "**23 / 35** (1, 2)" - the note references belong to the run that
     // published them, and a carried row is re-numbered from its own notes, so
     // they are stripped from every cell that carries one before it is kept.
     const overallCell = stripMarks(cells[cells.length - 1]);

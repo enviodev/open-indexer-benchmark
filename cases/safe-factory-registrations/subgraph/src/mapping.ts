@@ -92,7 +92,7 @@ export function handleProxyCreationIndexed(event: ProxyCreationIndexed): void {
 // ProxyCreation that announces it, so the data source created above did not
 // exist when that log was produced; whether it is recorded anyway is what this
 // case measures. The `V4` pairs take the layout Safe 1.4.x introduced, where an
-// argument moved into a topic without the signature changing — Graph Node runs
+// argument moved into a topic without the signature changing - Graph Node runs
 // whichever of the two can decode the log in front of it.
 export function handleSafeSetup(event: SafeSetupEvent): void {
   const entity = new SafeSetupEntity(

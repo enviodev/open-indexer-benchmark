@@ -5,8 +5,8 @@ import { indexer } from "envio";
 // at configuration time and grows throughout the run.
 //
 // The two canonical factory generations are separate contracts here because
-// `proxy` became an indexed argument in 1.4.1 — same event signature, two
-// incompatible payloads — but past decoding they say the same thing.
+// `proxy` became an indexed argument in 1.4.1 - same event signature, two
+// incompatible payloads - but past decoding they say the same thing.
 indexer.contractRegister(
   { contract: "SafeProxyFactory", event: "ProxyCreation", fields: {} },
   async ({ event, context }) => {
@@ -47,7 +47,7 @@ indexer.onEvent(
 
 // Everything a registered proxy emits. Eight of these events made an argument
 // `indexed` in Safe 1.4.x without changing the signature, so one topic0 arrives
-// in two incompatible layouts and each needs its own declaration — `name:` in
+// in two incompatible layouts and each needs its own declaration - `name:` in
 // config.yaml gives the second one a handler of its own.
 //
 // SafeSetup is the one that tests registration order: a proxy emits it one log

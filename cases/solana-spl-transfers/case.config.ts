@@ -60,8 +60,8 @@ export const caseConfig: SvmCaseConfig = {
     },
   ],
 
-  // The rows come from running the Envio project over the range — the case's
-  // reference implementation — rather than from a second reading of the chain.
+  // The rows come from running the Envio project over the range - the case's
+  // reference implementation - rather than from a second reading of the chain.
   // Which token a plain `transfer` moved is only knowable by joining the
   // transaction's balances, and writing that twice would leave two answers to
   // keep in step. What is committed is the snapshot; see ../lib/envio-snapshot.ts

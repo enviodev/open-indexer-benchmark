@@ -11,11 +11,11 @@
 // The same shape as scripts/build-tables.ts, and for the same reasons: read
 // the result lines each job emitted, render them with the module the runner
 // renders with, and keep the last published row for any tool that produced
-// nothing this time — a tool that silently vanishes from a table reads as one
+// nothing this time - a tool that silently vanishes from a table reads as one
 // nobody measures rather than one whose job failed.
 //
 // What differs is which rows exist at all. The table covers every tool the
-// suite intends to measure — every tool reading plain RPC — whether or not it
+// suite intends to measure - every tool reading plain RPC - whether or not it
 // has been measured yet, because a row missing from a table reads as a tool
 // nobody thought of rather than one whose project is not written. A tool that
 // reads a source the benchmark cannot make reorg on demand is a different
@@ -83,14 +83,14 @@ for (const prior of parsePublishedReliability(readme)) {
   if (fresh.has(key)) continue;
   // Only a real result is worth carrying. A row of dashes is not a stale
   // measurement, it is the absence of one, and its reason is rebuilt from the
-  // registry below — so a reason that has since changed is not republished
+  // registry below - so a reason that has since changed is not republished
   // from a table, and a tool that has since stopped being measured does not
   // linger because it was once printed.
   if (prior.overall.asked === 0 || !measured.has(key)) continue;
   rows.push({ ...prior, carriedOver: true });
 }
 
-// A tool with no row at all — nothing fresh, nothing published — is waiting on
+// A tool with no row at all - nothing fresh, nothing published - is waiting on
 // its first run rather than missing.
 for (const [key, presentation] of measured) {
   if (rows.some((row) => reliabilityRowKey(row) === key)) continue;

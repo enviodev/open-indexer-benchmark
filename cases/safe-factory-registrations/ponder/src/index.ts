@@ -32,8 +32,8 @@ for (const factory of ["SafeProxyFactory", "SafeProxyFactoryModern"] as const) {
   });
 }
 
-// The children of the two factory generations are separate declarations —
-// a `factory()` reads one event layout — so every child handler is registered
+// The children of the two factory generations are separate declarations -
+// a `factory()` reads one event layout - so every child handler is registered
 // against both. The eight overloaded events are named by their full signature,
 // which is how Ponder distinguishes two events sharing a topic0.
 for (const child of ["Safe", "SafeModern"] as const) {

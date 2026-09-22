@@ -6,7 +6,7 @@
 //   node reliability/run.ts --scenarios=reorg-cases,db-restart
 //
 // Arguments that name a tool select it; everything else is a flag. The default
-// is the whole suite, which is what CI runs — one job per tool, since the
+// is the whole suite, which is what CI runs - one job per tool, since the
 // scenarios take a machine to themselves: a tool being starved of CPU by a
 // neighbour would show up here as a tool that could not keep up with the head.
 //
@@ -37,7 +37,7 @@ if (unknown.length > 0) {
     console.error(
       reason
         ? `${tool} is not run by the reliability suite: ${reason}`
-        : `unknown tool "${tool}" — known tools are ${RELIABILITY_TOOLS.join(", ")}`
+        : `unknown tool "${tool}" - known tools are ${RELIABILITY_TOOLS.join(", ")}`
     );
   }
   process.exit(1);
@@ -47,7 +47,7 @@ const scenarios = (flags.get("scenarios") ?? "").split(",").filter(Boolean);
 const unknownScenarios = scenarios.filter((id) => !SCENARIOS.some((s) => s.id === id));
 if (unknownScenarios.length > 0) {
   console.error(
-    `unknown scenario(s) ${unknownScenarios.join(", ")} — known scenarios are ` +
+    `unknown scenario(s) ${unknownScenarios.join(", ")} - known scenarios are ` +
       SCENARIOS.map((s) => s.id).join(", ")
   );
   process.exit(1);
@@ -67,8 +67,8 @@ await runReliability({
 
 // A run that has published its results is finished.
 //
-// Leaving is explicit because the suite starts a lot of things — a chain, a
-// database, an indexer and whatever that indexer starts — and any one of them
+// Leaving is explicit because the suite starts a lot of things - a chain, a
+// database, an indexer and whatever that indexer starts - and any one of them
 // can leave a handle behind that keeps the event loop alive. In a terminal
 // that is a prompt that does not come back. In CI it is a job that hangs until
 // its timeout, which here is five hours, and a hung job reports nothing at

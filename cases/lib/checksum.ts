@@ -53,7 +53,7 @@ export interface EntitySpec {
 
 export interface EntityExpectation {
   rowCount: number;
-  /** Decimal string — the sum exceeds 64 bits for large tables. */
+  /** Decimal string - the sum exceeds 64 bits for large tables. */
   checksum: string;
 }
 
@@ -66,7 +66,7 @@ export interface Expected {
   totalEvents: number;
   /**
    * The highest block in the range that carries an event, which is not
-   * necessarily `endBlock` — the last blocks of a range are often empty.
+   * necessarily `endBlock` - the last blocks of a range are often empty.
    *
    * This is what "finished the range" means for a tool whose progress is read
    * from the data it wrote rather than from a position it reports. Such a tool
@@ -105,7 +105,7 @@ export function encodeSeconds(value: number): string {
  * differs in case or in whitespace between two indexers is two different
  * answers to the same question, and the point of a canonical encoding is to
  * stop hiding that. A null encodes as the empty string, the same as it does on
- * the SQL side, so a missing value and a blank one compare equal — which they
+ * the SQL side, so a missing value and a blank one compare equal - which they
  * are, as far as a row checksum can tell.
  */
 export function encodeText(value: string | null): string {

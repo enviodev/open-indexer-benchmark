@@ -9,8 +9,8 @@
 // scenarios' own verdicts are what is under test, so a run against a real
 // indexer tells you what that indexer did, not whether the harness can tell.
 //
-// So this drives the whole harness — the generated chain, the scenario bodies,
-// the schema resolution, the SQL, the comparison against the chain — against a
+// So this drives the whole harness - the generated chain, the scenario bodies,
+// the schema resolution, the SQL, the comparison against the chain - against a
 // deliberately simple indexer that can be given specific defects. A correct
 // indexer has to pass; an indexer with a defect has to fail the check that
 // defect is about, and that is what is asserted. Both directions matter: a
@@ -19,7 +19,7 @@
 // It needs a PostgreSQL it may create databases on, and no other credentials:
 // the chain is generated and the indexer is in this repository. Docker is not
 // needed, because the one scenario that takes a database away is given a
-// stand-in that takes this one away instead — by refusing its connections,
+// stand-in that takes this one away instead - by refusing its connections,
 // which is the same thing as far as the indexer connected to it is concerned.
 
 import { execFile } from "node:child_process";
@@ -67,7 +67,7 @@ const psqlAdmin = (query: string) => run("psql", [ADMIN, "-t", "-A", "-c", query
  *
  * Deliberately not a superuser. PostgreSQL does not enforce a database's
  * connection limit against superusers, so an "outage" staged by setting that
- * limit to zero would let a superuser straight through — which is exactly what
+ * limit to zero would let a superuser straight through - which is exactly what
  * happened here, and it scored an indexer that exits on its first failed query
  * as having survived one. An ordinary role is refused, which is the point.
  */
@@ -93,7 +93,7 @@ async function freshDatabase(name: string): Promise<string> {
 /**
  * Takes the database away from whatever is connected to it, without a
  * container: refuse new connections and drop the ones that exist. An indexer
- * holding a pool sees exactly what it sees when Postgres restarts — its
+ * holding a pool sees exactly what it sees when Postgres restarts - its
  * queries fail, and keep failing, until they do not.
  */
 function connectionOutage(name: string) {
@@ -124,7 +124,7 @@ interface Expectation {
   batchBlocks?: number;
   /** Checks that must pass. */
   passes?: string[];
-  /** Checks that must fail — the defect's fingerprint. */
+  /** Checks that must fail - the defect's fingerprint. */
   fails?: string[];
   /** Checks that must come back unmeasured rather than failed. */
   unmeasured?: string[];
@@ -175,7 +175,7 @@ const EXPECTATIONS: Expectation[] = [
   //
   // No-code rindexer has no facility for reading contract state, so its
   // project has no token row and never will. The two checks that read one have
-  // to come back unmeasured — and, more importantly, the other three have to
+  // to come back unmeasured - and, more importantly, the other three have to
   // still be asked: a resolver that gave up on the whole schema over one
   // missing table would turn a project with a documented limit into an indexer
   // whose tables cannot be read at all.
@@ -234,7 +234,7 @@ for (const expectation of EXPECTATIONS) {
     check(
       `${label}: ${id} passes`,
       status(result.checks[id]) === "pass",
-      `${status(result.checks[id])} — ${detailOf(result.checks[id])} (${seconds}s)`
+      `${status(result.checks[id])} - ${detailOf(result.checks[id])} (${seconds}s)`
     );
   }
   for (const id of expectation.unmeasured ?? []) {

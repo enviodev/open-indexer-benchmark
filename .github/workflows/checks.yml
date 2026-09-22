@@ -3,15 +3,15 @@ name: Checks
 # The harness's own tests, for the parts that need no credentials and no real
 # indexer: the pull request scope filter, the result tables and their parser,
 # the mock chain the reliability scenarios serve, the reliability catalog and
-# scoring, and the reliability harness itself — which is driven against an
+# scoring, and the reliability harness itself - which is driven against an
 # indexer with deliberate defects and has to catch each one.
 #
 # The first four run in a second or two. The last needs a PostgreSQL, which is
 # why this job has one, and takes a few minutes; its slower scenarios are left
 # out unless it is run with --full.
 #
-# The tests that are still deliberately absent — scripts/test-verification.ts
-# and scripts/test-rpc-mock.ts — need a live HyperSync token, which forks do
+# The tests that are still deliberately absent - scripts/test-verification.ts
+# and scripts/test-rpc-mock.ts - need a live HyperSync token, which forks do
 # not have.
 
 on:
@@ -54,7 +54,7 @@ jobs:
       # The harness's own test: it drives every scenario against an indexer
       # with known defects and asserts that the checks catch them. Without it,
       # a published pass is only a claim that nothing was noticed. It needs a
-      # database it may create databases on, and nothing else — the chain is
+      # database it may create databases on, and nothing else - the chain is
       # generated and the indexer under test is in this repository.
       - run: node scripts/test-reliability-harness.ts
         env:

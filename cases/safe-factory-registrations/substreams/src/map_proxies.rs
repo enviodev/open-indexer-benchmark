@@ -3,21 +3,21 @@ use substreams::{skip_empty_output, Hex};
 use substreams_ethereum::pb::eth::v2::Block;
 
 /// `ProxyCreation(address proxy, address singleton)`, and the same signature
-/// with `proxy` indexed from 1.4.1 on — one topic0 either way, which is why the
+/// with `proxy` indexed from 1.4.1 on - one topic0 either way, which is why the
 /// layouts are told apart by the factory that emitted the log.
 pub const PROXY_CREATION_TOPIC: [u8; 32] = [
     0x4f, 0x51, 0xfa, 0xf6, 0xc4, 0x56, 0x1f, 0xf9, 0x5f, 0x06, 0x76, 0x57, 0xe4, 0x34, 0x39, 0xf0,
     0xf8, 0x56, 0xd9, 0x7c, 0x04, 0xd9, 0xec, 0x90, 0x70, 0xa6, 0x19, 0x9a, 0xd4, 0x18, 0xe2, 0x35,
 ];
 
-/// `ProxyCreation(address proxy, address singleton)` — both arguments in the
+/// `ProxyCreation(address proxy, address singleton)` - both arguments in the
 /// data payload, proxy first.
 const FACTORIES_V1_3_0: [&str; 2] = [
     "a6b71e26c5e0845f74c812102ca7114b6a896ab2",
     "c22834581ebc8527d974f8a1c97e1bea4ef910bc",
 ];
 
-/// `ProxyCreation(address indexed proxy, address singleton)` — proxy moved into
+/// `ProxyCreation(address indexed proxy, address singleton)` - proxy moved into
 /// a topic in 1.4.1 and stayed there, so the payload holds the singleton alone.
 const FACTORIES_MODERN: [&str; 2] = [
     "4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67",

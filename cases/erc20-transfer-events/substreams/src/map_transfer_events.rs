@@ -36,8 +36,8 @@ fn map_transfer_events(
             continue;
         }
         // Topics are (signature, from, to) and the value is the data word.
-        // An ERC-20 whose Transfer is non-standard — three indexed arguments,
-        // or none — would decode to something else, so the shape is checked
+        // An ERC-20 whose Transfer is non-standard - three indexed arguments,
+        // or none - would decode to something else, so the shape is checked
         // rather than assumed.
         if log.topics.len() != 3 || log.topics[0] != TRANSFER_TOPIC || log.data.len() != 32 {
             continue;

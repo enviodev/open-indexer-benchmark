@@ -63,7 +63,7 @@ fn map_events(block: Block, proxies: StoreGetInt64) -> Result<Events, substreams
         // Only a proxy one of these factories announced counts as a child.
         // `get_last` rather than `get_at(0, ..)`: the latter reads the store as
         // it stood before this block's writes, so a proxy created in this very
-        // block would not be known yet — and a Safe emits its own SafeSetup one
+        // block would not be known yet - and a Safe emits its own SafeSetup one
         // log index *below* the ProxyCreation announcing it, which is the case
         // this scenario exists to make visible.
         if proxies.get_last(&safe).is_none() {
@@ -155,7 +155,7 @@ fn map_events(block: Block, proxies: StoreGetInt64) -> Result<Events, substreams
             topic::EXECUTION_SUCCESS | topic::EXECUTION_FAILURE => {
                 // Both layouts carry at least one word and the payment is the
                 // last of them, so an empty payload is a truncated log rather
-                // than a layout this has not met — dropping it beats reading a
+                // than a layout this has not met - dropping it beats reading a
                 // payment of zero into the checksum.
                 let words = log.data.len() / 32;
                 let Some(payment) = words.checked_sub(1).and_then(|w| uint_at_word(&log.data, w))

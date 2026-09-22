@@ -13,12 +13,12 @@ holding the amount, the two token accounts and the signer.
 - **Program**: SPL Token (`TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`)
 - **Mint**: USD Coin (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`)
 - **Instructions Indexed**: `transfer` (`0x03`) and `transferChecked` (`0x0c`)
-  — every instruction that moves USDC between accounts. Issuance (`mintTo`) and
+  - every instruction that moves USDC between accounts. Issuance (`mintTo`) and
   redemption (`burn`) change the supply rather than move a balance between
   holders, and are out of scope; over a 200-slot sample they amount to one
   instruction.
 - **Slot Range**: 440,000,000 to latest
-- **Verification Range**: 440,000,000 to 440,003,999 — 119,152 transfers
+- **Verification Range**: 440,000,000 to 440,003,999 - 119,152 transfers
 - **Features**: `instruction decoding`, `inner instructions`, `transaction metadata join`
 
 ## Case Logic
@@ -33,7 +33,7 @@ from the transaction's token balances, so either token account's balance record
 is read: if one of them holds USDC, the transfer is stored, otherwise it is
 dropped. Either account answers it, because SPL Token rejects a transfer
 between different mints. Over a 100-slot sample this path carried 1,299 of
-2,914 transfers, so it is not a tail case — it is nearly half the scenario.
+2,914 transfers, so it is not a tail case - it is nearly half the scenario.
 Why reading balances loses nothing is set out below.
 
 Both apply to inner instructions as well as top-level ones. 68% of USDC
@@ -44,18 +44,18 @@ an indexer that only sees top-level instructions misses most of them.
 
 The Substreams package resolves the unchecked case by asking whether *any*
 token balance in the transaction carries the mint. That over-matches every
-transaction touching two tokens — which is every swap. This case resolves the
+transaction touching two tokens - which is every swap. This case resolves the
 transfer's own two accounts, so the ground truth is a definite answer rather
 than a heuristic every implementation would have to reproduce identically.
 
 ## Implementations
 
-- **Envio** — [envio/](./envio/) — also the reference the ground truth is
+- **Envio** - [envio/](./envio/) - also the reference the ground truth is
   snapshotted from
-- **Squid SDK** — [sqd/](./sqd/) — reads the SQD Portal
-- **Carbon** — [carbon/](./carbon/) — reads plain RPC at Carbon's default 10
+- **Squid SDK** - [sqd/](./sqd/) - reads the SQD Portal
+- **Carbon** - [carbon/](./carbon/) - reads plain RPC at Carbon's default 10
   concurrent `getBlock` calls, run locally
-- **Substreams** — [substreams/](./substreams/) — reads StreamingFast, sunk to
+- **Substreams** - [substreams/](./substreams/) - reads StreamingFast, sunk to
   Postgres by `substreams-sink-sql`, run locally
 
 A scenario runs the tools it has a project directory for. SubQuery also indexes
@@ -89,15 +89,15 @@ the ground truth and for HyperSync.
 ENVIO_API_TOKEN=your-token node cases/solana-spl-transfers/run.ts
 ```
 
-Each indexer indexes the verification range to completion — its database is
-then checked against `expected.json` and measured — before re-running for the
+Each indexer indexes the verification range to completion - its database is
+then checked against `expected.json` and measured - before re-running for the
 throughput window.
 
 Every implementation writes the same row. Three of them key it the same way,
 `slot-transactionIndex-instructionPath`; Substreams keys on the transaction's
 signature and the instruction's path within it. The key is not part of what the
-ground truth checks — the checksum covers the source, destination, amount,
-signer and timestamp — but it is stored and indexed, so it shows up in the
+ground truth checks - the checksum covers the source, destination, amount,
+signer and timestamp - but it is stored and indexed, so it shows up in the
 storage column, and Substreams' row is the larger for it: a base58 signature is
 88 characters against roughly 17, which is 62.7 MB against 37.7 to 40.4 for the
 same 119,152 rows.
@@ -107,13 +107,13 @@ upstream package keys on `(evt_tx, evt_instruction_index)`, and `solana-common`'
 own instruction stream carries `tx_hash` and no index at all, because a
 signature travels with the transaction while a position within a block does
 not. Substreams filters server-side to the transactions that touch the Token
-program — which is the point of it — and those arrive without the block they
+program - which is the point of it - and those arrive without the block they
 came from. Computing the index the other three use would mean asking for whole
 blocks and counting, giving up that filter to match a field the ground truth
 never reads.
 
 `expected.json` is a snapshot of what the Envio project produces over the
-verification range — the case's logic is written once, in the indexer, rather
+verification range - the case's logic is written once, in the indexer, rather
 than once there and once in the harness. Regenerate it after changing the mint,
 the slot range or the case logic, and review the diff:
 
@@ -127,14 +127,14 @@ ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts solana-spl-transfer
 to prove. A token account is either older than the transaction it appears in,
 or created inside it:
 
-- **Older** — it has a balance to report, so the transaction's token balances
+- **Older** - it has a balance to report, so the transaction's token balances
   carry it and its mint. Reading only the source would still lose transfers,
   because a *freshly created* source has no balance before the transaction:
   over a 100-slot sample that is 538 of 4,266 unchecked transfers. Reading
   either account closes that, and either is enough, because SPL Token rejects a
   transfer whose two accounts hold different mints. Across 4,266 transfers the
   two never disagreed where both were present.
-- **Created inside it** — the same transaction carries the
+- **Created inside it** - the same transaction carries the
   `initializeAccount` that names its mint, necessarily before the transfer, so
   a transfer out of a brand-new account is still attributable.
 
@@ -142,8 +142,8 @@ The two cases are exhaustive, so the only account both readings miss is one
 created *and* closed inside a single transaction: no balance either side, and
 nothing but its initialization to identify it.
 
-Measured against an independent reading of HyperSync — instruction calls and
-account activity queried directly, decoded, and joined by the same rules — the
+Measured against an independent reading of HyperSync - instruction calls and
+account activity queried directly, decoded, and joined by the same rules - the
 first 2,000 slots of the range held 57,753 unchecked transfers, 28,361 of them
 USDC, and 2,320 USDC accounts created in range, with **zero** transfers that
 the balance records miss. That reading produced the same rows and the same
@@ -154,8 +154,8 @@ thing done once and recorded rather than a check the generator re-runs: a
 transfer this logic cannot see is a transfer neither side sees. The argument
 above is what rules the class out; the measurement is what confirmed it.
 
-Instructions from failed transactions never reach the indexers — a query
-filtered on `tx_success: false` returns nothing over this range — so no
+Instructions from failed transactions never reach the indexers - a query
+filtered on `tx_success: false` returns nothing over this range - so no
 reverted transfer is counted.
 
 USDC lives entirely on the classic SPL Token program: across 200 slots no
@@ -165,6 +165,6 @@ program is the whole story for this token, which is not true of every mint on
 Solana.
 
 The slot range is pinned inside HyperSync's Solana retention window, which
-currently reaches back to slot 391,000,000 — a request below the floor is
+currently reaches back to slot 391,000,000 - a request below the floor is
 answered from the floor rather than refused, so the ground truth reads the
 floor first and fails if the range has aged out.

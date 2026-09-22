@@ -19,7 +19,7 @@ const client = createPublicClient({ transport: http(RPC_URL) });
 /**
  * The token's metadata, read once for the whole run.
  *
- * Handlers run twice — once in preload and once in order — so an unguarded
+ * Handlers run twice - once in preload and once in order - so an unguarded
  * call here would be two calls per transfer rather than one per indexer. The
  * promise is the cache: whoever gets there first makes the call and everyone
  * else awaits the same answer.
@@ -46,7 +46,7 @@ function readMetadata() {
         return cleaned.length > 0 ? cleaned : null;
       } catch {
         // A revert, or returndata that does not decode as a string, is the
-        // token not answering — which is a null, not a failed block.
+        // token not answering - which is a null, not a failed block.
         return null;
       }
     };

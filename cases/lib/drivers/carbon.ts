@@ -11,8 +11,8 @@ const PG_PORT = 25_432;
 export const CARBON_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/carbon`;
 
 /**
- * Carbon reads Solana over plain RPC — its block crawler is the only Carbon 2
- * datasource that takes a bounded slot range — so this row needs an archive
+ * Carbon reads Solana over plain RPC - its block crawler is the only Carbon 2
+ * datasource that takes a bounded slot range - so this row needs an archive
  * endpoint deep enough to serve the scenario's slots. There is no shared one
  * to fall back to the way the EVM rows fall back to HyperRPC, which is why the
  * scenario runs this driver locally rather than in CI.
@@ -23,7 +23,7 @@ export const carbonDriver: DriverFactory = ({ config, endBlock }) => {
   if (!rpcUrl) {
     throw new Error(
       "SOLANA_RPC_URL must be set to an archive RPC endpoint that serves the " +
-        "case's slot range — Carbon reads every block in it over RPC"
+        "case's slot range - Carbon reads every block in it over RPC"
     );
   }
 
@@ -55,7 +55,7 @@ export const carbonDriver: DriverFactory = ({ config, endBlock }) => {
       await exec("cargo", ["build", "--release"], dir, env);
 
       // This row is measured by hand, so a Postgres already listening on the
-      // port is taken as one someone put there on purpose — a machine without a
+      // port is taken as one someone put there on purpose - a machine without a
       // Docker daemon can still run the scenario. The table is dropped rather
       // than the volume, which is what the container path achieves by recreating
       // it; the indexer creates it again on startup.

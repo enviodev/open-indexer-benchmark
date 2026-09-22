@@ -3,8 +3,8 @@ import { createConfig } from "ponder";
 import { ERC20Abi } from "./abis/ERC20";
 
 // The reliability harness always supplies an end block, the same way the
-// throughput runner does. It is a block no scenario reaches — the suite is
-// about what happens at the head — so this project runs as an open-ended head
+// throughput runner does. It is a block no scenario reaches - the suite is
+// about what happens at the head - so this project runs as an open-ended head
 // follower. The variable is still required rather than defaulted: an indexer
 // silently running unbounded looks exactly like a working one.
 function requireEndBlock(): number {

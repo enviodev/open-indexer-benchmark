@@ -5,13 +5,13 @@ row per instruction, into Postgres.
 
 ### Datasource
 
-`RpcBlockCrawler` — the only Carbon 2 datasource that takes a bounded slot
+`RpcBlockCrawler` - the only Carbon 2 datasource that takes a bounded slot
 range. Geyser gRPC and `blockSubscribe` follow the head; the transaction
 crawler walks backwards from it by signature; `jetstreamer` is slot-ranged but
 stayed on Carbon 1 and is not built in the Carbon 2 workspace.
 
 It fetches every block in the range whole, so unlike the other implementations
-of this scenario nothing about the mint narrows what arrives — that is the
+of this scenario nothing about the mint narrows what arrives - that is the
 shape of RPC indexing, and it is what the row measures. The block config asks
 for base64 encoding, no rewards, and version 0 support, which keeps the payload
 to what the decoder needs.
@@ -24,7 +24,7 @@ limit, so asking for more at once buys nothing and only makes the arrivals
 burstier.
 
 **Both of Carbon's queues are raised to 100,000**, from a default of 1,000. The
-datasource does not wait when a queue is full — it `try_send`s, and on `Full`
+datasource does not wait when a queue is full - it `try_send`s, and on `Full`
 logs `Error sending transaction update: "Full(..)"` and abandons the rest of
 that block's transactions. There is no backpressure, so a full queue is data
 quietly missing from the table. A thousand is marginal even at the default
@@ -39,7 +39,7 @@ dropped a block. Measured over the range:
 | 50 | 1,000 (default) | 215s | 5 | 119,045 |
 
 The scenario verifies against a checksum, so a run that drops fails rather than
-publishing a number quietly measured over less work — which is what the two
+publishing a number quietly measured over less work - which is what the two
 faster-looking rows above are.
 
 ### Mint resolution
@@ -51,7 +51,7 @@ mints, and reading only the source would lose the transfers whose source the
 transaction itself opened.
 
 Token balances index accounts by position, so the lookup rebuilds the
-transaction's key list the way Solana does — the message's own keys, then the
+transaction's key list the way Solana does - the message's own keys, then the
 writable and readonly addresses its lookup tables loaded. Without the second
 half a transfer whose account came from a lookup table would look like a
 transfer of some other token.
@@ -94,7 +94,7 @@ allowance for a verification run.
 `carbon-token-program-decoder` are pinned to exactly `2.0.0` with `Cargo.lock`
 committed, so the row names the version it measured.
 
-Carbon's crates span two generations of the `solana-*` types — the block
-crawler is on 4.x while `carbon-core`'s transaction metadata is on 2.x — so
+Carbon's crates span two generations of the `solana-*` types - the block
+crawler is on 4.x while `carbon-core`'s transaction metadata is on 2.x - so
 this crate names only the types it hands to the crawler and compares everything
 else as text.

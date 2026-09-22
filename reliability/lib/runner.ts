@@ -2,7 +2,7 @@
 // once each.
 //
 // The repeat is the part worth explaining. Every other number this repository
-// publishes is a measurement, and a measurement is allowed to be noisy — the
+// publishes is a measurement, and a measurement is allowed to be noisy - the
 // throughput runner takes the best of two windows and says so. A check is not
 // a measurement. It is a claim that a tool does something, and a claim that
 // holds two times in three is not a weaker claim, it is a different and worse
@@ -67,7 +67,7 @@ const POLL_MS = 500;
  *
  * Twenty-five minutes was not generous enough, and cost a real column. The
  * reorg scenario asks a tool to catch up seven times, and rindexer's live
- * indexing takes one block per poll, about three seconds each — so the twenty
+ * indexing takes one block per poll, about three seconds each - so the twenty
  * blocks the harness adds between checks are a minute of chasing every time,
  * before the reorg is even unwound. It was most of the way through when the
  * ceiling stopped it, and published six unmeasured checks that it would have
@@ -248,7 +248,7 @@ export async function runOnce(
     );
   } catch (err) {
     const message = (err as Error)?.message ?? String(err);
-    // A failure to set the run up is the harness's, not the tool's — with one
+    // A failure to set the run up is the harness's, not the tool's - with one
     // exception worth naming, since it is the difference between "this tool
     // has no reorg handling" and "nobody ran the scenario".
     log(`  ${tool}/${scenario} attempt ${attempt} could not run: ${message}`);
@@ -276,7 +276,7 @@ export async function runOnce(
  *
  * The generated chain implements the methods someone thought to write down. An
  * indexer reaching for one of the others gets an error back, fails to index,
- * and — without this — is published as a tool that cannot handle reorgs. That
+ * and - without this - is published as a tool that cannot handle reorgs. That
  * would be the benchmark's own gap, reported as a finding about somebody
  * else's software, which is the one failure mode this whole repository exists
  * to avoid.
@@ -297,7 +297,7 @@ function withoutRefusedMethods(
 
   const reason =
     `the generated chain does not serve ${methods.join(", ")}, which this tool ` +
-    `asked for, so the scenario cannot say anything about it — ` +
+    `asked for, so the scenario cannot say anything about it - ` +
     `add the method to reliability/lib/chain-mock.ts`;
   log(`  ! ${scenario}: refused ${methods.join(", ")}; failures are not the tool's`);
 
@@ -398,7 +398,7 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
     // published table, which reads as a tool nobody thought to measure.
     throw new Error(
       `${unaccounted.join(", ")} is registered as an indexer but the reliability ` +
-        `suite neither runs it nor says why — add it to RELIABILITY_TOOLS or to ` +
+        `suite neither runs it nor says why - add it to RELIABILITY_TOOLS or to ` +
         `NOT_RUN in reliability/lib/tools.ts`
     );
   }
@@ -441,8 +441,8 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
       const asked = Object.values(merged.checks).filter((c) => c.status !== "na").length;
       console.log(`  ${scenario}: ${passed} of ${asked} checks`);
       for (const [id, outcome] of Object.entries(merged.checks)) {
-        if (outcome.status === "fail") console.log(`    ✗ ${id} — ${outcome.detail}`);
-        if (outcome.status === "na") console.log(`    ? ${id} — ${outcome.detail}`);
+        if (outcome.status === "fail") console.log(`    ✗ ${id} - ${outcome.detail}`);
+        if (outcome.status === "na") console.log(`    ? ${id} - ${outcome.detail}`);
       }
       // The spread across repeats is printed rather than published: the table
       // carries the median, and a reader chasing an odd one wants the runs.
@@ -457,7 +457,7 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
 
     const result: ToolReliability = { ...presentation(tool), runs };
     results.push(result);
-    // One line per tool, in the shape the summary job parses — the same
+    // One line per tool, in the shape the summary job parses - the same
     // contract the throughput jobs publish their results through.
     console.log(`RELIABILITY_RESULT ${JSON.stringify(result)}`);
     options.emit?.(result);

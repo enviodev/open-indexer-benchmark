@@ -34,7 +34,7 @@ export function start(
 ): ChildProcess {
   const p = spawn(cmd, args, { cwd, stdio: "pipe", detached: true, env });
   // A binary that is not there raises an `error` event and no `exit`, and an
-  // unhandled `error` takes the whole harness down with it — one tool whose
+  // unhandled `error` takes the whole harness down with it - one tool whose
   // CLI failed to install would end the run for every other. Reporting it as
   // an exit instead leaves it as what it is: a tool that is not running, which
   // every driver already knows how to see.
@@ -112,7 +112,7 @@ export function signalGroup(
  * Run a SQL query via psql and return the trimmed stdout.
  *
  * The query goes in on stdin rather than as an argument. Linux caps a single
- * argument at 128 KB, and a query over that fails as `spawn E2BIG` — an error
+ * argument at 128 KB, and a query over that fails as `spawn E2BIG` - an error
  * that names nothing about SQL and takes a while to recognise. Every query the
  * benchmark issues today is far under the cap, but nothing enforces that, and
  * the first one that is not would fail somewhere far from here.
@@ -133,7 +133,7 @@ export function psql(connStr: string, query: string): Promise<string> {
     p.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     p.on("error", rej);
     // A psql that cannot connect exits before the query is written, and the
-    // write then fails with EPIPE — which, unhandled, takes the process down.
+    // write then fails with EPIPE - which, unhandled, takes the process down.
     // The exit code is what the failure is reported from, so the broken pipe
     // is ignored. The reliability suite takes databases away on purpose, so
     // this is a normal path there rather than an edge case.

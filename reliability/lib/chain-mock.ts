@@ -2,8 +2,8 @@
 //
 // The performance scenarios read real chain data, because throughput is only
 // interesting over data an indexer will really meet. Reliability is the other
-// way round: the interesting moments — the chain rewriting itself, the node
-// going away mid-batch, a token whose `symbol()` answers nothing — either
+// way round: the interesting moments - the chain rewriting itself, the node
+// going away mid-batch, a token whose `symbol()` answers nothing - either
 // cannot be arranged on a real chain at all, or cannot be arranged twice the
 // same way. So the reliability scenarios do not read a chain. They serve one.
 //
@@ -17,11 +17,11 @@
 // it is on, never stored from a previous life. That is what makes a reorg
 // legible: the replacement block at height N is a different block with
 // different logs, and an indexer that kept the old one is holding data no
-// longer on the chain — exactly the failure the scenario is looking for.
+// longer on the chain - exactly the failure the scenario is looking for.
 //
 // This is deliberately not rpc-mock.ts. That endpoint sits in front of a real
 // node and answers one method itself; this one has no upstream at all, and
-// every method it does not implement is an error rather than a passthrough —
+// every method it does not implement is an error rather than a passthrough -
 // a tool reaching for something the mock chain has not defined should surface
 // as a failed scenario, not as an unexplained hang.
 
@@ -44,8 +44,8 @@ const JSON_HEADERS = { "content-type": "application/json" };
  * A real node derives this from the logs, and indexers check it in both
  * directions. Ponder checks that a log it was given is present in the block's
  * bloom, and stopped on a bloom of zeros: "Log not found in block.logsBloom".
- * The Squid SDK checks the converse — that a non-empty bloom is matched by
- * logs — and stopped on a bloom of ones over an empty block: "got 0 log
+ * The Squid SDK checks the converse - that a non-empty bloom is matched by
+ * logs - and stopped on a bloom of ones over an empty block: "got 0 log
  * records from eth_getLogs, but logs bloom is not empty". Each found one half,
  * and only a real indexer could have.
  *
@@ -120,7 +120,7 @@ export interface ChainSpec {
    * This exists because of what a real run showed. An indexer that refuses a
    * log index above the signed 32-bit maximum stops there, and when every
    * block carried one, that single refusal was also the answer to every other
-   * question the scenario wanted to ask — the tool never reached the blocks
+   * question the scenario wanted to ask - the tool never reached the blocks
    * they were about. Confining the hostile indices to the end of the chain
    * means each check gets put to a tool that is still running.
    */
@@ -135,8 +135,8 @@ export interface ChainSpec {
   maxLogsPerResponse?: number;
   /**
    * What `eth_call` answers, keyed by the 4-byte selector. A value of null is
-   * answered as empty data (`0x`) — a contract that has no such function, or a
-   * token whose `symbol()` returns nothing — which the indexer is expected to
+   * answered as empty data (`0x`) - a contract that has no such function, or a
+   * token whose `symbol()` returns nothing - which the indexer is expected to
    * store as a null rather than crash on.
    */
   calls?: Record<string, string | null>;
@@ -202,11 +202,11 @@ export interface Fault {
   /**
    * How the endpoint misbehaves.
    *
-   *   error     — a JSON-RPC error, the way a node reports an internal fault
-   *   status    — a non-2xx HTTP status with a provider's error body
-   *   timeout   — the request is accepted and never answered, which is the
+   *   error     - a JSON-RPC error, the way a node reports an internal fault
+   *   status    - a non-2xx HTTP status with a provider's error body
+   *   timeout   - the request is accepted and never answered, which is the
    *               failure mode a retry policy is least likely to survive
-   *   close     — the socket is destroyed mid-request
+   *   close     - the socket is destroyed mid-request
    */
   kind: "error" | "status" | "timeout" | "close";
   /** Methods to break. Unset breaks every method. */
@@ -225,7 +225,7 @@ export interface ChainStats {
    *
    * This is the honest accounting of the mock's own limits. A generated chain
    * serves the methods someone thought to write, and an indexer reaching for
-   * one of the others gets an error — which, left unexamined, looks exactly
+   * one of the others gets an error - which, left unexamined, looks exactly
    * like an indexer that cannot index. Every entry here is a bug report
    * against this file, and the harness treats a scenario that saw one as
    * unmeasured rather than failed: a tool cannot be marked down for a question
@@ -255,9 +255,9 @@ export interface ChainControl {
    *
    * `logs` says what happens to the events in the rewritten blocks:
    *
-   *   "changed" — the replacements carry different values, so an indexer that
+   *   "changed" - the replacements carry different values, so an indexer that
    *               did not roll back holds rows that were never on the chain
-   *   "dropped" — the replacements carry nothing, so the events have to be
+   *   "dropped" - the replacements carry nothing, so the events have to be
    *               deleted rather than merely overwritten, which is the case
    *               an upsert-only rollback silently fails
    */
@@ -268,7 +268,7 @@ export interface ChainControl {
   /** The block at a height on the current chain, or null if it is not there. */
   blockAt(height: number): MockBlock | null;
   /**
-   * Every log the chain currently holds, oldest first — the ground truth a
+   * Every log the chain currently holds, oldest first - the ground truth a
    * scenario compares an indexer's tables against.
    *
    * Derived from the chain as it stands right now, which is the only reading
@@ -306,7 +306,7 @@ export interface ChainRow {
   block: number;
   logIndex: number;
   amount: bigint;
-  /** Lowercase, `0x`-prefixed — the form every comparison normalises to. */
+  /** Lowercase, `0x`-prefixed - the form every comparison normalises to. */
   from: string;
   to: string;
 }
@@ -409,7 +409,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
    * back for a parent, a client checking the network by reading an early
    * block. Answering null would be a hole in a chain that is supposed to be
    * ordinary everywhere except where a scenario made it strange, so ancestors
-   * are derived on demand — hashes that chain together, no logs, no branch.
+   * are derived on demand - hashes that chain together, no logs, no branch.
    */
   function ancestorAt(height: number): MockBlock {
     return {
@@ -427,7 +427,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
    * A block by hash, ancestors included.
    *
    * Graph Node starts by asking for the parent of its start block by hash, and
-   * that parent is below the chain's start block — derived, never in `chain`.
+   * that parent is below the chain's start block - derived, never in `chain`.
    * Searching only the array answered null there, which reads to a tool as a
    * node that does not have the block it just named.
    */
@@ -490,7 +490,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       // Leaving the fee fields out is the kind of gap only a real indexer
       // finds: the historical path never asks for transactions, and the
       // realtime path fetches whole blocks and converts every field it knows
-      // about — Ponder turned the missing maxFeePerGas into "Cannot convert
+      // about - Ponder turned the missing maxFeePerGas into "Cannot convert
       // undefined to a BigInt" and took its own process down with it.
       transactions: fullTx
         ? logs.map((log, i) => ({
@@ -646,7 +646,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         // Both an undefined selector and an explicit null answer as empty
         // data. A contract with no such function returns nothing on a real
         // chain too, and what the scenario is watching is what the indexer
-        // does with nothing — store a null, or fall over.
+        // does with nothing - store a null, or fall over.
         return answer ?? "0x";
       }
       default: {

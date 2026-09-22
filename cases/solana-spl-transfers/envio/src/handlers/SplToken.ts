@@ -39,8 +39,8 @@ indexer.onInstruction(
   }
 );
 
-// Plain `transfer` carries no mint — its accounts are (source, destination,
-// authority) — so which token moved is only knowable from the transaction's
+// Plain `transfer` carries no mint - its accounts are (source, destination,
+// authority) - so which token moved is only knowable from the transaction's
 // token balances. Either account answers it, since SPL Token rejects a
 // transfer between different mints, and reading only the source would lose the
 // transfers whose source the transaction itself opened: an account with no

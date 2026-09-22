@@ -7,7 +7,7 @@ timestamps: true
 #
 # * The two factory generations decode `ProxyCreation` differently (the proxy
 #   moved into a topic in 1.4.1), so child extraction needs one factory
-#   definition per generation — the addresses within a generation share one.
+#   definition per generation - the addresses within a generation share one.
 # * Ten of the child events exist under one topic0 in two layouts (1.4.x made
 #   the first argument indexed without changing the signature), and a proxy can
 #   emit either at any time. Each layout is registered as its own contract; a

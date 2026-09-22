@@ -7,8 +7,8 @@ ponder.on("ERC20:Approval", async ({ event, context }) => {
   // An approval of zero revokes it, and a revoked allowance is zero whatever
   // the token reports, so there is nothing to go and ask. Everything else is a
   // contract read: `context.client` is Ponder's own Viem client, which caches
-  // results in the database and — because it profiles what each indexing
-  // function asks for — issues the reads for upcoming events ahead of time
+  // results in the database and - because it profiles what each indexing
+  // function asks for - issues the reads for upcoming events ahead of time
   // instead of one at a time as the events arrive.
   const allowance =
     approved === 0n

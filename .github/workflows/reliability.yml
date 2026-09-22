@@ -3,7 +3,7 @@ name: Reliability
 # What a tool does when things go wrong, published beside what it does when
 # they do not.
 #
-# The suite is expensive — nine scenarios, three runs each — so it runs at two
+# The suite is expensive - nine scenarios, three runs each - so it runs at two
 # depths. Tools run in parallel, one runner each, so a depth costs the wall
 # clock of its slowest tool rather than the sum of seven.
 #
@@ -12,8 +12,8 @@ name: Reliability
 # does. It is posted back as a comment and changes nothing in the repository.
 #
 # The full suite runs weekly, and on demand, and that is what writes the table
-# into the README. Nothing about these results changes between commits — they
-# are a property of each tool, not of this repository — so measuring them on
+# into the README. Nothing about these results changes between commits - they
+# are a property of each tool, not of this repository - so measuring them on
 # every push to main would be hours of runner time to learn the same thing
 # again.
 #
@@ -114,10 +114,10 @@ jobs:
     permissions:
       contents: read
     strategy:
-      # All seven at once. The scenarios do need a machine to themselves —
+      # All seven at once. The scenarios do need a machine to themselves -
       # two of them measure how long a tool takes to react, and a neighbour
       # competing for CPU would read as a tool that cannot keep up with the
-      # head — and they get one: GitHub gives every matrix job its own runner
+      # head - and they get one: GitHub gives every matrix job its own runner
       # VM, so the isolation is the runner's, not the queue's. Serialising
       # them bought nothing and cost the wall clock of all seven in a row.
       # A tool that fails is a result rather than a reason to stop measuring
@@ -169,7 +169,7 @@ jobs:
           # `*` in one of them add arguments of its own.
           ARGS=("$TOOL" "--repeats=$REPEATS")
           # An `&&` list that comes out false is a failed command under
-          # `set -e`, and "no scenarios named" means every scenario — the case
+          # `set -e`, and "no scenarios named" means every scenario - the case
           # a pull request and the weekly run both take.
           if [ -n "$SCENARIOS" ]; then
             ARGS+=("--scenarios=$SCENARIOS")
@@ -239,7 +239,7 @@ jobs:
           MISSING=$(( $(echo $TOOLS | wc -w) - REPORTED ))
 
           # A run where nothing reported has nothing to say, and saying it
-          # anyway overwrites the last run's results with a table of dashes —
+          # anyway overwrites the last run's results with a table of dashes -
           # which is what a cancelled run did to a complete one. The carry
           # forward cannot save it either: that reads the README, and on a pull
           # request the README is whatever `main` last published.

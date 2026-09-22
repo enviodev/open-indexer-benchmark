@@ -5,7 +5,7 @@
 //
 // A scenario runs a tool in CI if it has a project directory for it, the case
 // does not declare it unsupported, and the case does not keep it local-only. Every EVM scenario implements every tool,
-// so this changes nothing there — but Solana is indexed by a handful of them,
+// so this changes nothing there - but Solana is indexed by a handful of them,
 // and a job for a tool with nothing to run is a red X that means "not written
 // yet", which is not a benchmark result.
 //

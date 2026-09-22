@@ -29,8 +29,8 @@ const legacyFactories = new Set(FACTORIES_V1_3_0);
 // This is safe here and only here. The benchmark always runs a bounded range
 // that ends far below the chain head, so no block this set is built from is
 // ever rolled back. A head-following indexer would have to derive the set from
-// the `safe` table instead — a fork that unwinds a ProxyCreation unwinds the
-// row, but it cannot unwind a Set — which is a database read per log, and the
+// the `safe` table instead - a fork that unwinds a ProxyCreation unwinds the
+// row, but it cannot unwind a Set - which is a database read per log, and the
 // reason it is not done here: it would measure Postgres rather than the tool.
 const registered = new Set<string>();
 
@@ -76,8 +76,8 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
         continue;
       }
 
-      // Every child event is subscribed to by topic chain-wide — there is no
-      // address list to give the processor — so logs from proxies these
+      // Every child event is subscribed to by topic chain-wide - there is no
+      // address list to give the processor - so logs from proxies these
       // factories did not create are dropped here. SafeSetup is the one that
       // never survives: a proxy emits it one log index *below* the
       // ProxyCreation that announces it, so at this point the set does not yet

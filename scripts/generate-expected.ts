@@ -4,8 +4,8 @@
 //   ENVIO_API_TOKEN=... node scripts/generate-expected.ts [case...]
 //
 // Run this whenever a case's verification block range, contract, or handler
-// logic changes. The output is small by design — a row count and a checksum
-// per entity — so it can be committed and reviewed.
+// logic changes. The output is small by design - a row count and a checksum
+// per entity - so it can be committed and reviewed.
 
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -53,7 +53,7 @@ async function generate(name: string, token: string) {
       process.stdout.write(
         `\r  ${progress.pass}: fetched to block ${progress.block.toLocaleString(
           "en-US"
-        )} — ${progress.logs.toLocaleString("en-US")} rows`
+        )} - ${progress.logs.toLocaleString("en-US")} rows`
       );
     }
   );

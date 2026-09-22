@@ -5,8 +5,8 @@ import {
 } from "@subql/types-ethereum";
 
 // The harness always supplies an end block, the same way the throughput runner
-// does. It is a block no scenario reaches — the suite is about what happens at
-// the head — so this runs as an open-ended head follower. The variable is
+// does. It is a block no scenario reaches - the suite is about what happens at
+// the head - so this runs as an open-ended head follower. The variable is
 // still required rather than defaulted: a node silently running unbounded
 // looks exactly like a working one.
 function requireEndBlock(): number {

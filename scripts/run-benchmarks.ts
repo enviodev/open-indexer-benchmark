@@ -7,7 +7,7 @@
 //
 // Scenarios are sequential, mirroring CI, where each scenario's jobs only start
 // once the previous scenario's are done: a throughput number is only meaningful
-// if nothing else on the machine — or on the shared data endpoints — is
+// if nothing else on the machine - or on the shared data endpoints - is
 // competing with the run being measured. Within a scenario the runner already
 // takes the indexers one at a time, for the same reason.
 //
@@ -104,7 +104,7 @@ for (const [i, name] of selected.entries()) {
   }
   if (code !== 0) {
     // One scenario failing says nothing about the others, so keep going and
-    // report at the end — a partial table beats no table.
+    // report at the end - a partial table beats no table.
     failed++;
     console.error(`\nScenario "${name}" exited with code ${code}.`);
   }

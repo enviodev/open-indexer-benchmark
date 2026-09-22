@@ -14,7 +14,7 @@ export const RINDEXER_DB_URL = `postgresql://postgres:rindexer@localhost:${PG_PO
 
 // The first release with `networks[].hypersync` support. An older CLI ignores
 // the unknown yaml key and quietly serves the run over plain RPC, which would
-// publish an RPC measurement labeled HyperSync — so the hypersync row refuses
+// publish an RPC measurement labeled HyperSync - so the hypersync row refuses
 // to run on anything older rather than mislabel a result.
 const HYPERSYNC_MIN_VERSION = [0, 43, 0] as const;
 
@@ -80,7 +80,7 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
   // The block figure needs more care: rindexer indexes every registered event
   // as its own parallel stream, so the highest block among the event tables is
   // only the *fastest* stream's position. Reporting it lets a range run look
-  // finished — and get stopped — while slower streams still have batches in
+  // finished - and get stopped - while slower streams still have batches in
   // flight, which truncates their tail. rindexer does persist each stream's
   // own watermark (rindexer_internal.*.last_synced_block), and the minimum of
   // those is the block every stream has truly reached.
@@ -153,7 +153,7 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
     },
     async launch() {
       // Indexer only. The benchmark reads PostgreSQL directly, so serving a
-      // GraphQL API alongside the indexing would be work no measurement uses —
+      // GraphQL API alongside the indexing would be work no measurement uses -
       // and work the other indexers are not doing.
       proc = isRustProject
         ? start(rustBin, ["--indexer"], dir, env)

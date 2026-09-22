@@ -29,7 +29,7 @@ jobs:
     # One job is one indexer on one scenario, and they all run concurrently, so
     # this bounds a single benchmark rather than the suite: phase A's five-minute
     # cap, two throughput windows, and the install and build each of the three
-    # runs pays for. It is a backstop for a hung runner — a job that reaches it
+    # runs pays for. It is a backstop for a hung runner - a job that reaches it
     # produces no row at all, which is why it sits above what a real run costs.
     timeout-minutes: 30
     # Runs third-party indexer binaries, so it gets the narrowest token that
@@ -88,7 +88,7 @@ jobs:
       # The rust rindexer project pulls in alloy and the rindexer crate, which
       # is several minutes of compilation from cold. It happens before the
       # timer starts, so it costs CI wall clock rather than benchmark
-      # accuracy — the cache keeps that cost off most runs.
+      # accuracy - the cache keeps that cost off most runs.
       - name: Cache cargo build
         if: matrix.indexer == 'rindexer' || matrix.indexer == 'rindexer-hypersync'
         uses: actions/cache@v4
@@ -169,7 +169,7 @@ jobs:
           set -o pipefail
           # A contract call in flight is an open socket at both ends, and the
           # External Contract Calls scenario is a measurement of how many a tool
-          # keeps in flight — tens of thousands of them. The open-file limit
+          # keeps in flight - tens of thousands of them. The open-file limit
           # would cap that silently and read as a tool that stopped scaling, so
           # it goes as high as the runner allows before anything starts.
           ulimit -n "$(ulimit -Hn)" || true

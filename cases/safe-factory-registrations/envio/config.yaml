@@ -1,9 +1,9 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
 name: safe-factory-indexer
-description: Safe proxy factory — dynamic contract registration
+description: Safe proxy factory - dynamic contract registration
 contracts:
   # The two canonical factory generations emit the same ProxyCreation topic
-  # from different event layouts — `proxy` became indexed in 1.4.1 — so each
+  # from different event layouts - `proxy` became indexed in 1.4.1 - so each
   # needs its own contract carrying its own signature.
   - name: SafeProxyFactory
     events:

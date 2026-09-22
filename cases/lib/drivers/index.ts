@@ -50,7 +50,7 @@ const SOLANA_RPC_URL = "https://solana.com/docs/rpc";
  * pipeline from a plain RPC endpoint.
  *
  * The name lives here rather than on the driver so a row can be published for a
- * tool the case never starts — and so the two can never disagree.
+ * tool the case never starts - and so the two can never disagree.
  */
 export const TOOLS: Record<
   keyof typeof DRIVERS,
@@ -119,7 +119,7 @@ export const TOOLS: Record<
     storage: "Postgres",
   },
   sqd: {
-    // "Squid SDK" is what SQD — the company, formerly Subsquid — calls the
+    // "Squid SDK" is what SQD - the company, formerly Subsquid - calls the
     // indexing framework this project is built with; SQD Network is the data
     // source it reads from, and both appear in the row.
     name: "Squid SDK",

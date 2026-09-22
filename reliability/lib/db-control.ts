@@ -8,7 +8,7 @@
 //
 // They do agree on one thing, because the harness could not read their tables
 // otherwise: the database answers on a known port of the host. So that is what
-// is used — find whatever publishes that port and stop it. It works for a bare
+// is used - find whatever publishes that port and stop it. It works for a bare
 // container, for a compose service and for a database the tool started itself,
 // and it keeps the knowledge in the scenario that needs it.
 

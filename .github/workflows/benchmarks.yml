@@ -104,7 +104,7 @@ jobs:
           fi
 
           # Scenarios run one after another, which needs one `needs`-chained job
-          # per scenario below — GitHub cannot order a matrix. That makes the
+          # per scenario below - GitHub cannot order a matrix. That makes the
           # number of scenario slots fixed: adding a sixth scenario means adding
           # a sixth `scenario-N` job here. Fail loudly rather than silently
           # dropping the extra scenario from the run and from the table.
@@ -116,12 +116,12 @@ jobs:
           # Every scenario measures every indexer, unless a pull request
           # narrows it: there a full run is forty-four long jobs against shared
           # data endpoints, nearly all of them re-measuring untouched code.
-          # `main` and manual runs stay full — they publish the README table,
+          # `main` and manual runs stay full - they publish the README table,
           # which has to hold a complete set of results.
           PARTIAL=0
           # Both empty unless the run is scoped. SELECTED lets the summary tell
-          # an indexer that was asked to run and reported nothing — a failed
-          # job — apart from one this run never selected.
+          # an indexer that was asked to run and reported nothing - a failed
+          # job - apart from one this run never selected.
           SCOPE=""
           SELECTED=""
 
@@ -132,11 +132,11 @@ jobs:
 
             # HEAD is the merge commit GitHub built against the base. The
             # event's base sha can lag the merge base it actually used, in
-            # which case files from the base branch leak into the diff — that
+            # which case files from the base branch leak into the diff - that
             # only ever widens the selection, never narrows it.
             #
-            # A base commit the clone does not have — the base branch was
-            # force-pushed after the event fired — leaves nothing to diff, and
+            # A base commit the clone does not have - the base branch was
+            # force-pushed after the event fired - leaves nothing to diff, and
             # an empty file list would read as "nothing changed" and skip the
             # run. The filter only ever narrows, so an unknown base leaves the
             # run unscoped instead.
@@ -171,7 +171,7 @@ jobs:
 
           # The summary reads SELECTED to tell a job that failed apart from one
           # this run never asked for, so it has to be narrowed the same way the
-          # matrix is — otherwise a tool a scenario does not implement is
+          # matrix is - otherwise a tool a scenario does not implement is
           # reported as a job that produced nothing.
           if [ -n "$SELECTED" ]; then
             SELECTED=$(jq -cn --argjson sel "$SELECTED" --argjson avail "$AVAILABLE" \
@@ -203,8 +203,8 @@ jobs:
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
-  # The harness has four test scripts — scripts/test-verification.ts,
-  # scripts/test-tables.ts, scripts/test-rpc-mock.ts and scripts/test-scope.ts —
+  # The harness has four test scripts - scripts/test-verification.ts,
+  # scripts/test-tables.ts, scripts/test-rpc-mock.ts and scripts/test-scope.ts -
   # that are run locally when the verification layer, the result table, the
   # endpoint that serves a case's contract calls, or the pull request run filter
   # changes. They are deliberately not a CI job: the verification test needs a
@@ -230,8 +230,8 @@ jobs:
   scenario-2:
     name: ${{ needs.setup.outputs.case2 }}
     needs: [setup, scenario-1]
-    # `always()` so a failing indexer in scenario 1 — which is a result in its
-    # own right, not a reason to skip the rest of the run — still lets scenario
+    # `always()` so a failing indexer in scenario 1 - which is a result in its
+    # own right, not a reason to skip the rest of the run - still lets scenario
     # 2 start once scenario 1 is done.
     if: always() && needs.setup.result == 'success' && needs.setup.outputs.case2 != ''
     uses: ./.github/workflows/benchmark-case.yml
@@ -278,7 +278,7 @@ jobs:
     name: Summary
     needs: [setup, scenario-1, scenario-2, scenario-3, scenario-4, scenario-5]
     # A pull request that changed nothing benchmark-related runs no scenario,
-    # so there is nothing to tabulate — and an empty table reads as "measured,
+    # so there is nothing to tabulate - and an empty table reads as "measured,
     # found nothing" rather than "not measured".
     if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != ''
     runs-on: ubuntu-latest
@@ -325,7 +325,7 @@ jobs:
             fi
 
             # An indexer that WAS selected and still produced nothing is a
-            # failed job, and must not hide behind the scope note above —
+            # failed job, and must not hide behind the scope note above -
             # build-tables.ts writes one list per case where that happened.
             FAILURES=""
             for CASE in $(echo "$CASES" | jq -r '.[]'); do
@@ -336,7 +336,7 @@ jobs:
               FAILURES="${FAILURES}${FAILURES:+; }${TITLE}: ${NAMES}"
             done
             if [ -n "$FAILURES" ]; then
-              echo "> ⚠️ Selected to run but reported no result — ${FAILURES}."
+              echo "> ⚠️ Selected to run but reported no result - ${FAILURES}."
               echo "> These rows show the last published value; [check the failed job(s)]($RUN_URL)."
               echo
             fi

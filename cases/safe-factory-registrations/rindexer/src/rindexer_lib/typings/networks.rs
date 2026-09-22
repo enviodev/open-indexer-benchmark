@@ -62,7 +62,7 @@ pub async fn get_ethereum_provider_cache() -> Arc<JsonRpcCachedProvider> {
                 None,
                 // Hand-set: with in-memory address filtering every request is
                 // topic-only, and the upstream RPC rejects eth_getLogs
-                // responses above 50,000 logs — an uncapped request over a
+                // responses above 50,000 logs - an uncapped request over a
                 // busy topic never succeeds.
                 Some(U64::from(2000)),
                 None,
@@ -105,7 +105,7 @@ pub async fn get_ethereum_provider_hypersync() -> Arc<dyn ChainProvider> {
                 "ethereum",
                 1,
                 // Same cap as the RPC provider above, for the same topic-only
-                // requests — HyperSync serves them fine, this just keeps the
+                // requests - HyperSync serves them fine, this just keeps the
                 // per-window buffers bounded and the rows comparable.
                 Some(U64::from(2000)),
                 rpc_provider,

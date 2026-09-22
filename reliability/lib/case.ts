@@ -3,8 +3,8 @@
 // This is a case in the same sense the throughput scenarios are: a contract, a
 // start block, a schema, and one project directory per tool implementing it.
 // What it is not is a benchmark case. It never reads a real network, it has no
-// committed ground truth — the chain it reads is generated, so the truth is
-// whatever the chain currently says — and it is not measured for speed. So it
+// committed ground truth - the chain it reads is generated, so the truth is
+// whatever the chain currently says - and it is not measured for speed. So it
 // lives here, beside the harness that provokes it, rather than under cases/.
 //
 // The drivers are the throughput suite's, unchanged. Every one of them resolves
@@ -25,7 +25,7 @@ export const RELIABILITY_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 
 /**
  * Mainnet's id, because several tools treat an unknown chain as a
  * configuration error rather than as a chain. Nothing else about the chain is
- * mainnet — the tools are pointed at the mock endpoint and never at a real one.
+ * mainnet - the tools are pointed at the mock endpoint and never at a real one.
  */
 export const CHAIN_ID = 1;
 
@@ -47,15 +47,15 @@ export const LOGS_PER_BLOCK = 2;
  * The block the tools are configured to stop at.
  *
  * Reliability is measured at and around the head, so there is no end block in
- * any real sense — the tools have to be told one anyway, because every driver
+ * any real sense - the tools have to be told one anyway, because every driver
  * takes it. A million blocks past the start is one no scenario comes close to,
  * so every tool runs as an open-ended head follower.
  */
 export const NO_END_BLOCK = START_BLOCK + 1_000_000;
 
 /**
- * The chain as every scenario starts it. A scenario that needs something else —
- * log indices near the 32-bit ceiling, a provider's range cap — overrides the
+ * The chain as every scenario starts it. A scenario that needs something else -
+ * log indices near the 32-bit ceiling, a provider's range cap - overrides the
  * field it needs and leaves the rest, so the two chains differ in exactly the
  * thing under test.
  */
@@ -82,7 +82,7 @@ export function baseChainSpec(): ChainSpec {
  * What every reliability project writes.
  *
  * Three entities, each load-bearing. `transfer` is one row per log, carrying
- * the block, the log index and the amount — enough to say whether what a tool
+ * the block, the log index and the amount - enough to say whether what a tool
  * holds is what the chain holds, which is the question behind every reorg and
  * crash check. `account` is the running balance those transfers move, and is
  * the only one of the three that can come out wrong without a row being
@@ -116,8 +116,8 @@ export const RELIABILITY_CASE: CaseConfig = {
     {
       // The aggregate, and the reason the suite can see a batch applied twice.
       // A transfer table is append-only: replaying blocks writes the same rows
-      // again, and a primary key quietly absorbs it. A balance does not — it
-      // ends up doubled — which is what makes this the entity the crash and
+      // again, and a primary key quietly absorbs it. A balance does not - it
+      // ends up doubled - which is what makes this the entity the crash and
       // reorg scenarios actually turn on.
       key: "account",
       label: "account balances",

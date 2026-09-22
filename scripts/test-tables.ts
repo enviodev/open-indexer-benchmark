@@ -4,7 +4,7 @@
 //
 // The parser is load-bearing: when a benchmark job fails, the published table
 // is the only record of that tool's last result, and carry-forward re-reads it.
-// If parsing silently breaks, a tool disappears from the results — which looks
+// If parsing silently breaks, a tool disappears from the results - which looks
 // like "no longer benchmarked" rather than "the job failed". It has to survive
 // markdown links, numbered failure notes, and two rows sharing a tool name.
 
@@ -71,7 +71,7 @@ const RESULTS: BenchmarkResult[] = [
 
 let failures = 0;
 function check(label: string, passed: boolean, detail = "") {
-  console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
+  console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}${detail ? ` - ${detail}` : ""}`);
   if (!passed) failures++;
 }
 
@@ -149,7 +149,7 @@ check(
 );
 
 // A tool that cannot express a case is published as a row of dashes carrying a
-// numbered note, and must survive a round trip like any other row — otherwise
+// numbered note, and must survive a round trip like any other row - otherwise
 // it silently disappears from the table on the next run.
 const unsupportedRow = {
   name: "Rindexer",
@@ -158,19 +158,19 @@ const unsupportedRow = {
   cells: {
     tool: "[Rindexer](https://rindexer.xyz)",
     source: "[RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc)",
-    events: "—",
-    blocks: "—",
-    correctness: "—",
+    events: "-",
+    blocks: "-",
+    correctness: "-",
     correctnessDetail: "",
-    dbSize: "—",
+    dbSize: "-",
   },
 };
 const withUnsupported = buildTable([rows[0], unsupportedRow]);
 check(
   "an unsupported tool renders as dashes with a numbered note",
   withUnsupported.includes(
-    "| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (1) | — |"
-  ) && withUnsupported.includes("**(1)** Rindexer — no factory contract support"),
+    "| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | - | - | - | - (1) | - |"
+  ) && withUnsupported.includes("**(1)** Rindexer - no factory contract support"),
   withUnsupported
 );
 check(
@@ -184,7 +184,7 @@ const reparsed = parsePublishedTable(
 check(
   "an unsupported row round-trips with its reason",
   reparsed?.unsupported === "no factory contract support" &&
-    reparsed?.cells.events === "—",
+    reparsed?.cells.events === "-",
   JSON.stringify(reparsed)
 );
 

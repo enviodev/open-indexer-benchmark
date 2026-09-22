@@ -16,7 +16,7 @@ const erc20Abi = parseAbi([
  * The client the effect makes its calls through.
  *
  * `batch` is what matters here. The Effect API hands the whole batch's calls
- * over at once — several thousand of them — and a client that sends each as its
+ * over at once - several thousand of them - and a client that sends each as its
  * own HTTP request opens a socket per call, which costs about a millisecond
  * each and swamps the round trip the calls are actually waiting on: 14,114
  * calls that way take 17.6s against an endpoint that answers each in 200ms.
@@ -39,7 +39,7 @@ const client = createPublicClient({
  * Reading the allowance is an external call, so it goes through the Effect API
  * rather than being an ordinary call in the handler.
  *
- * That is what makes the case survivable. Handlers run twice — once across the
+ * That is what makes the case survivable. Handlers run twice - once across the
  * whole batch in preload, where nothing is written and every effect in the
  * batch is in flight at the same time, and once in block order, where the
  * results are already in hand. A call written inline would run in both passes
@@ -80,7 +80,7 @@ indexer.onEvent(
     const approved = event.params.value;
 
     // An approval of zero revokes it, and a revoked allowance is zero whatever
-    // the token reports — so there is nothing to go and ask. Roughly a fifth of
+    // the token reports - so there is nothing to go and ask. Roughly a fifth of
     // the approvals in this range are revocations.
     const allowance =
       approved === 0n

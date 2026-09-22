@@ -35,7 +35,7 @@ async function ensureToken(address: string): Promise<void> {
       return clean(await call());
     } catch {
       // A revert, or returndata that does not decode as a string, is the token
-      // not answering — which is a null, not a failed block.
+      // not answering - which is a null, not a failed block.
       return undefined;
     }
   };

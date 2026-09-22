@@ -17,7 +17,7 @@ function requireEndBlock(): number {
 
 // The canonical Safe proxy factories, grouped by how ProxyCreation is laid
 // out: 1.3.0 carries `proxy` in the data payload, 1.4.1 onwards carries it in
-// a topic. The signature — and so the topic0 — is the same for both.
+// a topic. The signature - and so the topic0 - is the same for both.
 const FACTORIES_V1_3_0 = [
   "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2", // canonical
   "0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC", // eip155

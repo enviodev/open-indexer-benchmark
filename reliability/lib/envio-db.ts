@@ -1,6 +1,6 @@
 // The Postgres both Envio rows expect to find already running.
 //
-// Every other tool brings its own database up — a container of its own, or a
+// Every other tool brings its own database up - a container of its own, or a
 // compose file in its project. HyperIndex does not: it connects to a Postgres
 // on a fixed port and fails to initialize its storage if nothing answers
 // there. The throughput suite satisfies that with a service container declared

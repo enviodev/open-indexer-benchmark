@@ -17,7 +17,7 @@ export interface ExpectedData {
 export interface GroundTruth extends ExpectedData {
   /**
    * The highest block in the range that carries an event, which is not
-   * necessarily the last block of the range — the last blocks are often empty.
+   * necessarily the last block of the range - the last blocks are often empty.
    */
   lastEventBlock: number;
 }
@@ -39,8 +39,8 @@ interface CommonCaseConfig {
    */
   verifyEndBlock: number;
   /**
-   * Inclusive end block of the throughput window, when the default — as far
-   * towards the chain head as anything could get — would measure the wrong
+   * Inclusive end block of the throughput window, when the default - as far
+   * towards the chain head as anything could get - would measure the wrong
    * thing. Pin it where a case's events are concentrated, so the window
    * measures work rather than the cost of scanning past empty blocks. The
    * fastest indexer may then reach it before the window closes, which is fine:
@@ -49,16 +49,16 @@ interface CommonCaseConfig {
   throughputEndBlock?: number;
   /**
    * Set for a case whose handlers read contract state. Every tool is then
-   * pointed at an endpoint that answers those calls itself — same latency and
+   * pointed at an endpoint that answers those calls itself - same latency and
    * the same answers for everyone, and no limit on how many it will answer at
-   * once — instead of at a real node, whose response times no two runs would
+   * once - instead of at a real node, whose response times no two runs would
    * share. See ./rpc-mock.ts.
    */
   ethCall?: EthCallInterceptor;
   /**
    * Tools that cannot express this case at all, keyed by driver name, with the
    * reason. They are skipped rather than run, and published as a row of dashes
-   * carrying the reason as a numbered note — a tool that cannot do something
+   * carrying the reason as a numbered note - a tool that cannot do something
    * should be visible in the table, not quietly absent from it.
    */
   unsupported?: Record<string, string>;
@@ -86,7 +86,7 @@ interface CommonCaseConfig {
 /** A case reading an EVM chain, whose ground truth is built from logs. */
 export interface EvmCaseConfig extends CommonCaseConfig {
   /**
-   * The contract the case indexes. A factory case may list several — different
+   * The contract the case indexes. A factory case may list several - different
    * deployments of the same protocol, which the ground truth reads together.
    */
   contract: string | string[];
@@ -107,7 +107,7 @@ export interface EvmCaseConfig extends CommonCaseConfig {
 }
 
 /**
- * A case the log path cannot express, which builds its own ground truth —
+ * A case the log path cannot express, which builds its own ground truth -
  * from a second reading of the chain, or from a snapshot of its reference
  * implementation where the logic is not replayable from raw data.
  */
@@ -139,14 +139,14 @@ export async function buildGroundTruth(
   const logs = await fetchCaseLogs(config, token, onProgress);
   if (logs.length === 0) {
     throw new Error(
-      `No logs found for ${config.name} — check the contract address and block range`
+      `No logs found for ${config.name} - check the contract address and block range`
     );
   }
   const { totalEvents, entities } = config.computeExpected(logs);
   if (totalEvents !== logs.length) {
     throw new Error(
       `${config.name}: case logic accounted for ${totalEvents} of ${logs.length} ` +
-        `logs — a topic is being fetched but not handled`
+        `logs - a topic is being fetched but not handled`
     );
   }
   const lastEventBlock = logs.reduce(
@@ -158,8 +158,8 @@ export async function buildGroundTruth(
 
 /**
  * Every log a case's ground truth is built from, in the order an indexer would
- * see them. A factory case reads in two passes — the factory, then the children
- * it announced — and a plain case reads one contract; callers should not have
+ * see them. A factory case reads in two passes - the factory, then the children
+ * it announced - and a plain case reads one contract; callers should not have
  * to care which, so both the runner and the ground-truth generator come
  * through here.
  */

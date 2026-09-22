@@ -8,9 +8,9 @@ wrong? This repository measures both, for the tools people actually build on.
 Every number comes from code in this repository, so you can run it yourself and
 check, and CI refreshes the tables.
 
-- [**Reliability**](#reliability) — what a tool does when its database restarts
+- [**Reliability**](#reliability) - what a tool does when its database restarts
   under it, the chain reorgs, or the node it reads from starts failing.
-- [**Speed**](#speed) — how fast each tool gets through five scenarios, from a
+- [**Speed**](#speed) - how fast each tool gets through five scenarios, from a
   plain event stream to Solana.
 
 
@@ -18,27 +18,27 @@ check, and CI refreshes the tables.
 
 An indexer that is fast and wrong is not fast. These scenarios take the
 database away mid-write, rewrite the chain underneath the tool, make the node
-answer 429 to everything, and hand it values that are legal but awkward — then
+answer 429 to everything, and hand it values that are legal but awkward - then
 check what ended up in the database.
 
 <!-- RELIABILITY:START -->
 | tool | source | crash recovery | reorgs | rpc faults | data fidelity | head latency | overall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (1) |
-| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (2) |
-| [Ponder](https://ponder.sh) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (3) |
-| [Rindexer](https://rindexer.xyz) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (4) |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (5) |
-| [Subgraph](https://thegraph.com) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (6) |
-| [SubQuery](https://subquery.network) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (7) |
+| [Envio Indexer](https://envio.dev) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | - | - | - | - | - | - (1) |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | - | - | - | - | - | - (2) |
+| [Ponder](https://ponder.sh) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | - | - | - | - | - | - (3) |
+| [Rindexer](https://rindexer.xyz) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | - | - | - | - | - | - (4) |
+| [Squid SDK](https://sqd.dev/sdk/) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | - | - | - | - | - | - (5) |
+| [Subgraph](https://thegraph.com) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | - | - | - | - | - | - (6) |
+| [SubQuery](https://subquery.network) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | - | - | - | - | - | - (7) |
 
-> **(1)** Envio Indexer — not measured yet: no run has published a result
-> **(2)** Envio Subgraph — not measured yet: no run has published a result
-> **(3)** Ponder — not measured yet: no run has published a result
-> **(4)** Rindexer — not measured yet: no run has published a result
-> **(5)** Squid SDK — not measured yet: no run has published a result
-> **(6)** Subgraph — not measured yet: no run has published a result
-> **(7)** SubQuery — not measured yet: no run has published a result
+> **(1)** Envio Indexer - not measured yet: no run has published a result
+> **(2)** Envio Subgraph - not measured yet: no run has published a result
+> **(3)** Ponder - not measured yet: no run has published a result
+> **(4)** Rindexer - not measured yet: no run has published a result
+> **(5)** Squid SDK - not measured yet: no run has published a result
+> **(6)** Subgraph - not measured yet: no run has published a result
+> **(7)** SubQuery - not measured yet: no run has published a result
 <!-- RELIABILITY:END -->
 
 Each cell is the checks a tool passed out of the checks it was asked. Follow
@@ -59,7 +59,7 @@ Every rETH transfer changes a balance, so the indexer has to find the right row,
 <!-- BENCHMARK:erc20-account-balances:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 4,834.5 | 36,934.3 | — | ✅ | Postgres 2.2 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 4,834.5 | 36,934.3 | - | ✅ | Postgres 2.2 MB |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 3,822.1 | 31,761.0 | 1.3x slower | ✅ | Postgres 2.2 MB |
 | [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 693.1 | 4,969.4 | 7x slower | ✅ | Postgres 5.2 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 586.6 | 4,263.9 | 8.2x slower | ✅ | Postgres 2.2 MB |
@@ -72,9 +72,9 @@ Every rETH transfer changes a balance, so the indexer has to find the right row,
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 16.2 | 183.5 | 298.4x slower | ❓ (2) | Postgres ~7.3 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4.3 | 44.2 | 1124.3x slower | ❓ (3) | Postgres ~3.5 MB |
 
-> **(1)** SubQuery — missing 0.92% of the data: the verification range was not finished within 300s
-> **(2)** Subgraph — missing 36% of the data: the verification range was not finished within 300s
-> **(3)** Squid SDK — missing 83% of the data: the verification range was not finished within 300s
+> **(1)** SubQuery - missing 0.92% of the data: the verification range was not finished within 300s
+> **(2)** Subgraph - missing 36% of the data: the verification range was not finished within 300s
+> **(3)** Squid SDK - missing 83% of the data: the verification range was not finished within 300s
 <!-- BENCHMARK:erc20-account-balances:END -->
 
 [How this case works, and how to run it →](./cases/erc20-account-balances/README.md)
@@ -87,7 +87,7 @@ Every USDC transfer, stored once, with nothing to aggregate and nothing to look 
 <!-- BENCHMARK:erc20-transfer-events:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 103,974.7 | 11,123.4 | — | ✅ | Postgres 3.4 MB |
+| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 103,974.7 | 11,123.4 | - | ✅ | Postgres 3.4 MB |
 | [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 64,777.3 | 7,093.0 | 1.6x slower | ✅ | Postgres 1.4 MB |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 51,139.2 | 5,512.9 | 2x slower | ✅ | Postgres 1.4 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 16,889.0 | 1,968.5 | 6.2x slower | ✅ | Postgres 1.4 MB |
@@ -106,12 +106,12 @@ Every USDC transfer, stored once, with nothing to aggregate and nothing to look 
 
 ### External Contract Calls
 
-Not everything an indexer needs is in the logs. Every approval is followed by a read of the allowance at that block — 15,703 calls, answered at a fixed latency so every tool waits the same.
+Not everything an indexer needs is in the logs. Every approval is followed by a read of the allowance at that block - 15,703 calls, answered at a fixed latency so every tool waits the same.
 
 <!-- BENCHMARK:erc20-allowance-calls:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 14,834.4 | 977.8 | — | ✅ | Postgres 8.3 MB |
+| [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 14,834.4 | 977.8 | - | ✅ | Postgres 8.3 MB |
 | [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 12,489.3 | 823.1 | 1.2x slower | ✅ | Postgres 8.4 MB |
 | [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 7,764.5 | 497.8 | 1.9x slower | ✅ | Postgres 7.3 MB |
 | [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 7,379.3 | 474.1 | 2x slower | ✅ | Postgres 7.3 MB |
@@ -122,11 +122,11 @@ Not everything an indexer needs is in the logs. Every approval is followed by a 
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 70.3 | 4.4 | 211x slower | ✅ | Postgres 20.1 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 24.7 | 1.7 | 600.6x slower | ❓ (1) | Postgres ~12.1 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 3.9 | 0.3 | 3803.7x slower | ❓ (2) | Postgres ~16.7 MB |
-| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | — | — | — | — (3) | — |
+| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | - | - | - | - (3) | - |
 
-> **(1)** Ponder — missing 61% of the data: the verification range was not finished within 300s
-> **(2)** SubQuery — missing 94% of the data: the verification range was not finished within 300s
-> **(3)** Substreams — its contract calls run against the Substreams server's own node, not a given endpoint
+> **(1)** Ponder - missing 61% of the data: the verification range was not finished within 300s
+> **(2)** SubQuery - missing 94% of the data: the verification range was not finished within 300s
+> **(3)** Substreams - its contract calls run against the Substreams server's own node, not a given endpoint
 <!-- BENCHMARK:erc20-allowance-calls:END -->
 
 [How this case works, and how to run it →](./cases/erc20-allowance-calls/README.md)
@@ -139,7 +139,7 @@ What happens when you do not know the contracts up front? Each of the 82,268 pro
 <!-- BENCHMARK:safe-factory-registrations:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 8,419.2 | 2,972.1 | — | ✅ | Postgres 14.0 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 8,419.2 | 2,972.1 | - | ✅ | Postgres 14.0 MB |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 7,528.7 | 2,657.8 | 1.1x slower | ✅ | Postgres 14.0 MB |
 | [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 6,071.7 | 2,143.4 | 1.4x slower | ✅ | Postgres 11.4 MB |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.7.0-subgraph) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4,516.0 | 1,594.3 | 1.9x slower | ✅ | Postgres 14.0 MB |
@@ -150,14 +150,14 @@ What happens when you do not know the contracts up front? Each of the 82,268 pro
 | [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 266.7 | 66.5 | 31.6x slower | ❓ (3) | Postgres ~14.5 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 265.6 | 59.2 | 31.7x slower | ❓ (4) | Postgres ~25.3 MB |
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 45.0 | 16.1 | 187.1x slower | ❓ (5) | Postgres ~35.9 MB |
-| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | — | ❓ (6) | — |
+| [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.0 | 0.0 | - | ❓ (6) | - |
 
-> **(1)** Squid SDK — 921 of 927 safe setups missing; 10 of 11 fallback handler changes missing; 211 of 293 module enables missing
-> **(2)** Squid SDK — missing 1.8% of the data: the verification range was not finished within 300s
-> **(3)** Substreams — missing 5.6% of the data: the verification range was not finished within 300s
-> **(4)** Ponder — missing 6.1% of the data: the verification range was not finished within 300s
-> **(5)** Subgraph — missing 84% of the data: the verification range was not finished within 300s
-> **(6)** SubQuery — indexed nothing in 300s, so there was no data to verify
+> **(1)** Squid SDK - 921 of 927 safe setups missing; 10 of 11 fallback handler changes missing; 211 of 293 module enables missing
+> **(2)** Squid SDK - missing 1.8% of the data: the verification range was not finished within 300s
+> **(3)** Substreams - missing 5.6% of the data: the verification range was not finished within 300s
+> **(4)** Ponder - missing 6.1% of the data: the verification range was not finished within 300s
+> **(5)** Subgraph - missing 84% of the data: the verification range was not finished within 300s
+> **(6)** SubQuery - indexed nothing in 300s, so there was no data to verify
 <!-- BENCHMARK:safe-factory-registrations:END -->
 
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
@@ -170,7 +170,7 @@ The same question on a chain with no logs to subscribe to, where a transfer is a
 <!-- BENCHMARK:solana-spl-transfers:START -->
 | tool | source | events/s | blocks/s | vs best | data | storage |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 14,756.4 | 228.4 | — | ✅ | Postgres 37.8 MB |
+| [Envio Indexer](https://envio.dev) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | 14,756.4 | 228.4 | - | ✅ | Postgres 37.8 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 8,278.5 | 258.4 | 1.8x slower | ✅ | Postgres 37.7 MB |
 | [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 3,856.5 | 126.9 | 3.8x slower | ✅ | Postgres 62.7 MB |
 | [Carbon](https://github.com/sevenlabs-hq/carbon) | [RPC](https://solana.com/docs/rpc) | 563.2 | 18.9 | 26.2x slower | ✅ | Postgres 40.4 MB |
@@ -196,7 +196,7 @@ what every column means.
 
 ## Contributing
 
-Contributions are welcome — we already have some from the [SQD](https://sqd.dev)
+Contributions are welcome - we already have some from the [SQD](https://sqd.dev)
 team. Open an issue or a pull request to add an indexer, add a scenario, report
 a result that looks wrong, or improve the methodology. Indexer teams especially:
 nobody knows your tool better than you do. Or come and ask on
@@ -209,10 +209,10 @@ nobody knows your tool better than you do. Or come and ask on
 The benchmark started in May 2025 as a fork of [Sentio](https://sentio.xyz)'s
 research. That repository was later closed, so [Envio](https://envio.dev) picked
 it up and has kept it current since. We are not affiliated with Sentio, and
-although the project now lives under the Envio organisation — its data is what
+although the project now lives under the Envio organisation - its data is what
 the [Envio landing page](https://envio.dev) and the
 [Blockchain Indexers in 2026](https://docs.envio.dev/blog/best-blockchain-indexers-2026)
-article cite — the point of it is a fair comparison.
+article cite - the point of it is a fair comparison.
 
 Six scenarios from that original research are kept for reference. They are total
 sync times rather than throughput rates and predate the current methodology, so

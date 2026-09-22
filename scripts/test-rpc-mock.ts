@@ -4,7 +4,7 @@
 //
 // The endpoint is the External Contract Calls scenario's measuring instrument:
 // every row in that table is a statement about how well an indexer kept it
-// busy. So the things a row depends on are what is pinned here — that the
+// busy. So the things a row depends on are what is pinned here - that the
 // latency is paid, that nothing is ever queued or rate limited however much
 // arrives at once, that a batch comes back in the order it was asked for, and
 // that a call the case does not define is refused rather than quietly
@@ -239,7 +239,7 @@ try {
   // they arrive: the first of them can be answered and gone before the last is
   // sent, so the peak is however many the client managed to have in the air at
   // once. That is the same thing that will bound a real indexer long before
-  // this endpoint does — what is being pinned here is only that the endpoint
+  // this endpoint does - what is being pinned here is only that the endpoint
   // itself never holds any of them back.
   const BIG = PILE * 10;
   mock.reset();
@@ -257,7 +257,7 @@ try {
   // A batch holding both kinds is split, and the half that goes upstream comes
   // back matched up by position. A rate limit answers that half with one error
   // object rather than one response each, and filling the unanswered slots
-  // from it by position would leave them null under a 200 — which an indexer
+  // from it by position would leave them null under a 200 - which an indexer
   // reads as a block range that held no logs, silently losing data. Every slot
   // upstream did not answer has to carry an error the client can retry.
   upstream.failNextWith(429, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32_005, message: "rate limited" } }));

@@ -11,7 +11,7 @@ import { TRANSFER_TOPIC } from "../lib/hypersync.ts";
 
 const START_BLOCK = 18_600_000;
 
-// 1,000 blocks of USDC is roughly 9,000 Transfer events — small enough that
+// 1,000 blocks of USDC is roughly 9,000 Transfer events - small enough that
 // the slowest indexer completes it in a few minutes, large enough that a
 // broken batch or an off-by-one block boundary shows up in the checksum.
 const VERIFY_END_BLOCK = 18_600_999;

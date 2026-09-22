@@ -5,7 +5,7 @@
 // column naming, storage types), so tables and columns are resolved by
 // introspection against per-entity candidate lists rather than hardcoded per
 // indexer. When resolution is ambiguous or a column is missing, the result is
-// reported as "unknown" with the reason — never as a correctness failure, so a
+// reported as "unknown" with the reason - never as a correctness failure, so a
 // schema change in an indexer cannot be mistaken for a data bug.
 //
 // A checksum tells you that something is wrong but not what, so when an entity
@@ -263,7 +263,7 @@ function resolveEntity(
     // counts and checksums describe present state. The discarded history still
     // shows up in the measured table size, which is the honest way to report
     // the cost of keeping it. Graph Node's immutable entities have no range
-    // column at all — nothing to filter, since nothing is ever superseded.
+    // column at all - nothing to filter, since nothing is ever superseded.
     predicate: table.columns.has("_block_range")
       ? "upper_inf(_block_range)"
       : table.columns.has("block_range")
@@ -285,7 +285,7 @@ export interface EntityTable {
  * Locate the tables backing the given entities.
  *
  * Shared with the drivers, which read indexing progress straight out of the
- * database and so need the same name resolution — but only the table, not the
+ * database and so need the same name resolution - but only the table, not the
  * canonical field expressions. Throws on the first entity that cannot be
  * resolved: a caller that polls progress has no way to report "unknown" the way
  * verification does, and a silently-skipped table would read as an indexer that

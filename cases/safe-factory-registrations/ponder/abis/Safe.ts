@@ -10,7 +10,7 @@ export const SafeProxyFactoryAbi = [
   },
 ] as const;
 
-// Same event signature, and so the same topic0 — `proxy` became indexed in
+// Same event signature, and so the same topic0 - `proxy` became indexed in
 // 1.4.1, which moves it out of the data payload and makes the two layouts
 // mutually undecodable.
 export const SafeProxyFactoryModernAbi = [
@@ -26,7 +26,7 @@ export const SafeProxyFactoryModernAbi = [
 ] as const;
 
 // The child ABI. Eight of these events made an argument `indexed` in Safe
-// 1.4.x without changing the signature, so they appear twice — same topic0,
+// 1.4.x without changing the signature, so they appear twice - same topic0,
 // different payload. Ponder names an overloaded event by its full signature,
 // which is how the two are told apart in `src/index.ts`.
 export const SafeAbi = [

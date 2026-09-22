@@ -17,7 +17,7 @@ fn store_balances(events: Events, store: StoreAddBigInt) {
     }
 }
 
-/// The allowance a pair last agreed, which is what `Approval` reports — the
+/// The allowance a pair last agreed, which is what `Approval` reports - the
 /// event carries the new figure rather than a delta, so the last one in the
 /// range wins.
 #[substreams::handlers::store]

@@ -4,7 +4,7 @@
 // something. There is exactly one way to know that: point it at an indexer
 // that really does the thing, and at one that really does not, and see which
 // verdicts come back. Real indexers cannot be asked to misbehave on cue, so
-// this one exists — a small, honest ERC-20 indexer with defects that can be
+// this one exists - a small, honest ERC-20 indexer with defects that can be
 // switched on.
 //
 // It is a test double, not a benchmark subject. It never appears in a
@@ -28,7 +28,7 @@
 //                       not implement, which stands for every real indexer
 //                       that uses something nobody thought to mock
 //   no-token-table      writes no token row at all, standing in for a project
-//                       that cannot read contract state — a no-code rindexer
+//                       that cannot read contract state - a no-code rindexer
 //                       project is exactly this, and the checks that read a
 //                       token row have to come back unmeasured rather than
 //                       failed, and rather than breaking every other read
@@ -126,7 +126,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       // same one may arrive twice: a provider stitching two backends together
       // will serve it twice in one response. Deduplicating here rather than
       // relying on the primary key is the difference between a balance that
-      // is right and one that is doubled — the insert absorbs the second row
+      // is right and one that is doubled - the insert absorbs the second row
       // and the arithmetic does not.
       const seen = new Set<string>();
       for (const log of logs) {
@@ -200,7 +200,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
 
     /**
      * Walk back until the stored hash matches the chain, which is how an
-     * indexer notices a reorg — including one that happened while it was not
+     * indexer notices a reorg - including one that happened while it was not
      * running, which is why the hashes are in the database rather than in
      * memory. An indexer that keeps them only in memory cannot tell, after a
      * restart, that the chain moved under it.
@@ -294,14 +294,14 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
      * The binding is what makes a kill final. Setting `running` to false only
      * stops the next iteration, and the loop that was mid-flight when it was
      * killed would wake from its retry sleep to find `running` true again
-     * after the restart — two loops indexing the same chain into the same
+     * after the restart - two loops indexing the same chain into the same
      * database, which shows up as every balance applied twice. A process that
      * is killed does not come back when its replacement starts.
      */
     async function run(gen: number) {
       if (defects.has("asks-for-an-unserved-method")) {
         // Stands in for an indexer that uses a method the mock never learned.
-        // What matters is not that this call fails — it is that every verdict
+        // What matters is not that this call fails - it is that every verdict
         // in the scenario becomes unmeasured, because the benchmark cannot
         // mark a tool down for a question it could not answer.
         await rpc("eth_newFilter", [{}]).catch(() => {});
@@ -412,7 +412,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       async cleanup() {},
       /**
        * SIGKILL stops the loop where it stands, with no chance to finish the
-       * statement in flight — which is what a real kill does, and what the
+       * statement in flight - which is what a real kill does, and what the
        * checkpoint-ahead defect needs in order to lose anything. SIGTERM lets
        * the current pass finish first.
        */
@@ -426,7 +426,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
           // …and anything already sent is aborted. A real kill closes the
           // socket, which rolls back the transaction on it. Letting it commit
           // instead leaves rows the restarted process does not know it has,
-          // and applies them a second time — a bug in the double that reads
+          // and applies them a second time - a bug in the double that reads
           // exactly like the bug the scenario hunts for.
           await sql(
             "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +

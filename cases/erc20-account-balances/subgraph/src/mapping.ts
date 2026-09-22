@@ -22,7 +22,7 @@ export function handleTransfer(event: Transfer): void {
 
   // Both accounts come into existence as soon as they are seen, whether or not
   // the transfer moves anything: the case gives every address seen as sender or
-  // recipient a row. Only the balances are conditional — sending to yourself
+  // recipient a row. Only the balances are conditional - sending to yourself
   // leaves it unchanged, and applying the debit and the credit would keep only
   // the credit, since both sides were loaded at the same pre-transfer balance.
   const sender = loadOrCreateAccount(from);

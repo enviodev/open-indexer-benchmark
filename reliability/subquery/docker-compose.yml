@@ -10,7 +10,7 @@ services:
     volumes:
       # A named volume, not a bind mount into the project. Postgres writes as
       # its own user inside the container, so a bind-mounted `.data` comes back
-      # owned by somebody the runner is not — and the driver clears `.data`
+      # owned by somebody the runner is not - and the driver clears `.data`
       # before every scenario, which then fails with EACCES and takes the rest
       # of the suite's scenarios with it. `docker compose down -v` disposes of
       # a named volume cleanly, which is what the harness does between runs.

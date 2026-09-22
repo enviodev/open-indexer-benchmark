@@ -32,7 +32,7 @@ async fn ensure_case_tables(database: &Arc<PostgresClient>) -> Result<(), String
     CASE_TABLES
         .get_or_try_init(|| async {
             // Address columns CHAR(42), uint256 its decimal string, block
-            // number NUMERIC — the types rindexer's binary bulk insert writes.
+            // number NUMERIC - the types rindexer's binary bulk insert writes.
             // `block_number` is what the benchmark reads progress from.
             let address_events = [
                 ("changed_master_copy", "singleton"),
@@ -461,7 +461,7 @@ macro_rules! register_dual {
 
 /// The factory-sync registrations. rindexer only builds the pipeline that
 /// discovers and registers children for a factory event that is itself
-/// registered, so each generation's ProxyCreation gets a no-op handler — the
+/// registered, so each generation's ProxyCreation gets a no-op handler - the
 /// child bookkeeping happens inside rindexer after the callback returns. The
 /// `safe` table rows come from the plain FactoryV13/V14 contracts instead,
 /// which see the same events.

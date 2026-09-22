@@ -11,7 +11,7 @@ credited on `to` and debited on `from`, and `store_allowances` a
 delta so the last one wins.
 
 **Every module declares `initialBlock: 18600000`.** A store otherwise
-accumulates from its initial block, which defaults to genesis — 18.6 million
+accumulates from its initial block, which defaults to genesis - 18.6 million
 blocks of state to prepare before the first row, and a different question
 answered. The scenario's balances are the ones its range produces, which is
 how every other implementation computes them.
@@ -37,7 +37,7 @@ D="postgres://postgres:postgres@localhost:25433/substreams?sslmode=disable"
 
 `--batch-block-flush-interval 1` is not optional: the sink batches 1,000 blocks
 by default and drops whatever is pending when it reaches a stop block, so a
-bounded run — which a backfill is — silently loses its tail.
+bounded run - which a backfill is - silently loses its tail.
 
 `substreams.yaml` imports the sink-sql protodefs spkg because the sink resolves
 its type from there. The `substreams` CLI bundles them itself and then rejects

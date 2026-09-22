@@ -2,9 +2,9 @@
 //
 // Every check in this suite ends the same way: compare the rows in the tool's
 // database against the rows on the chain. That is harder than it sounds,
-// because six frameworks spell the same two entities six ways — `Transfer` and
+// because six frameworks spell the same two entities six ways - `Transfer` and
 // `transfer`, `blockNumber` and `block_number`, one schema per deployment for
-// Graph Node and `public` for everyone else — and the suite has to read all of
+// Graph Node and `public` for everyone else - and the suite has to read all of
 // them without a per-tool branch, or the per-tool branch becomes the place the
 // bugs live.
 //
@@ -156,7 +156,7 @@ export function observer(sql: SqlRunner) {
     if (!block || !logIndex || !amount || !fromColumn || !toColumn) {
       throw new MissingSchema(
         `the transfer table ${transferTable.qualified} is missing one of the block, ` +
-          `log index, amount, from or to columns — every reliability project has to ` +
+          `log index, amount, from or to columns - every reliability project has to ` +
           `store all five`
       );
     }
@@ -354,8 +354,8 @@ export function diffRows(
     else if (mine !== amount) wrong.push(`${id} holds ${mine}, chain says ${amount}`);
   }
   const extra = [...held.keys()].filter((id) => !wanted.has(id));
-  // Duplicates cannot show up in the maps above — a second row with the same
-  // block and log index overwrites the first — so they are counted separately.
+  // Duplicates cannot show up in the maps above - a second row with the same
+  // block and log index overwrites the first - so they are counted separately.
   // A retried batch landing twice is exactly the failure the crash scenarios
   // are looking for, and it would otherwise read as a clean run.
   const duplicates = stored.filter((r) => r.block <= upTo).length - held.size;
@@ -366,7 +366,7 @@ export function diffRows(
 
 /**
  * The balances a list of transfers adds up to. The sender is debited and the
- * receiver credited, which is what every reliability project's handler does —
+ * receiver credited, which is what every reliability project's handler does -
  * so an indexer holding the right transfers and the wrong balances has applied
  * some of them more than once, or failed to take one back.
  *

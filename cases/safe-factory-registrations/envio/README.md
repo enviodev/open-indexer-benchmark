@@ -2,7 +2,7 @@
 
 [Envio HyperIndex](https://docs.envio.dev) implementation of the Safe proxy factory benchmark.
 
-`config.yaml` declares two contracts. `SafeProxyFactory` has an address; `Safe` deliberately has none — every instance is supplied at runtime by `indexer.contractRegister`, which calls `context.chain.Safe.add(proxy)` for each `ProxyCreation`.
+`config.yaml` declares two contracts. `SafeProxyFactory` has an address; `Safe` deliberately has none - every instance is supplied at runtime by `indexer.contractRegister`, which calls `context.chain.Safe.add(proxy)` for each `ProxyCreation`.
 
 ## Run
 

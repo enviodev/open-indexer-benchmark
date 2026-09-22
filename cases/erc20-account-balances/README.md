@@ -9,7 +9,7 @@ Index the Rocket Pool ERC20 token contract (RocketTokenRETH) on Ethereum Mainnet
 - **Target Contract**: RocketTokenRETH (Rocket Pool)
 - **Events Indexed**: Transfer and Approval events
 - **Block Range**: 18,600,000 to latest
-- **Verification Range**: 18,600,000 to 18,699,999 — indexed to completion, then checked against `expected.json`
+- **Verification Range**: 18,600,000 to 18,699,999 - indexed to completion, then checked against `expected.json`
 - **Features**: `event decoding`, `storage write`, `storage update on conflict`
 
 ## Case Logic
@@ -29,13 +29,13 @@ For each **Approval** event:
 
 ## Implementations
 
-- **Envio** — [envio/](./envio/)
-- **Ponder** — [ponder/](./ponder/)
-- **Rindexer** — [rindexer/](./rindexer/)
-- **Squid SDK** — [sqd/](./sqd/)
-- **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
-- **SubQuery** — [subquery/](./subquery/) (requires Docker)
-- **Substreams** — [substreams/](./substreams/), run locally
+- **Envio** - [envio/](./envio/)
+- **Ponder** - [ponder/](./ponder/)
+- **Rindexer** - [rindexer/](./rindexer/)
+- **Squid SDK** - [sqd/](./sqd/)
+- **Subgraph** - [subgraph/](./subgraph/) (requires Docker)
+- **SubQuery** - [subquery/](./subquery/) (requires Docker)
+- **Substreams** - [substreams/](./substreams/), run locally
 
 Substreams reads through StreamingFast, which bills by the request and needs an
 API key, so unlike the rows above it is measured by hand rather than on every
@@ -54,7 +54,7 @@ Requires Node 23.6+, Docker, a Rust toolchain (for the rindexer implementation),
 ENVIO_API_TOKEN=your-token node cases/erc20-account-balances/run.ts
 ```
 
-Each indexer indexes the verification range to completion — its database is then checked against `expected.json` and measured — before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
+Each indexer indexes the verification range to completion - its database is then checked against `expected.json` and measured - before re-running for the throughput window. Indexers too slow to finish the range within that window skip it and report their rate from the verification run.
 
 The verification run is capped at five minutes. An indexer that has not finished by then is stopped there and verified on what it did index, so its row carries a rate, a `~` storage figure scaled from the share of the range it covered, and a note naming the share of the data it is missing rather than no result at all.
 
@@ -80,9 +80,9 @@ ENVIO_API_TOKEN=your-token node scripts/generate-expected.ts erc20-account-balan
 
 ## Implementation Notes
 
-Progress and correctness are both read straight from each indexer's PostgreSQL database, never through its GraphQL API. Two reasons: an indexer serving queries alongside its indexing is doing work the benchmark does not measure but does pay for, and every API models the same data differently enough that the polling code was becoming a per-indexer dialect. So none of the GraphQL servers is started — `squid-graphql-server` is not launched, rindexer is started with indexing only (`start indexer` for a no-code project, `--indexer` for a rust one), and SubQuery's `graphql-engine` container is gone from its compose file. Ponder and Graph Node are the exceptions: `ponder start` and `gnd dev` both always serve an API, so each is bound to port `19876` and otherwise ignored.
+Progress and correctness are both read straight from each indexer's PostgreSQL database, never through its GraphQL API. Two reasons: an indexer serving queries alongside its indexing is doing work the benchmark does not measure but does pay for, and every API models the same data differently enough that the polling code was becoming a per-indexer dialect. So none of the GraphQL servers is started - `squid-graphql-server` is not launched, rindexer is started with indexing only (`start indexer` for a no-code project, `--indexer` for a rust one), and SubQuery's `graphql-engine` container is gone from its compose file. Ponder and Graph Node are the exceptions: `ponder start` and `gnd dev` both always serve an API, so each is bound to port `19876` and otherwise ignored.
 
-The tables backing each entity are found by introspection against the `tableCandidates` in `case.config.ts` — the same resolution the verification layer uses — so a case names its entities once instead of once per indexer.
+The tables backing each entity are found by introspection against the `tableCandidates` in `case.config.ts` - the same resolution the verification layer uses - so a case names its entities once instead of once per indexer.
 
 ### Envio
 
@@ -92,17 +92,17 @@ The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync
 
 ### Ponder
 
-Runs natively via `ponder start` — the production command, which builds once and ignores file changes — backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the API server it insists on running to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
+Runs natively via `ponder start` - the production command, which builds once and ignores file changes - backed by a Postgres container. It rejects the dev-only `--disable-ui` flag and requires an explicit `--schema`, so the invocation differs from `ponder dev`. `--port` binds the API server it insists on running to the benchmark port. The two account upserts in the Transfer handler must remain sequential so a self-transfer nets to zero rather than losing one of the two writes.
 
 ### Rindexer
 
-A `rust` project rather than the `no-code` setup the other case uses, because `no-code` could not compute the balances correctly. A running balance is a read-modify-write, but `no-code` can only describe table operations declaratively in `rindexer.yaml`, so the case had to become a sequence of independent upserts — and the debit was intermittently lost, leaving 465 of 1,747 accounts absent and 672 holding the wrong balance. Reordering the operations and splitting them across event entries changed which addresses broke, but never fixed it.
+A `rust` project rather than the `no-code` setup the other case uses, because `no-code` could not compute the balances correctly. A running balance is a read-modify-write, but `no-code` can only describe table operations declaratively in `rindexer.yaml`, so the case had to become a sequence of independent upserts - and the debit was intermittently lost, leaving 465 of 1,747 accounts absent and 672 holding the wrong balance. Reordering the operations and splitting them across event entries changed which addresses broke, but never fixed it.
 
 The `rust` project type hands the handler a database connection, so the aggregation is ordinary code: each batch is summed in memory into one signed delta per address, then applied as a single upsert whose arithmetic runs in SQL (`balance = account.balance + EXCLUDED.balance`). There is no second write to lose, so a self-transfer netting to zero and a sender-only address ending up negative hold by construction. Allowances collapse to the last value per `(owner, spender)` pair first, since Postgres rejects an `ON CONFLICT` that touches the same row twice.
 
-Event tables and their inserts are exactly what `rindexer codegen` produces. Only the aggregation in `src/rindexer_lib/indexers/erc_20indexer/rocket_token_reth.rs` is hand-written — the file rindexer intends you to edit — and codegen's per-batch progress logging is removed, since it sits on the hot path and no other implementation here logs progress.
+Event tables and their inserts are exactly what `rindexer codegen` produces. Only the aggregation in `src/rindexer_lib/indexers/erc_20indexer/rocket_token_reth.rs` is hand-written - the file rindexer intends you to edit - and codegen's per-batch progress logging is removed, since it sits on the hot path and no other implementation here logs progress.
 
-The crate is built with `cargo build --release` before the timer begins, and Postgres runs in a separate container started beforehand. Two things follow: the `rindexer` crate is pinned to a git tag rather than tracking `master`, so runs are reproducible, and the binary is built from source rather than being the released CLI. `rindexer new rust` also does not scaffold a rustls crypto provider while the dependency graph enables two, so `main` installs one explicitly — without it the binary panics on its first HTTPS request.
+The crate is built with `cargo build --release` before the timer begins, and Postgres runs in a separate container started beforehand. Two things follow: the `rindexer` crate is pinned to a git tag rather than tracking `master`, so runs are reproducible, and the binary is built from source rather than being the released CLI. `rindexer new rust` also does not scaffold a rustls crypto provider while the dependency graph enables two, so `main` installs one explicitly - without it the binary panics on its first HTTPS request.
 
 ### Squid SDK
 
@@ -110,12 +110,12 @@ Runs the processor as a native Node.js process against a Docker Postgres instanc
 
 The `sqd` variant ingests from the SQD Network gateway (`v2.archive.subsquid.io`), which requires an API key as of 19 May 2026. Set `SQD_API_KEY` (from [portal.sqd.dev](https://portal.sqd.dev)); without it the processor fails with `CREDENTIALS_INVALID` and indexes nothing.
 
-The `sqd-rpc` variant runs the same project with the gateway left off (`SQD_SOURCE=rpc`), so it ingests from the RPC endpoint alone — the regime SQD documents for chains SQD Network does not cover. It needs no API key. Each variant configures only its own source: the `sqd` run is given no RPC endpoint at all, since a processor holding both falls back to RPC near the head and its row would then be measuring a mixture of the two.
+The `sqd-rpc` variant runs the same project with the gateway left off (`SQD_SOURCE=rpc`), so it ingests from the RPC endpoint alone - the regime SQD documents for chains SQD Network does not cover. It needs no API key. Each variant configures only its own source: the `sqd` run is given no RPC endpoint at all, since a processor holding both falls back to RPC near the head and its row would then be measuring a mixture of the two.
 
 ### Subgraph
 
-Runs Graph Node natively via `gnd dev` — the single-binary distribution of
-graph-node — backed by a Postgres container. `gnd` builds and deploys the
+Runs Graph Node natively via `gnd dev` - the single-binary distribution of
+graph-node - backed by a Postgres container. `gnd` builds and deploys the
 subgraph itself on startup, so there is no separate `graph create` /
 `graph deploy` step to keep out of the measured window, and no IPFS or Docker
 Compose stack to stand up. The binary is pinned to a Graph Node release tag in
@@ -132,18 +132,18 @@ Compose stack to stand up. The binary is pinned to a Graph Node release tag in
   `@entity(immutable: true)`; accounts and allowances are updated in place and
   stay mutable, which is what makes this case a read-after-write test. Mutable
   entity tables keep every superseded version in a `block_range` column, so
-  verification restricts them to the current version — the retained history
+  verification restricts them to the current version - the retained history
   still counts toward the reported storage, which is the honest way to report
   what keeping it costs.
 - **Write batching**: Graph Node buffers entity writes and flushes them in
   batches, so both the tables and `subgraphs.head` stay at zero for the first
   minute or two of a run and then jump. Progress is therefore stepped rather
   than continuous, and the measured time can run up to one poll interval past
-  the actual finish — which overstates the time rather than flattering it. Both
+  the actual finish - which overstates the time rather than flattering it. Both
   scenarios take longer than the throughput window, so the published rate comes
   from the verification range, where the batching is fully accounted for.
 - **Progress**: read from `subgraphs.head`, Graph Node's own record of where the
-  deployment has got to — the same position its status API serves. It keeps
+  deployment has got to - the same position its status API serves. It keeps
   advancing through ranges that produced no events, which a row count cannot.
 - **IPFS**: `gnd` connects to `https://api.thegraph.com/ipfs` at startup even
   though everything it deploys is local, so the run needs outbound network

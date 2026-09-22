@@ -18,8 +18,8 @@ export const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${PG_PORT}/
  * Subgraph write the same `envio_chains` row, on the same throttle, so they
  * share this rather than each inventing a way to lose the race.
  *
- * The progress row is the better reading — it advances through ranges that
- * produced no events — but it is written on a throttle, and a batch's entity
+ * The progress row is the better reading - it advances through ranges that
+ * produced no events - but it is written on a throttle, and a batch's entity
  * rows land before it. On a short run that gap is the whole measurement: a
  * range indexed in sixteen seconds has been seen to finish, commit all 19,125
  * rows, and exit with the progress row still reading zero. So the event tables
@@ -27,7 +27,7 @@ export const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${PG_PORT}/
  * work either way.
  *
  * Both readings only ever move forwards, so a later one that comes back lower
- * is the read racing the writer rather than work being undone — and the final
+ * is the read racing the writer rather than work being undone - and the final
  * reading is the one that decides the rate. Without a high-water mark a run
  * could publish a real events/s beside a blocks/s of zero, since the event
  * count has a second source to fall back on and the block position does not.
@@ -89,7 +89,7 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
 
       // Both Envio drivers reuse one database across phases, and
       // `envio start -r` resets it asynchronously after launch. A snapshot taken
-      // before that reset lands reads the previous phase's progress — and when
+      // before that reset lands reads the previous phase's progress - and when
       // the previous phase reached its end block, that stale reading satisfies
       // the completion check immediately and yields an absurd rate. Drop the
       // schema up front so no prior state can be observed at all.

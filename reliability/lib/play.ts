@@ -9,8 +9,8 @@
 // Three rules the scenarios all follow.
 //
 // A check reports on the tool, never on the harness. Anything the scenario
-// could not arrange — a database that is not in a container, a tool that never
-// started — is "na" with the reason, so a run that could not ask a question
+// could not arrange - a database that is not in a container, a tool that never
+// started - is "na" with the reason, so a run that could not ask a question
 // says so instead of answering it badly.
 //
 // Nothing is concluded from a tool being slow. Every wait has a generous
@@ -108,7 +108,7 @@ export interface Ctx {
   patience: Patience;
 
   progress(): Promise<Snapshot | null>;
-  /** Poll until the predicate holds. False on timeout — never throws. */
+  /** Poll until the predicate holds. False on timeout - never throws. */
   waitFor(label: string, holds: () => Promise<boolean>, timeoutMs: number): Promise<boolean>;
   /** Restart the tool's database container. Throws when there is none. */
   restartDb(downMs: number): Promise<void>;
@@ -227,7 +227,7 @@ const HEARTBEAT_EVERY_MS = 3_000;
  * A real chain always produces blocks, and an indexer's realtime path is
  * written for that: it reacts to the head moving. A chain that has been
  * advanced and then stands still is not a chain any of these tools were
- * designed against, and one of them showed it — Ponder backfilled to its
+ * designed against, and one of them showed it - Ponder backfilled to its
  * finalised block, handed the last sixty-five to realtime, and realtime had no
  * new head to react to, so those blocks were never indexed and the scenario
  * read that as an indexer that could not keep up.
@@ -288,7 +288,7 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   // The chain keeps producing across the outage rather than standing still,
   // because an indexer only meets a failed query if it is issuing queries. A
   // tool that had caught up would sit the outage out and pass a check it was
-  // never really asked — which is how an indexer that exits on its first
+  // never really asked - which is how an indexer that exits on its first
   // failed query was, at one point, scored as having survived one.
   const before = await ctx.observe.count();
   const producingThrough = produce(ctx, 30, 500);
@@ -390,7 +390,7 @@ export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
     }
     // The process is gone; its rows are not. Whatever is readable right now is
     // what a reader querying the indexer during a crash would have seen, and
-    // the first kill is the one that reading is taken from — later ones follow
+    // the first kill is the one that reading is taken from - later ones follow
     // a restart, so a mixture would say less.
     await sleep(1_000);
     if (attempt === 0) torn = await compare(ctx);
@@ -584,7 +584,7 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
   }
 
   // A rewrite below the head, at a height the tool has already indexed but is
-  // still working towards — the one a head-only reorg check walks past.
+  // still working towards - the one a head-only reorg check walks past.
   checks["during-backfill"] = await reconciles(
     "reorg behind the head during a backfill",
     () => ctx.chain.reorg({ depth: 4, extend: 250, logs: "changed" }),
@@ -782,7 +782,7 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
  *
  * The order matters, and it is the one thing a real run changed about this
  * scenario. An indexer that refuses a log index above the signed 32-bit
- * maximum stops there — Ponder does, loudly — and when every block carried
+ * maximum stops there - Ponder does, loudly - and when every block carried
  * one, that refusal was also the answer to every other question here, because
  * the tool never reached the blocks they were about. So the hostile indices
  * come last, after the values a tool should simply store, and the scenario
@@ -816,8 +816,8 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
    * position, or the last block it wrote a row for, whichever is further.
    *
    * Rows count because for two of these tools the benchmark reads position
-   * from the rows they wrote. The position can also be missing altogether — a
-   * driver whose snapshot throws reports none — and reading that as "the tool
+   * from the rows they wrote. The position can also be missing altogether - a
+   * driver whose snapshot throws reports none - and reading that as "the tool
    * is at the start block" would state something about the tool that nobody
    * observed.
    */

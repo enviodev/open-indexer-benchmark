@@ -2,7 +2,7 @@
 
 Two rows run this directory unchanged: Graph Node, and the same subgraph on
 [HyperIndex](https://envio.dev) as the Envio Subgraph row. Nothing here is
-specific to either — it is one manifest, one schema and one set of
+specific to either - it is one manifest, one schema and one set of
 AssemblyScript mappings, which is what makes the two rows a reading of the same
 subgraph on two indexers rather than two ports of one idea.
 
