@@ -13,11 +13,13 @@ const PG_PORT = 19_877;
 const PG_CONTAINER = "ponder-benchmark-pg";
 export const PONDER_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/ponder`;
 
-export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
+export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock, wsUrl }) => {
   const dir = resolve(config.dir, "ponder");
   const env = {
     ...process.env,
     PONDER_RPC_URL_1: rpcUrl,
+    // Read only by projects that configure a WebSocket; empty is "none".
+    PONDER_WS_URL_1: wsUrl ?? "",
     DATABASE_URL: PONDER_DB_URL,
     PONDER_END_BLOCK: String(endBlock),
   };

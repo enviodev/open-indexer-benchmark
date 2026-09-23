@@ -1175,6 +1175,83 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   return { checks, measures: {} };
 }
 
+/**
+ * A block subscription that stops delivering without the socket closing.
+ *
+ * Only asked of a tool that subscribed: the scenario offers a WebSocket, and a
+ * tool that never calls eth_subscribe polls, which has nothing to go quiet.
+ */
+export async function subscriptionStall(ctx: Ctx): Promise<ScenarioResult> {
+  const BLOCK_MS = 2_000;
+  /** Blocks produced with the subscription silent: a minute of chain. */
+  const QUIET_BLOCKS = 30;
+
+  ctx.chain.advance(100);
+  await ctx.launch();
+  if (!(await synced(ctx))) {
+    return {
+      checks: {
+        "notices-quiet-subscription": na("the tool never caught up, so it was never at the head"),
+      },
+      measures: {},
+    };
+  }
+  // A few live blocks, so a tool that subscribes once it reaches the head has
+  // done so before anything is asked of it.
+  await produce(ctx, 5, BLOCK_MS);
+  if (ctx.chain.stats().subscriptions === 0) {
+    return {
+      checks: {
+        "notices-quiet-subscription": na(
+          "it never subscribed to new blocks, so it had no subscription to go quiet"
+        ),
+      },
+      measures: {},
+    };
+  }
+  await synced(ctx, ctx.patience.reactMs, { heartbeat: false });
+
+  // Silent from here: the socket stays open and answers everything asked of
+  // it, and no block is announced. The chain goes on for a minute, then holds
+  // still, so there is a fixed head to reach - and nothing will ever announce
+  // it.
+  ctx.chain.setSubscriptionsQuiet(true);
+  const quietAt = performance.now();
+  const checks: Record<string, Outcome> = {};
+  const measures: Record<string, number> = {};
+  try {
+    await produce(ctx, QUIET_BLOCKS, BLOCK_MS);
+    const caughtUp = await synced(ctx, ctx.patience.reactMs, { heartbeat: false });
+    const seconds = Math.round((performance.now() - quietAt) / 1_000);
+    const reached = await ctx.observe.highestBlock().catch(() => 0);
+    checks["notices-quiet-subscription"] = verdict(
+      caughtUp,
+      ctx.alive()
+        ? `stopped following the chain once its subscription went quiet: at block ` +
+            `${reached} of ${ctx.chain.head()} after ${seconds}s, with every request ` +
+            `still being answered`
+        : "exited when its subscription went quiet"
+    );
+    if (caughtUp) measures["stall-catch-up-seconds"] = seconds;
+  } finally {
+    ctx.chain.setSubscriptionsQuiet(false);
+  }
+
+  // ── Announcements back ──
+  //
+  // The next announcement names a head a minute past the last one the tool
+  // heard of. Whatever it does with that, the minute in between has to be in
+  // its tables.
+  await reviveIfNeeded(ctx, "exited when its subscription went quiet");
+  await produce(ctx, 5, BLOCK_MS);
+  const { result } = await finalState(ctx);
+  checks["fills-quiet-gap"] = verdict(
+    result.missing.length === 0 && result.wrong.length === 0,
+    `skipped blocks it was never told about: ${result.summary}`
+  );
+  return { checks, measures };
+}
+
 // ── Data fidelity ──────────────────────────────────────────────────────
 
 /**
@@ -1536,6 +1613,7 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
       "p50-ms": Math.round(p50),
       "p99-ms": Math.round(p99),
       "max-lag-blocks": run.worstLag,
+      subscribed: ctx.chain.stats().subscriptions > 0 ? 1 : 0,
     },
   };
 }
@@ -1558,6 +1636,7 @@ export const PLAYS: Record<string, (ctx: Ctx) => Promise<ScenarioResult>> = {
   "rpc-limits": rpcLimits,
   "rpc-chaos": rpcChaos,
   "rpc-inconsistency": rpcInconsistency,
+  "subscription-stall": subscriptionStall,
   "awkward-values": awkwardValues,
   "block-to-row": blockToRow,
 };

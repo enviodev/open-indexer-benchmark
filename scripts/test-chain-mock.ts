@@ -379,6 +379,71 @@ try {
   } finally {
     await huge.close();
   }
+  // ── The WebSocket side: requests, subscriptions, and a feed gone quiet ──
+  {
+    const socket = new WebSocket(mock.wsUrl);
+    const received: any[] = [];
+    socket.addEventListener("message", (event) => received.push(JSON.parse(String(event.data))));
+    await new Promise<void>((resolve, reject) => {
+      socket.addEventListener("open", () => resolve());
+      socket.addEventListener("error", () => reject(new Error("WebSocket did not open")));
+    });
+    const waitFor = async (holds: () => boolean) => {
+      for (let i = 0; i < 100 && !holds(); i++) await new Promise((r) => setTimeout(r, 10));
+      return holds();
+    };
+    const reply = (id: number) => received.find((m) => m.id === id);
+
+    socket.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }));
+    await waitFor(() => reply(1) !== undefined);
+    check(
+      "a request over the WebSocket is answered like one over HTTP",
+      reply(1)?.result === (await rpc("eth_blockNumber")).result,
+      JSON.stringify(reply(1))
+    );
+
+    socket.send(
+      JSON.stringify({ jsonrpc: "2.0", id: 2, method: "eth_subscribe", params: ["newHeads"] })
+    );
+    await waitFor(() => reply(2) !== undefined);
+    const subscription = reply(2)?.result;
+    const heads = () => received.filter((m) => m.method === "eth_subscription");
+    mock.control.advance(2);
+    await waitFor(() => heads().length >= 2);
+    check(
+      "every new block is announced to a newHeads subscriber",
+      heads().length === 2 &&
+        heads().every((m) => m.params.subscription === subscription) &&
+        Number(BigInt(heads()[1].params.result.number)) === mock.control.head(),
+      JSON.stringify(heads().map((m) => m.params.result.number))
+    );
+
+    mock.control.reorg({ depth: 2, extend: 1 });
+    await waitFor(() => heads().length >= 5);
+    check(
+      "a rewrite announces every block of the branch the chain switched to",
+      heads().length === 5,
+      `${heads().length} announcements`
+    );
+
+    mock.control.setSubscriptionsQuiet(true);
+    mock.control.advance(3);
+    socket.send(JSON.stringify({ jsonrpc: "2.0", id: 3, method: "eth_blockNumber", params: [] }));
+    await waitFor(() => reply(3) !== undefined);
+    check(
+      "a quiet feed announces nothing and still answers requests",
+      heads().length === 5 && Number(BigInt(reply(3)?.result ?? "0x0")) === mock.control.head(),
+      `${heads().length} announcements, ${JSON.stringify(reply(3))}`
+    );
+    mock.control.setSubscriptionsQuiet(false);
+    check(
+      "subscriptions are counted, and the count survives a reset",
+      (mock.control.reset(), mock.control.stats().subscriptions === 1),
+      String(mock.control.stats().subscriptions)
+    );
+    socket.close();
+  }
+
   // ── An address that is not an address is refused at the door ──
   //
   // The chain served a 41-digit address for a while, because nothing between

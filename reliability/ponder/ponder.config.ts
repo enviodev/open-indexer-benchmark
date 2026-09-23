@@ -24,6 +24,9 @@ export default createConfig({
       // unknown chain id as a configuration error rather than as a chain.
       id: 1,
       rpc: process.env.PONDER_RPC_URL_1!,
+      // New blocks by subscription, where the harness offers a WebSocket -
+      // only in the scenarios that time how soon a block becomes readable.
+      ws: process.env.PONDER_WS_URL_1 || undefined,
     },
   },
   contracts: {

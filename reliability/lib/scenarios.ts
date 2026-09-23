@@ -123,6 +123,13 @@ export interface Measure {
    * the number worth the room is the one an operator would ask for next.
    */
   headline?: boolean;
+  /**
+   * A yes-or-no reading - 1 or 0 - that qualifies its group's headline rather
+   * than being a number of its own: when it reads 1, this word follows the
+   * headline in the cell. "180ms, WS" says the tool was given, and used, a
+   * WebSocket; the reader comparing it with a polled 700ms needs to know.
+   */
+  tag?: string;
   /** Word the headline number is printed with, e.g. "2 restarts". */
   abbr?: string;
 }
@@ -137,6 +144,15 @@ export interface Scenario {
   method: string;
   checks: Check[];
   measures?: Measure[];
+  /**
+   * Hand the tool a WebSocket source as well, if it can use one. Only where
+   * the question is how soon a tool hears of a block: a tool that can
+   * subscribe would be set up to on any chain where latency matters, and
+   * polling is what it is measured by otherwise. Everywhere else the tools
+   * read plain HTTP, so every fault the other scenarios inject lands on the
+   * path they actually use.
+   */
+  websocket?: boolean;
 }
 
 export const SCENARIOS: Scenario[] = [
@@ -514,6 +530,41 @@ export const SCENARIOS: Scenario[] = [
 
   // ── Data fidelity ────────────────────────────────────────────────────
   {
+    id: "subscription-stall",
+    title: "The subscription goes quiet",
+    group: "rpc-faults",
+    websocket: true,
+    summary:
+      "A tool that subscribes to new blocks over a WebSocket hears of them the moment they exist, and has swapped a failure mode it could see for one it cannot. A subscription can stop delivering without the socket closing - a load balancer moves the backend, a node restarts behind a proxy - and the connection stays up, answers pings and carries requests, and simply stops announcing blocks. A tool that relies on the announcements stops following the chain with no error anywhere.",
+    method:
+      "Asked only of a tool that subscribes: the chain is served over a WebSocket as well as HTTP, and a tool that never calls eth_subscribe is not tested. Once it has caught up, the chain stops announcing new blocks on every subscription, without closing anything, and goes on producing one every two seconds. The tool has two minutes to notice - by polling, by resubscribing, by reconnecting - and catch up while the announcements are still silent. Then the announcements resume, and whatever the tool holds is checked against the chain.",
+    checks: [
+      {
+        id: "notices-quiet-subscription",
+        label: "keeps following the chain when its block subscription goes quiet",
+        failing: "Stops indexing silently: stops following the chain when its block subscription goes quiet",
+        detail:
+          "The subscription stops announcing blocks while the socket stays open and every request is still answered. Passing means catching up with a chain that went on producing for the whole time. Tools that do not subscribe are not tested; they poll, and have nothing to go quiet.",
+      },
+      {
+        id: "fills-quiet-gap",
+        label: "fills in the blocks it was never told about",
+        failing: "Missing data: skips the blocks produced while its block subscription was quiet",
+        detail:
+          "Once announcements resume, the next one names a head a minute of blocks past the last one the tool heard about. A tool that indexes what it is told about, rather than everything up to it, leaves that minute out. Asked of a tool whether or not it noticed the silence, since a tool that waited it out has the same gap to fill.",
+      },
+    ],
+    measures: [
+      {
+        id: "stall-catch-up-seconds",
+        label: "time to catch up with the subscription silent",
+        unit: "s",
+        detail:
+          "From the moment the announcements stopped to the moment the tool held every block the chain had produced.",
+      },
+    ],
+  },
+  {
     id: "awkward-values",
     title: "Legal values that break things",
     group: "data-fidelity",
@@ -572,10 +623,11 @@ export const SCENARIOS: Scenario[] = [
     id: "block-to-row",
     title: "From block to row",
     group: "head-latency",
+    websocket: true,
     summary:
       "Backfill throughput says how long a tool takes to catch up once. Head latency says what it is like to live with afterwards: the gap between a block being published and its rows being readable is the staleness of everything built on the indexer. It is a distribution rather than a number - the median is the ordinary experience, and the tail is the one that shows up as a bug report.",
     method:
-      "The mock chain publishes a block every two seconds for five minutes, stamping the wall clock as each becomes the head. The harness polls the tool's own tables and records when each block's rows first become readable. The difference is the latency; the distribution is reported rather than an average, because a tool that batches every thirty seconds and one that writes continuously can share a mean while feeling nothing alike. The last minute repeats the exercise across a reorg, since that is when staleness costs the most.",
+      "The mock chain publishes a block every two seconds for three minutes, stamping the wall clock as each becomes the head, and announces each one over a WebSocket to any tool that subscribes. Tools that can subscribe to new blocks - Envio, Ponder, the Squid SDK - are given the WebSocket, as anyone running them on a latency-sensitive chain would; the others poll over HTTP, and the difference is part of what is measured. The tool's database records when each transaction committed, and a block's latency is the commit of its rows minus its publication - exact, rather than bracketed by a poll. The distribution is reported rather than an average, because a tool that batches every thirty seconds and one that writes continuously can share a mean while feeling nothing alike. The last half minute repeats the exercise across a reorg, since that is when staleness costs the most.",
     checks: [
       {
         id: "median-under-block-time",
@@ -607,6 +659,14 @@ export const SCENARIOS: Scenario[] = [
       },
     ],
     measures: [
+      {
+        id: "subscribed",
+        label: "new blocks by subscription",
+        unit: "",
+        tag: "WS",
+        detail:
+          "1 when the tool subscribed to new blocks over the WebSocket it was offered, 0 when it polled. Published beside the median latency as \"WS\", because a subscribed tool hears of a block the moment it exists and a polling one up to an interval later, and the two numbers are not the same kind of number without it.",
+      },
       {
         id: "p50-ms",
         label: "median latency",

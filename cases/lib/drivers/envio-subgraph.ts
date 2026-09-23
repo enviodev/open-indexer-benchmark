@@ -29,6 +29,7 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
   config,
   rpcUrl,
   endBlock,
+  wsUrl,
 }) => {
   const dir = resolve(config.dir, "subgraph");
   const envio = resolve(CLI_DIR, "node_modules", ".bin", "envio");
@@ -40,7 +41,9 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
     // A bare URL leaves HyperSync as the source and keeps RPC for contract
     // calls and the block-timestamp fallback; `for: sync` makes it the source.
     ENVIO_SUBGRAPH_RPC:
-      mode === "rpc" ? JSON.stringify({ url: rpcUrl, for: "sync" }) : rpcUrl,
+      mode === "rpc"
+        ? JSON.stringify({ url: rpcUrl, for: "sync", ...(wsUrl ? { ws: wsUrl } : {}) })
+        : rpcUrl,
   };
   let proc: ChildProcess | null = null;
   let done = false;

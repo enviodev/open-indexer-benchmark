@@ -73,18 +73,19 @@ function formatHeadline(value: number, unit: string, abbr?: string): string {
   return `${formatValue(value, unit)} ${word}`;
 }
 
-/** The headline measure of a group, if the run reported one. */
+/** The headline measure of a group, if the run reported one, and its tags. */
 function headlineOf(group: string, measures: Record<string, number>): string | null {
-  for (const scenario of SCENARIOS) {
-    if (scenario.group !== group) continue;
-    for (const measure of scenario.measures ?? []) {
-      if (!measure.headline) continue;
-      const value = measures[measure.id];
-      if (value === undefined) continue;
-      return formatHeadline(value, measure.unit, measure.abbr);
-    }
-  }
-  return null;
+  const inGroup = SCENARIOS.filter((scenario) => scenario.group === group).flatMap(
+    (scenario) => scenario.measures ?? []
+  );
+  const headline = inGroup.find(
+    (measure) => measure.headline && measures[measure.id] !== undefined
+  );
+  if (!headline) return null;
+  const tags = inGroup
+    .filter((measure) => measure.tag && measures[measure.id] === 1)
+    .map((measure) => measure.tag);
+  return [formatHeadline(measures[headline.id], headline.unit, headline.abbr), ...tags].join(", ");
 }
 
 /**

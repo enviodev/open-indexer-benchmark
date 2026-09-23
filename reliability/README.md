@@ -131,6 +131,7 @@ write down, which is not the same as a reliable tool - see
   - [Everything wrong at once](#rpc-chaos)
   - [The node refuses the question](#rpc-limits)
   - [The node contradicts itself](#rpc-inconsistency)
+  - [The subscription goes quiet](#subscription-stall)
 - [**data fidelity**](#data-fidelity) - Whether values that are unusual but entirely legal - an empty symbol, a log index near the 32-bit ceiling - are stored, refused, or fatal.
   - [Legal values that break things](#awkward-values)
 - [**head latency**](#head-latency) - How long after a block is published its rows are readable, and whether that holds up while the chain misbehaves.
@@ -274,7 +275,7 @@ Reported alongside the score, and not part of it:
 
 Whether a node that errors, stalls, rate limits or contradicts itself costs throughput or costs data.
 
-4 scenarios, 14 checks between them; the column counts all of them together.
+5 scenarios, 16 checks between them; the column counts all of them together.
 
 <a id="rpc-outage"></a>
 
@@ -346,6 +347,25 @@ The failure nobody plans for, because it should not happen and does: a load-bala
 | handles a block the RPC node briefly fails to return | Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as "no such block" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself. |
 | handles a block being replaced while it asks for it | A request against a hash the chain has reorged away comes back an error, not an empty result. The tool has to treat that as a reorg signal; treating it as a failed request and retrying forever is the stall this check finds. |
 
+<a id="subscription-stall"></a>
+
+### The subscription goes quiet
+
+A tool that subscribes to new blocks over a WebSocket hears of them the moment they exist, and has swapped a failure mode it could see for one it cannot. A subscription can stop delivering without the socket closing - a load balancer moves the backend, a node restarts behind a proxy - and the connection stays up, answers pings and carries requests, and simply stops announcing blocks. A tool that relies on the announcements stops following the chain with no error anywhere.
+
+**What the harness does.** Asked only of a tool that subscribes: the chain is served over a WebSocket as well as HTTP, and a tool that never calls eth_subscribe is not tested. Once it has caught up, the chain stops announcing new blocks on every subscription, without closing anything, and goes on producing one every two seconds. The tool has two minutes to notice - by polling, by resubscribing, by reconnecting - and catch up while the announcements are still silent. Then the announcements resume, and whatever the tool holds is checked against the chain.
+
+| check | what a pass means |
+| --- | --- |
+| keeps following the chain when its block subscription goes quiet | The subscription stops announcing blocks while the socket stays open and every request is still answered. Passing means catching up with a chain that went on producing for the whole time. Tools that do not subscribe are not tested; they poll, and have nothing to go quiet. |
+| fills in the blocks it was never told about | Once announcements resume, the next one names a head a minute of blocks past the last one the tool heard about. A tool that indexes what it is told about, rather than everything up to it, leaves that minute out. Asked of a tool whether or not it noticed the silence, since a tool that waited it out has the same gap to fill. |
+
+Reported alongside the score, and not part of it:
+
+| measure | unit | what it says |
+| --- | --- | --- |
+| time to catch up with the subscription silent | s | From the moment the announcements stopped to the moment the tool held every block the chain had produced. |
+
 <a id="data-fidelity"></a>
 
 ## Data fidelity
@@ -385,7 +405,7 @@ One scenario, 4 checks.
 
 Backfill throughput says how long a tool takes to catch up once. Head latency says what it is like to live with afterwards: the gap between a block being published and its rows being readable is the staleness of everything built on the indexer. It is a distribution rather than a number - the median is the ordinary experience, and the tail is the one that shows up as a bug report.
 
-**What the harness does.** The mock chain publishes a block every two seconds for five minutes, stamping the wall clock as each becomes the head. The harness polls the tool's own tables and records when each block's rows first become readable. The difference is the latency; the distribution is reported rather than an average, because a tool that batches every thirty seconds and one that writes continuously can share a mean while feeling nothing alike. The last minute repeats the exercise across a reorg, since that is when staleness costs the most.
+**What the harness does.** The mock chain publishes a block every two seconds for three minutes, stamping the wall clock as each becomes the head, and announces each one over a WebSocket to any tool that subscribes. Tools that can subscribe to new blocks - Envio, Ponder, the Squid SDK - are given the WebSocket, as anyone running them on a latency-sensitive chain would; the others poll over HTTP, and the difference is part of what is measured. The tool's database records when each transaction committed, and a block's latency is the commit of its rows minus its publication - exact, rather than bracketed by a poll. The distribution is reported rather than an average, because a tool that batches every thirty seconds and one that writes continuously can share a mean while feeling nothing alike. The last half minute repeats the exercise across a reorg, since that is when staleness costs the most.
 
 | check | what a pass means |
 | --- | --- |
@@ -398,6 +418,7 @@ Reported alongside the score, and not part of it:
 
 | measure | unit | what it says |
 | --- | --- | --- |
+| new blocks by subscription |  | 1 when the tool subscribed to new blocks over the WebSocket it was offered, 0 when it polled. Published beside the median latency as "WS", because a subscribed tool hears of a block the moment it exists and a polling one up to an interval later, and the two numbers are not the same kind of number without it. |
 | median latency *(shown in the results table)* | ms | Median milliseconds from a block being published to its rows being readable. This is the number published in the table's head lag column. |
 | 99th percentile latency | ms | The tail, over the same run. |
 | worst lag behind the head | blocks | The largest gap seen between the chain head and the tool's position. |

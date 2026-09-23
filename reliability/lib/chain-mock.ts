@@ -27,6 +27,7 @@
 
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
+import { acceptWebSocket, type WsConnection } from "./ws-server.ts";
 import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
 
 /**
@@ -316,6 +317,12 @@ export interface ChainStats {
    * under the range cap.
    */
   capped: { range: number; results: number };
+  /**
+   * `eth_subscribe("newHeads")` calls over the WebSocket. Like `refused`, it
+   * survives reset(): whether a tool subscribes at all is a fact about the
+   * run, and it decides whether a subscription check can be asked.
+   */
+  subscriptions: number;
 }
 
 export interface ChainControl {
@@ -392,6 +399,13 @@ export interface ChainControl {
    * what it is given ends up with each transfer stored twice.
    */
   setDuplicateLogs(on: boolean): void;
+  /**
+   * Stop announcing new blocks to WebSocket subscribers, without closing the
+   * socket or refusing anything asked over it. A load-balanced endpoint whose
+   * subscription backend died does exactly this: the connection stays up,
+   * pings are answered, and the heads simply stop coming.
+   */
+  setSubscriptionsQuiet(on: boolean): void;
   stats(): ChainStats;
   reset(): void;
 }
@@ -417,6 +431,13 @@ export interface MetadataRow {
 export interface ChainMock {
   /** What the indexers are pointed at. */
   url: string;
+  /**
+   * The same endpoint over a WebSocket: every method the HTTP side serves,
+   * plus `eth_subscribe("newHeads")`. Faults are injected on the HTTP side
+   * only - the scenarios that hand a tool this URL are about how fast it hears
+   * of a block, and whether it notices when it stops hearing.
+   */
+  wsUrl: string;
   control: ChainControl;
   close(): Promise<void>;
 }
@@ -456,6 +477,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       widestRange: 0,
       refused: {},
       capped: { range: 0, results: 0 },
+      subscriptions: 0,
     };
   }
 
@@ -946,6 +968,87 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     });
   });
 
+  // ── The same endpoint over a WebSocket ──
+  //
+  // Everything the HTTP side answers, answered the same way, plus the one
+  // thing only a socket can do: tell a subscriber about a block the moment it
+  // exists. No faults here - see ChainMock.wsUrl.
+  const sockets = new Set<WsConnection>();
+  const subscribers = new Map<WsConnection, Set<string>>();
+  let nextSubscription = 1;
+  let subscriptionsQuiet = false;
+
+  /** Tell every newHeads subscriber about a block, unless the feed is quiet. */
+  function announce(block: MockBlock) {
+    if (subscriptionsQuiet || subscribers.size === 0) return;
+    const header = serializeBlock(block, false);
+    for (const [connection, ids] of subscribers) {
+      for (const subscription of ids) {
+        connection.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            method: "eth_subscription",
+            params: { subscription, result: header },
+          })
+        );
+      }
+    }
+  }
+
+  function answerOverSocket(text: string, connection: WsConnection) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      connection.send(
+        JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32_700, message: "parse error" } })
+      );
+      return;
+    }
+    const entries = (Array.isArray(payload) ? payload : [payload]) as {
+      id?: unknown;
+      method?: string;
+      params?: unknown[];
+    }[];
+    stats.requests++;
+    const answers = entries.map((entry) => {
+      const method = entry?.method ?? "unknown";
+      stats.methods[method] = (stats.methods[method] ?? 0) + 1;
+      const id = entry?.id ?? null;
+      try {
+        if (method === "eth_subscribe") {
+          if (entry.params?.[0] !== "newHeads") {
+            stats.refused[`eth_subscribe(${String(entry.params?.[0])})`] =
+              (stats.refused[`eth_subscribe(${String(entry.params?.[0])})`] ?? 0) + 1;
+            throw rpcFault(-32_601, `the mock chain does not serve that subscription`);
+          }
+          const subscription = `0x${(nextSubscription++).toString(16)}`;
+          if (!subscribers.has(connection)) subscribers.set(connection, new Set());
+          subscribers.get(connection)!.add(subscription);
+          stats.subscriptions++;
+          return { jsonrpc: "2.0", id, result: subscription };
+        }
+        if (method === "eth_unsubscribe") {
+          const removed = subscribers.get(connection)?.delete(String(entry.params?.[0])) ?? false;
+          return { jsonrpc: "2.0", id, result: removed };
+        }
+        return { jsonrpc: "2.0", id, result: handle(entry) };
+      } catch (err) {
+        const code = err instanceof RpcFault ? err.code : -32_603;
+        return { jsonrpc: "2.0", id, error: { code, message: (err as Error).message } };
+      }
+    });
+    connection.send(JSON.stringify(Array.isArray(payload) ? answers : answers[0]));
+  }
+
+  server.on("upgrade", (req, socket) => {
+    const connection = acceptWebSocket(req, socket, answerOverSocket, (closed) => {
+      sockets.delete(closed);
+      subscribers.delete(closed);
+    });
+    if (connection) sockets.add(connection);
+  });
+
   const requested = spec.port ?? CHAIN_PORT;
   await new Promise<void>((resolve, reject) => {
     // A listen failure has to reject rather than reach the process as an
@@ -975,7 +1078,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     head: () => chain[chain.length - 1]?.number ?? spec.startBlock,
     advance(blocks = 1) {
       const epoch = chain[chain.length - 1]?.epoch ?? 0;
-      for (let i = 0; i < blocks; i++) append(epoch, true);
+      for (let i = 0; i < blocks; i++) announce(append(epoch, true));
     },
     reorg({ depth, extend = 0, logs = "changed" }) {
       const head = chain[chain.length - 1];
@@ -987,7 +1090,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       const from = head.number - cut + 1;
       const epoch = head.epoch + 1;
       chain.length = chain.length - cut;
-      for (let i = 0; i < replacements; i++) append(epoch, logs !== "dropped");
+      // Announced block by block, as a node announces the new branch it
+      // switched to.
+      for (let i = 0; i < replacements; i++) announce(append(epoch, logs !== "dropped"));
       return { from, to: chain[chain.length - 1].number };
     },
     blockAt,
@@ -1038,6 +1143,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     setDuplicateLogs(on) {
       duplicateLogs = on;
     },
+    setSubscriptionsQuiet(on) {
+      subscriptionsQuiet = on;
+    },
     stats: () => ({
       ...stats,
       methods: { ...stats.methods },
@@ -1047,17 +1155,21 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     reset() {
       // Refusals survive: they are the mock's own shortcomings rather than
       // part of whatever window a scenario is counting.
-      const refused = stats.refused;
+      const { refused, subscriptions } = stats;
       stats = emptyStats();
       stats.refused = refused;
+      stats.subscriptions = subscriptions;
     },
   };
 
   return {
     url: `http://127.0.0.1:${port}`,
+    wsUrl: `ws://127.0.0.1:${port}`,
     control,
     close: () =>
       new Promise<void>((resolve) => {
+        // An upgraded socket is no longer the HTTP server's to close.
+        for (const connection of sockets) connection.close();
         server.closeAllConnections?.();
         server.close(() => resolve());
       }),

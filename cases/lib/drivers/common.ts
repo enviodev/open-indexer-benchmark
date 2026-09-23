@@ -61,6 +61,13 @@ export interface Ctx {
   config: CaseConfig;
   rpcUrl: string;
   endBlock: number;
+  /**
+   * The same endpoint over a WebSocket, for a driver whose indexer can
+   * subscribe to new blocks. Only the reliability suite's head-latency and
+   * subscription scenarios pass one; a driver that has nothing to do with it
+   * ignores it, and every throughput run leaves it unset.
+   */
+  wsUrl?: string;
 }
 
 export type DriverFactory = (ctx: Ctx) => Driver;

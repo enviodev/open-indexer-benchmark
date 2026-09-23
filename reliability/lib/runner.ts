@@ -172,6 +172,9 @@ export async function runOnce(
       config: RELIABILITY_CASE,
       rpcUrl: chain.url,
       endBlock: NO_END_BLOCK,
+      wsUrl: SCENARIOS.find((entry) => entry.id === scenario)?.websocket
+        ? chain.wsUrl
+        : undefined,
     });
     const activeDriver = driver;
     const activeChain = chain;

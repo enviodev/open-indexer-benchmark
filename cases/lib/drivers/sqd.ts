@@ -24,6 +24,7 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
   config,
   rpcUrl,
   endBlock,
+  wsUrl,
 }) => {
   const dir = resolve(config.dir, "sqd");
   const env: NodeJS.ProcessEnv = {
@@ -42,7 +43,9 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
   // short of the head never reaches the point where the processor would go to
   // RPC for it.
   if (source === "rpc" || config.ethCall) {
-    env.RPC_ENDPOINT = rpcUrl;
+    // Given a ws:// endpoint the processor subscribes to new heads, and sends
+    // every other request over the same socket.
+    env.RPC_ENDPOINT = source === "rpc" && wsUrl ? wsUrl : rpcUrl;
   } else {
     delete env.RPC_ENDPOINT;
   }

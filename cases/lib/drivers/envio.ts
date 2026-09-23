@@ -67,9 +67,10 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
   config,
   rpcUrl,
   endBlock,
+  wsUrl,
 }) => {
   const dir = resolve(config.dir, "envio");
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     ENVIO_TUI: "false",
     ENVIO_HASURA: "false",
@@ -78,6 +79,13 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
     ENVIO_END_BLOCK: String(endBlock),
   };
+  // A WebSocket for new-block notifications lives in a config of its own:
+  // `ws` has to be absent rather than empty when there is none, and the
+  // config's variable substitution cannot express "absent".
+  if (wsUrl) {
+    env.ENVIO_CONFIG = "config.ws.yaml";
+    env.ENVIO_RPC_WS = wsUrl;
+  }
   let proc: ChildProcess | null = null;
   let done = false;
 

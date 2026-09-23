@@ -42,6 +42,13 @@
 //   slow-head           looks for new blocks every five seconds, the default
 //                       of at least one real tool, on a chain that makes one
 //                       every two
+//   trusts-subscription given a WebSocket, takes the head from its newHeads
+//                       subscription alone and never asks, so a feed that
+//                       goes quiet leaves it waiting for ever
+//   jumps-to-announced-head
+//                       given a WebSocket, indexes the block it is told about
+//                       rather than everything up to it, so blocks it was
+//                       never told about are skipped
 //   asks-for-an-unserved-method
 //                       reaches for a JSON-RPC method the generated chain does
 //                       not implement, which stands for every real indexer
@@ -101,7 +108,9 @@ export type Defect =
   | "ignores-range-cap"
   | "ignores-result-cap"
   | "die-on-rpc-error"
-  | "slow-head";
+  | "slow-head"
+  | "trusts-subscription"
+  | "jumps-to-announced-head";
 
 export interface FakeOptions {
   /** Where it writes. A real database: the harness's SQL has to be exercised. */
@@ -127,7 +136,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
   const defects = new Set(options.defects ?? []);
   const { dbUrl } = options;
 
-  return ({ rpcUrl }) => {
+  return ({ rpcUrl, wsUrl }) => {
     let running = false;
     /** Indexing nothing from here on, restart or no restart. */
     let stuck = false;
@@ -328,9 +337,52 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       );
     }
 
+    // ── New blocks by subscription, when offered a WebSocket ──
+    //
+    // The correct double subscribes and keeps polling as well, which is what
+    // makes a quiet feed harmless to it. The two defects below lean on the
+    // subscription in the two ways a real tool can.
+    let socket: WebSocket | null = null;
+    /** The newest head the subscription announced, or null before the first. */
+    let announced: number | null = null;
+    /** Caught up at least once since it started, so the backfill is behind it. */
+    let caughtUpOnce = false;
+    const leansOnSubscription =
+      defects.has("trusts-subscription") || defects.has("jumps-to-announced-head");
+
+    function subscribe() {
+      if (!wsUrl) return;
+      socket = new WebSocket(wsUrl);
+      socket.addEventListener("open", () =>
+        socket?.send(
+          JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_subscribe", params: ["newHeads"] })
+        )
+      );
+      socket.addEventListener("message", (event) => {
+        const message = JSON.parse(String(event.data));
+        if (message.method === "eth_subscription") {
+          announced = Number(BigInt(message.params.result.number));
+        }
+      });
+      socket.addEventListener("error", () => {});
+    }
+
     async function step(gen = generation) {
-      const head = Number(BigInt(await rpc("eth_blockNumber", [])));
+      const head =
+        leansOnSubscription && announced !== null && caughtUpOnce
+          ? announced
+          : Number(BigInt(await rpc("eth_blockNumber", [])));
+      if (
+        defects.has("jumps-to-announced-head") &&
+        announced !== null &&
+        caughtUpOnce &&
+        head > checkpoint + 1
+      ) {
+        // Straight to the block it was told about.
+        checkpoint = head - 1;
+      }
       if (head <= checkpoint) {
+        caughtUpOnce = true;
         // The head moved backwards, or has not moved. A replica answering from
         // behind is not a reorg, so nothing is undone on the strength of it.
         return;
@@ -508,6 +560,10 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         generation++;
         // A new process: whatever it had narrowed to lived in the old one.
         batch = options.batchBlocks ?? 500;
+        announced = null;
+        caughtUpOnce = false;
+        socket?.close();
+        subscribe();
         running = true;
         exited = false;
         loop = run(generation);
@@ -526,6 +582,8 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       },
       async stop() {
         running = false;
+        socket?.close();
+        socket = null;
         await loop?.catch(() => {});
         loop = null;
         exited = true;
@@ -538,6 +596,9 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
        * the current pass finish first.
        */
       async signal(signal) {
+        // A process that ends, however it ends, takes its socket with it.
+        socket?.close();
+        socket = null;
         if (signal === "SIGKILL") {
           running = false;
           exited = true;

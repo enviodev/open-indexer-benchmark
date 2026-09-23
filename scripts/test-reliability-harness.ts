@@ -257,6 +257,30 @@ const EXPECTATIONS: Expectation[] = [
     passes: ["tail-bounded", "keeps-up"],
     slow: true,
   },
+  // A block subscription that goes quiet. The correct double subscribes and
+  // polls as well, so the silence costs it nothing.
+  {
+    scenario: "subscription-stall",
+    passes: ["notices-quiet-subscription", "fills-quiet-gap"],
+    slow: true,
+  },
+  // Trusting the feed alone: it waits for an announcement that never comes,
+  // and once they resume it walks every block up to the head it is told of.
+  {
+    scenario: "subscription-stall",
+    defects: ["trusts-subscription"],
+    fails: ["notices-quiet-subscription"],
+    passes: ["fills-quiet-gap"],
+    slow: true,
+  },
+  // Indexing the announced block and nothing before it: the minute nobody
+  // announced is simply not there.
+  {
+    scenario: "subscription-stall",
+    defects: ["jumps-to-announced-head"],
+    fails: ["notices-quiet-subscription", "fills-quiet-gap"],
+    slow: true,
+  },
   // One defect per cap, and each fails only its own check. A tool stuck at
   // the range cap was never shown the result cap, so that one is not tested.
   {

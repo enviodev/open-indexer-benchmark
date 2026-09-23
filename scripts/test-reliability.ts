@@ -473,6 +473,43 @@ check(
   table
 );
 check("the headline head lag reaches the table", table.includes("(640ms)"), table);
+{
+  // The same tool, heard of its blocks by subscription: the cell has to say
+  // so, or 180ms reads as the same kind of number as a polled 640ms.
+  const subscribed: ToolReliability = {
+    ...crashed,
+    name: "Subscribed Indexer",
+    runs: crashed.runs.map((run) =>
+      run.scenario === "block-to-row"
+        ? { ...run, measures: { ...run.measures, "p50-ms": 180, subscribed: 1 } }
+        : run
+    ),
+  };
+  const score = scoreTool(subscribed);
+  const tagged = buildReliabilityTable([toReliabilityRow(score, measuresOf(score))]);
+  check(
+    "a latency heard by subscription is tagged, and a polled one is not",
+    tagged.includes("(180ms, WS)") && !table.includes("WS)"),
+    tagged
+  );
+}
+
+{
+  // Envio's WebSocket variant has to be its config and one more line, or the
+  // head-latency column measures a different project from every other one.
+  const read = (name: string) =>
+    readFileSync(resolve(import.meta.dirname, "..", "reliability", "envio", name), "utf8")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"));
+  const plain = read("config.yaml");
+  const ws = read("config.ws.yaml");
+  const without = ws.filter((line) => line.trim() !== "ws: ${ENVIO_RPC_WS}");
+  check(
+    "Envio's WebSocket config is its plain config with a ws endpoint added",
+    without.length === ws.length - 1 && without.join("\n") === plain.join("\n"),
+    ws.join("\n")
+  );
+}
 check(
   "every tool's failures sit in one collapsed block, counted on its summary line",
   (table.match(/<details>/g) ?? []).length === 1 &&
