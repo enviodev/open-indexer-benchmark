@@ -1425,9 +1425,11 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
       const look = Date.now();
       const highest = await ctx.observe.highestBlock().catch(() => 0);
       // A row seen now appeared at some point since the last look, and the
-      // midpoint is the unbiased guess. Timing it to when the answer came back
-      // instead added half the sampling interval and the query itself to
-      // every reading, about a sixth of a block on each.
+      // midpoint is the best guess polling has - a poor one: Ponder's rows,
+      // which commit a steady 460ms after their block, read anywhere from
+      // 270ms to 560ms this way, and low on the whole, because the query runs
+      // a few tens of milliseconds after the moment it is timed from. Only
+      // the fallback when the database cannot say when a row committed.
       const appearedAt = (previousLook + look) / 2;
       previousLook = look;
       while (seen.at < highest) {
