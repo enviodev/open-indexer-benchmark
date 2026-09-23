@@ -3,15 +3,15 @@ name: Reliability
 # What a tool does when things go wrong, published beside what it does when
 # they do not.
 #
-# The suite is expensive - nine scenarios, three runs each - so it runs at two
+# The suite is expensive - every scenario, three runs each - so it runs at two
 # depths, and every job is one tool and one column of the table. Nothing is
 # shared between a tool and another tool, or between a column and another
 # column: each scenario generates its own chain and its own database, and each
 # wants a machine to itself anyway, because two of them measure how long a tool
 # takes to react and a neighbour competing for CPU reads as a tool that cannot
 # keep up with the head. So a depth costs the wall clock of its slowest single
-# column rather than the sum of nine scenarios across seven tools - about
-# twenty minutes rather than the better part of an hour.
+# column rather than the sum of every scenario across seven tools - about
+# forty minutes for a pull request rather than most of a day.
 #
 # A pull request that touches the suite gets every scenario once per tool,
 # which fills every column of the table and is enough to say what each tool

@@ -19,30 +19,38 @@ check, and CI refreshes the tables.
 An indexer that is fast and wrong is not fast. These scenarios take the
 database away mid-write, rewrite the chain underneath the tool, make the node
 answer 429 to everything, and hand it values that are legal but awkward - then
-check what ended up in the database.
+check what ended up in the database. They also time how long a new block takes
+to become readable, to the millisecond, from the database's own commit times.
 
 <!-- RELIABILITY:START -->
-| tool | source | crash recovery | reorgs | rpc faults | data fidelity | head latency | overall |
+| tool | [source](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | [crash recovery](./reliability/README.md#crash-recovery) | [reorgs](./reliability/README.md#reorgs) | [rpc faults](./reliability/README.md#rpc-faults) | [data fidelity](./reliability/README.md#data-fidelity) | [head latency](./reliability/README.md#head-latency) | overall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (1) |
-| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.10.0-subgraph) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (2) |
-| [Ponder](https://ponder.sh) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (3) |
-| [Rindexer](https://rindexer.xyz) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (4) |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (5) |
-| [Subgraph](https://thegraph.com) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (6) |
-| [SubQuery](https://subquery.network) | [RPC](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | — | — | — | — | — | — (7) |
+| [Envio Indexer](https://envio.dev) | RPC | — | — | — | — | — | — |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.10.0-subgraph) | RPC | — | — | — | — | — | — |
+| [Ponder](https://ponder.sh) | RPC | — | — | — | — | — | — |
+| [Rindexer](https://rindexer.xyz) | RPC | — | — | — | — | — | — |
+| [Squid SDK](https://sqd.dev/sdk/) | RPC | — | — | — | — | — | — |
+| [Subgraph](https://thegraph.com) | RPC | — | — | — | — | — | — |
+| [SubQuery](https://subquery.network) | RPC | — | — | — | — | — | — |
 
-> **(1)** Envio Indexer - not measured yet: no run has published a result
-> **(2)** Envio Subgraph - not measured yet: no run has published a result
-> **(3)** Ponder - not measured yet: no run has published a result
-> **(4)** Rindexer - not measured yet: no run has published a result
-> **(5)** Squid SDK - not measured yet: no run has published a result
-> **(6)** Subgraph - not measured yet: no run has published a result
-> **(7)** SubQuery - not measured yet: no run has published a result
+<details>
+<summary>What failed, and what it means for you - no results published yet</summary>
+
+- **Envio Indexer** - <i>not measured yet: no run has published a result</i>
+- **Envio Subgraph** - <i>not measured yet: no run has published a result</i>
+- **Ponder** - <i>not measured yet: no run has published a result</i>
+- **Rindexer** - <i>not measured yet: no run has published a result</i>
+- **Squid SDK** - <i>not measured yet: no run has published a result</i>
+- **Subgraph** - <i>not measured yet: no run has published a result</i>
+- **SubQuery** - <i>not measured yet: no run has published a result</i>
+
+</details>
 <!-- RELIABILITY:END -->
 
-Each cell is the checks a tool passed out of the checks it was asked. Follow
-one for the list behind it, and for what is deliberately not asked yet.
+Each cell is the checks a tool passed out of the checks it was asked; the
+number in brackets is a measurement beside the score, not part of it. Every
+column heading links to the checks behind it, and the block under the table
+lists every failure with what it means for whoever runs the tool.
 
 [What every check means →](./reliability/README.md)
 

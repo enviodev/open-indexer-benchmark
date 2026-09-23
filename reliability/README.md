@@ -126,7 +126,7 @@ write down, which is not the same as a reliable tool - see
   - [The indexer is asked to stop](#graceful-shutdown)
 - [**reorgs**](#reorgs) - Whether the data still matches the chain after the chain rewrites itself, in the awkward ways it really does.
   - [The chain rewrites itself](#reorg-cases)
-- [**rpc faults**](#rpc-faults) - Whether a node that errors, stalls, rate limits or contradicts itself costs throughput or costs data.
+- [**rpc faults**](#rpc-faults) - Whether a node that errors, stalls, rate limits, contradicts itself or stops announcing new blocks costs throughput or costs data.
   - [The node stops answering](#rpc-outage)
   - [Everything wrong at once](#rpc-chaos)
   - [The node refuses the question](#rpc-limits)
@@ -134,7 +134,7 @@ write down, which is not the same as a reliable tool - see
   - [The subscription goes quiet](#subscription-stall)
 - [**data fidelity**](#data-fidelity) - Whether values that are unusual but entirely legal - an empty symbol, a log index near the 32-bit ceiling - are stored, refused, or fatal.
   - [Legal values that break things](#awkward-values)
-- [**head latency**](#head-latency) - How long after a block is published its rows are readable, and whether that holds up while the chain misbehaves.
+- [**head latency**](#head-latency) - How long after a block is published its rows are readable - over a WebSocket where the tool can subscribe to new blocks - and whether that holds up across a chain rewrite.
   - [From block to row](#block-to-row)
 
 <a id="coverage"></a>
@@ -273,7 +273,7 @@ Reported alongside the score, and not part of it:
 
 ## Rpc faults
 
-Whether a node that errors, stalls, rate limits or contradicts itself costs throughput or costs data.
+Whether a node that errors, stalls, rate limits, contradicts itself or stops announcing new blocks costs throughput or costs data.
 
 5 scenarios, 16 checks between them; the column counts all of them together.
 
@@ -395,7 +395,7 @@ Chain data is not the tidy subset a schema was designed around. A token's `symbo
 
 ## Head latency
 
-How long after a block is published its rows are readable, and whether that holds up while the chain misbehaves.
+How long after a block is published its rows are readable - over a WebSocket where the tool can subscribe to new blocks - and whether that holds up across a chain rewrite.
 
 One scenario, 4 checks.
 

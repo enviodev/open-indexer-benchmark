@@ -495,6 +495,22 @@ check("the headline head lag reaches the table", table.includes("(640ms)"), tabl
 }
 
 {
+  // Before the first publish every row is empty, and the block has to say so
+  // rather than that nothing failed.
+  const empty = buildReliabilityTable(
+    [perfect("Unrun Indexer")].map((tool) => {
+      const score = scoreTool({ ...tool, runs: [] });
+      return toReliabilityRow(score, measuresOf(score));
+    })
+  );
+  check(
+    "a table no run has published says so in its summary",
+    empty.includes("no results published yet") && !empty.includes("nothing failed"),
+    empty
+  );
+}
+
+{
   // Envio's WebSocket variant has to be its config and one more line, or the
   // head-latency column measures a different project from every other one.
   const read = (name: string) =>

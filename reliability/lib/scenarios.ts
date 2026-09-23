@@ -52,7 +52,7 @@ export const GROUPS: Group[] = [
     id: "rpc-faults",
     title: "rpc faults",
     blurb:
-      "Whether a node that errors, stalls, rate limits or contradicts itself costs throughput or costs data.",
+      "Whether a node that errors, stalls, rate limits, contradicts itself or stops announcing new blocks costs throughput or costs data.",
   },
   {
     id: "data-fidelity",
@@ -64,7 +64,7 @@ export const GROUPS: Group[] = [
     id: "head-latency",
     title: "head latency",
     blurb:
-      "How long after a block is published its rows are readable, and whether that holds up while the chain misbehaves.",
+      "How long after a block is published its rows are readable - over a WebSocket where the tool can subscribe to new blocks - and whether that holds up across a chain rewrite.",
   },
 ];
 

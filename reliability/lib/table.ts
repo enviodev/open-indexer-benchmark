@@ -344,7 +344,9 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
       failingTotal > 0
         ? `${failingTotal} failing ${failingTotal === 1 ? "check" : "checks"} across ` +
           `${toolsFailing} ${toolsFailing === 1 ? "tool" : "tools"}`
-        : "nothing failed; some checks were not tested";
+        : rows.every((row) => row.overall.asked === 0)
+          ? "no results published yet"
+          : "nothing failed; some checks were not tested";
     // GitHub renders markdown inside <details> only with a blank line after
     // the summary and before the close; without them the list comes out as
     // one run-on paragraph of dashes.

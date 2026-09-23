@@ -398,14 +398,14 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         ]);
       } catch (err) {
         const message = String((err as Error).message);
-        // The two caps a public endpoint imposes. Both say the same thing:
-        // ask for less.
-        const refusedFor = /max block range/.test(message)
-          ? "ignores-range-cap"
+        // The two caps a public endpoint imposes. Both say the same thing -
+        // ask for less - unless the double has been told to ignore that one.
+        const ignoring = /max block range/.test(message)
+          ? defects.has("ignores-range-cap")
           : /more than \d+ results/.test(message)
-            ? "ignores-result-cap"
-            : null;
-        if (refusedFor && !defects.has(refusedFor) && batch > 1) {
+            ? defects.has("ignores-result-cap")
+            : true;
+        if (!ignoring && batch > 1) {
           batch = Math.max(1, Math.floor(batch / 2));
           return;
         }

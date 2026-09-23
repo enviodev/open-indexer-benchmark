@@ -56,9 +56,9 @@ if (unknownScenarios.length > 0) {
 }
 
 // A group is a column of the published table, and it is what CI shards on: the
-// nine scenarios are independent of each other and each one wants a machine to
+// scenarios are independent of each other and each one wants a machine to
 // itself, so running a column per runner costs the wall clock of the slowest
-// column rather than the sum of all nine. Naming a group here is the same
+// column rather than the sum of all of them. Naming a group here is the same
 // selection by another name, so a shard can be reproduced by hand.
 const groups = (flags.get("group") ?? "").split(",").filter(Boolean);
 const unknownGroups = groups.filter((id) => !GROUPS.some((g) => g.id === id));
