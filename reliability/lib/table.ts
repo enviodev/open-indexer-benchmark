@@ -176,6 +176,49 @@ export function toReliabilityRow(
 }
 
 /**
+ * A fresh row, with every column its run did not report filled from the row
+ * the table last published.
+ *
+ * CI runs one job per tool per column, and a job can fail on its own. Left
+ * alone, the tool's other columns would publish and the failed one would read
+ * as a dash - an absence dressed as a result, replacing a real one. So the last
+ * published cell stands in, marked, and its tally counts towards the overall
+ * again. Only a column nothing reported is filled: one the run reached and
+ * could not measure is a result of this run, dash and all.
+ */
+export function fillUnreportedColumns(
+  fresh: ReliabilityRow,
+  prior: ReliabilityRow,
+  reported: ReadonlySet<string>
+): ReliabilityRow {
+  const cells = { ...fresh.cells };
+  let notes = [...fresh.notes];
+  let { passed, asked } = fresh.overall;
+  for (const group of GROUPS) {
+    if (reported.has(group.id)) continue;
+    const last = (prior.cells[group.id] ?? NO_VALUE).replace(/\s*⚠️\s*$/, "");
+    const tally = last.replace(/\*/g, "").match(/(\d+)\s*\/\s*(\d+)/);
+    if (!tally) continue;
+    cells[group.id] = `${last} ⚠️`;
+    passed += Number(tally[1]);
+    asked += Number(tally[2]);
+    notes = notes.filter((note) => note.group !== group.id);
+    notes.push({
+      group: group.id,
+      failing: [],
+      unmeasured: ["not reported by this run; the cell is the last published result"],
+    });
+  }
+  return {
+    ...fresh,
+    cells,
+    notes,
+    overall: { passed, asked },
+    overallCell: asked === 0 ? NO_VALUE : `**${passed} / ${asked}**`,
+  };
+}
+
+/**
  * What a failed check says under the table, and whether it said it every time.
  *
  * A check that failed on some repeats and not others is not a finding about

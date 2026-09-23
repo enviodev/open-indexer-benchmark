@@ -155,7 +155,13 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
           GRAPH_STORE_WRITE_BATCH_DURATION: "5",
         }
       );
-      proc.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     async snapshot() {
       // `subgraphs.head` is Graph Node's own record of where each deployment

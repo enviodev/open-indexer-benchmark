@@ -47,6 +47,8 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
   };
   let proc: ChildProcess | null = null;
   let done = false;
+  /** Not launched yet, so the next launch starts from an empty database. */
+  let fresh = true;
 
   return {
     dbUrl: ENVIO_DB_URL,
@@ -78,8 +80,18 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
     async launch() {
       // Run from the subgraph directory: that is the project root, and the
       // mappings' relative paths and its own graph-cli resolve from there.
-      proc = start(envio, ["start", "-r"], dir, env);
-      proc.on("exit", () => (done = true));
+      // `-r` on the first launch only: a relaunch is a restart of the same
+      // run, and resetting the database there would erase what the tool is
+      // supposed to recover.
+      proc = start(envio, ["start", ...(fresh ? ["-r"] : [])], dir, env);
+      fresh = false;
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     snapshot: createEnvioSnapshot(config),
     async stop() {

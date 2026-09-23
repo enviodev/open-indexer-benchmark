@@ -97,7 +97,13 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
         env
       );
       // The processor exits by itself once it reaches its end block.
-      processor.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = processor;
+      current.on("exit", () => {
+        if (processor === current || processor === null) done = true;
+      });
     },
     async snapshot() {
       const { events, block } = await readProgress();

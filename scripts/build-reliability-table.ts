@@ -33,6 +33,7 @@ import {
 } from "../reliability/lib/score.ts";
 import {
   buildReliabilityTable,
+  fillUnreportedColumns,
   parsePublishedReliability,
   reliabilityRowKey,
   toReliabilityRow,
@@ -41,6 +42,7 @@ import {
   RELIABILITY_START,
   type ReliabilityRow,
 } from "../reliability/lib/table.ts";
+import { SCENARIOS } from "../reliability/lib/scenarios.ts";
 import { AWAITING_PROJECT, RELIABILITY_TOOLS } from "../reliability/lib/tools.ts";
 import { TOOLS } from "../cases/lib/drivers/index.ts";
 
@@ -75,14 +77,23 @@ for (const dir of artifacts) {
   }
 }
 
+const readme = existsSync(README) ? readFileSync(README, "utf8") : "";
+const published = parsePublishedReliability(readme);
+
 for (const result of mergeToolResults(collected)) {
   const score = scoreTool(result);
   const row = toReliabilityRow(score, measuresOf(score));
-  rows.push(row);
+  // The columns this run reported for the tool: a column is reported when
+  // any of its scenarios ran, whatever they could measure.
+  const reported = new Set(
+    result.runs.map((run) => SCENARIOS.find((s) => s.id === run.scenario)?.group ?? "")
+  );
+  const prior = published.find(
+    (entry) => reliabilityRowKey(entry) === reliabilityRowKey(row) && entry.overall.asked > 0
+  );
+  rows.push(prior ? fillUnreportedColumns(row, prior, reported) : row);
   fresh.add(reliabilityRowKey(row));
 }
-
-const readme = existsSync(README) ? readFileSync(README, "utf8") : "";
 
 /** The rows this run is supposed to publish, by tool and source together. */
 const measured = new Map(
@@ -90,7 +101,7 @@ const measured = new Map(
 );
 
 // Anything measured before and not this time keeps its last published row.
-for (const prior of parsePublishedReliability(readme)) {
+for (const prior of published) {
   const key = reliabilityRowKey(prior);
   if (fresh.has(key)) continue;
   // Only a real result is worth carrying. A row of dashes is not a stale

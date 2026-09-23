@@ -165,6 +165,17 @@ export async function runOnce(
   let driver: Driver | null = null;
   let restarts = 0;
   let launched = false;
+  /**
+   * Set when the scenario runs out of time. The promise it was running cannot
+   * be cancelled, so everything it could still do to the world - start the
+   * tool again, signal it, take its database away - refuses from then on:
+   * otherwise an abandoned scenario can relaunch an indexer after the
+   * teardown below, onto the ports the next run is about to use.
+   */
+  let abandoned = false;
+  const stillRunning = () => {
+    if (abandoned) throw new Error("the scenario was abandoned when it ran out of time");
+  };
 
   try {
     chain = await startChainMock(chainSpecFor(scenario));
@@ -192,6 +203,7 @@ export async function runOnce(
       log,
       patience,
       async launch() {
+        stillRunning();
         await activeDriver.launch();
         launched = true;
         // The schema the tool is about to create is not the one the previous
@@ -203,6 +215,7 @@ export async function runOnce(
         await activeDriver.stop();
       },
       async manualRestart(reason: string) {
+        stillRunning();
         restarts++;
         log(`  restarting ${tool} by hand (${reason})`);
         await activeDriver.stop();
@@ -210,6 +223,7 @@ export async function runOnce(
         observe.reset();
       },
       async signal(signal) {
+        stillRunning();
         return (await activeDriver.signal?.(signal)) ?? false;
       },
       alive: () => launched && !activeDriver.exited(),
@@ -235,10 +249,12 @@ export async function runOnce(
         return false;
       },
       async restartDb(downMs: number) {
+        stillRunning();
         const { container, downMs: actual } = await restartDb(activeDriver.dbUrl, downMs);
         log(`  stopped ${container} for ${(actual / 1_000).toFixed(1)}s`);
       },
       async pauseDb(downMs: number) {
+        stillRunning();
         const { container, downMs: actual } = await pauseDb(activeDriver.dbUrl, downMs);
         log(`  froze ${container} for ${(actual / 1_000).toFixed(1)}s`);
       },
@@ -252,10 +268,15 @@ export async function runOnce(
       },
     };
 
+    const playing = play(ctx);
+    // An abandoned scenario still settles eventually, usually by throwing at
+    // the next thing it is no longer allowed to do. Nobody is listening.
+    playing.catch(() => {});
     const result = await withTimeout(
-      play(ctx),
+      playing,
       SCENARIO_TIMEOUT_MS,
-      `the scenario did not finish within ${SCENARIO_TIMEOUT_MS / 60_000} minutes`
+      `the scenario did not finish within ${SCENARIO_TIMEOUT_MS / 60_000} minutes`,
+      () => (abandoned = true)
     );
     // A scenario that returned early leaves its remaining checks unasked
     // rather than unmentioned: a missing check would silently shrink the
@@ -342,11 +363,20 @@ function fillUnasked(
   return { checks, measures: result.measures };
 }
 
-function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
-  return Promise.race([
-    work,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
-  ]);
+function withTimeout<T>(
+  work: Promise<T>,
+  ms: number,
+  message: string,
+  onTimeout: () => void
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout();
+      reject(new Error(message));
+    }, ms);
+  });
+  return Promise.race([work, expiry]).finally(() => clearTimeout(timer));
 }
 
 // ── Merging the repeats ────────────────────────────────────────────────
@@ -475,13 +505,24 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
         if (values.length > 1) console.log(`    ${measure}: ${values.join(", ")}`);
       }
       runs.push(merged);
+      // Printed after every scenario rather than once per tool, with the
+      // scenarios still to come as unmeasured: a job that runs out of time
+      // then publishes what it finished instead of nothing, and cannot
+      // publish a flattering partial score, because what it did not reach is
+      // counted as not tested. The summary job reads the last line.
+      const pending = options.scenarios
+        .slice(runs.length)
+        .map((id) => ({
+          scenario: id,
+          ...allUnmeasured(id, "the job ran out of time before this scenario"),
+        }));
+      console.log(
+        `RELIABILITY_RESULT ${JSON.stringify({ ...presentation(tool), runs: [...runs, ...pending] })}`
+      );
     }
 
     const result: ToolReliability = { ...presentation(tool), runs };
     results.push(result);
-    // One line per tool, in the shape the summary job parses - the same
-    // contract the throughput jobs publish their results through.
-    console.log(`RELIABILITY_RESULT ${JSON.stringify(result)}`);
     options.emit?.(result);
   }
   return results;

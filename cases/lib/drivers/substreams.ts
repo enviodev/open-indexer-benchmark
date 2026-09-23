@@ -141,7 +141,13 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
         env
       );
       // The sink stops when the range drains, and the process follows.
-      sink.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = sink;
+      current.on("exit", () => {
+        if (sink === current || sink === null) done = true;
+      });
     },
     async snapshot() {
       const { events, block } = await readProgress();

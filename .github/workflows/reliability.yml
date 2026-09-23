@@ -146,10 +146,13 @@ jobs:
           - rpc-faults
           - data-fidelity
           - head-latency
-    # At most three scenarios in a job, each with a 45-minute backstop of its
-    # own. A healthy tool is far inside this; it is here so one that hangs
-    # cannot hold a runner all day.
-    timeout-minutes: 150
+    # At most five scenarios in a job - the rpc-faults column - three runs
+    # each on the full suite, and every scenario has a 45-minute backstop of
+    # its own. A healthy tool is far inside this; it is here so one that hangs
+    # cannot hold a runner all day. The run step stops first, so the upload
+    # below still has time, and what it uploads says how far the job got: the
+    # runner prints a result after every scenario, with the rest unmeasured.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
         with:
@@ -188,6 +191,7 @@ jobs:
             ARGS+=("--scenarios=$SCENARIOS")
           fi
           node reliability/run.ts "${ARGS[@]}" 2>&1 | tee reliability-output.txt
+        timeout-minutes: 220
 
       - name: Upload the result
         if: always()

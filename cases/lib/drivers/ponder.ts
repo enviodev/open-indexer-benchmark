@@ -65,7 +65,13 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock, wsUrl })
         dir,
         env
       );
-      proc.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     async snapshot() {
       const [{ events }, checkpoint] = await Promise.all([

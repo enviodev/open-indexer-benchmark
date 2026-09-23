@@ -65,7 +65,13 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     },
     async launch() {
       proc = start("docker", ["compose", "up", "--remove-orphans"], dir, env);
-      proc.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     async snapshot() {
       // `_metadata` is the same key/value table the GraphQL `_metadata` field
@@ -104,16 +110,27 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     // The only indexer here that runs inside a container, so the signal has to
     // reach the container rather than the foreground `compose up` that started
     // it: SIGKILLing that process would leave the node indexing away inside a
-    // container the harness had already written off as dead. Killing the
-    // service brings `compose up` down with it, which is what marks the
-    // indexer exited.
+    // container the harness had already written off as dead.
+    //
+    // Nor does the container stopping end `compose up`, which stays attached
+    // to postgres - so the indexer is marked exited when its own container
+    // stops, whenever that is. A SIGTERM it ignores never gets there, which is
+    // the finding the graceful-shutdown scenario is looking for.
     async signal(signal) {
       try {
         await exec("docker", ["compose", "kill", "-s", signal, INDEXER_SERVICE], dir, env);
-        return true;
       } catch {
         return false;
       }
+      const signalled = proc;
+      // `compose wait` exits with the container's own exit code - 137 after a
+      // SIGKILL - so a rejection means stopped just as much as a success does.
+      exec("docker", ["compose", "wait", INDEXER_SERVICE], dir, env)
+        .catch(() => {})
+        .then(() => {
+          if (proc === signalled) done = true;
+        });
+      return true;
     },
     exited: () => done,
   };

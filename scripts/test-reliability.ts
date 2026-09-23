@@ -38,6 +38,7 @@ import {
 } from "../reliability/lib/score.ts";
 import {
   buildReliabilityTable,
+  fillUnreportedColumns,
   parsePublishedReliability,
   reliabilityRowKey,
   toReliabilityRow,
@@ -629,6 +630,41 @@ check(
   buildReliabilityTable(carriedBack).includes("⚠️"),
   buildReliabilityTable(carriedBack)
 );
+
+{
+  // One column's job failed: the rest of the tool is fresh, and the missing
+  // column is the last published cell rather than a dash.
+  const lastPublished = parsePublishedReliability(
+    `${RELIABILITY_START}\n${buildReliabilityTable([
+      toReliabilityRow(scoreTool(perfect("Partial")), {}),
+    ])}\n${RELIABILITY_END}`
+  )[0];
+  const crashOnly = perfect("Partial");
+  crashOnly.runs = crashOnly.runs.filter((run) =>
+    scenariosIn("crash-recovery").some((scenario) => scenario.id === run.scenario)
+  );
+  const partial = toReliabilityRow(scoreTool(crashOnly), {});
+  const filled = fillUnreportedColumns(partial, lastPublished, new Set(["crash-recovery"]));
+  const reorgCells = filled.cells["reorgs"];
+  check(
+    "a column the run did not report keeps its last published cell, marked",
+    reorgCells.endsWith("⚠️") &&
+      !reorgCells.includes("—") &&
+      filled.overall.asked === ALL_CHECKS &&
+      filled.overall.passed === ALL_CHECKS,
+    JSON.stringify([filled.cells, filled.overall])
+  );
+  const reached = fillUnreportedColumns(
+    partial,
+    lastPublished,
+    new Set(GROUPS.map((group) => group.id))
+  );
+  check(
+    "and a column the run reached but could not measure stays a dash",
+    reached.cells["reorgs"] === "—" && reached.overall.asked === CRASH_CHECKS,
+    JSON.stringify(reached.cells)
+  );
+}
 
 check(
   "every column heading links to its own section",

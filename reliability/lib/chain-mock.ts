@@ -907,11 +907,19 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
           // a replica that is a second behind, and everything else it answers
           // is fine. eth_getLogs is deliberately left alone, so the tool is
           // told about logs in a block it is then told does not exist.
-          const answers = entries.map((entry) => ({
-            jsonrpc: "2.0",
-            id: entry?.id ?? null,
-            result: BLOCK_LOOKUPS.includes(entry?.method ?? "") ? null : handle(entry),
-          }));
+          const answers = entries.map((entry) => {
+            const id = entry?.id ?? null;
+            if (BLOCK_LOOKUPS.includes(entry?.method ?? "")) return { jsonrpc: "2.0", id, result: null };
+            // Everything else is answered as it would be without the fault,
+            // errors included: a capped range or an unserved method thrown
+            // from here would take the whole harness down with it.
+            try {
+              return { jsonrpc: "2.0", id, result: handle(entry) };
+            } catch (err) {
+              const code = err instanceof RpcFault ? err.code : -32_603;
+              return { jsonrpc: "2.0", id, error: { code, message: (err as Error).message } };
+            }
+          });
           res
             .writeHead(200, JSON_HEADERS)
             .end(JSON.stringify(Array.isArray(payload) ? answers : answers[0]));

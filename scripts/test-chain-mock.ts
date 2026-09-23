@@ -444,6 +444,20 @@ try {
     socket.close();
   }
 
+  // ── A fault that answers some methods still answers errors as errors ──
+  //
+  // The missing-block fault passes everything but block lookups through to
+  // the ordinary handler, and that handler throws for a method it does not
+  // serve. Thrown from inside the fault, that took the process down.
+  mock.control.fail({ kind: "missing" });
+  const unserved = await rpc("eth_notAMethod").catch((err: Error) => ({ thrown: err.message }));
+  mock.control.fail(null);
+  check(
+    "a method the chain does not serve is an error under the missing-block fault too",
+    unserved?.error?.code === -32_601,
+    JSON.stringify(unserved)
+  );
+
   // ── An address that is not an address is refused at the door ──
   //
   // The chain served a 41-digit address for a while, because nothing between
