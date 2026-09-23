@@ -207,7 +207,12 @@ jobs:
     # A tool whose job failed is a result in its own right: the table carries
     # its last published row forward and marks it stale, which is the same
     # contract the throughput tables have.
-    if: always()
+    #
+    # Not `always()`: a run superseded by a newer push has its tool jobs
+    # cancelled, and an `always()` job still starts - inside it `cancelled()`
+    # reads false, so the comment step's guard let a table of "not part of
+    # this run" replace the last complete one. A cancelled run says nothing.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
