@@ -45,6 +45,17 @@
 //   trusts-subscription given a WebSocket, takes the head from its newHeads
 //                       subscription alone and never asks, so a feed that
 //                       goes quiet leaves it waiting for ever
+//   no-dedupe           writes a log it is handed twice in one response twice
+//                       over in the balances - the insert absorbs the second
+//                       row, the arithmetic does not
+//   ignores-sigterm     carries on indexing through a SIGTERM, until the
+//                       orchestrator gives up and kills it
+//   rolls-back-on-lower-head
+//                       takes a head lower than its own for a rewrite, and
+//                       deletes everything above it
+//   refuses-deep-reorg  stops indexing, and says so on every attempt, when a
+//                       reorg goes deeper than it keeps hashes for - the
+//                       Ponder and Squid SDK answer, with the process left up
 //   jumps-to-announced-head
 //                       given a WebSocket, indexes the block it is told about
 //                       rather than everything up to it, so blocks it was
@@ -110,7 +121,11 @@ export type Defect =
   | "die-on-rpc-error"
   | "slow-head"
   | "trusts-subscription"
-  | "jumps-to-announced-head";
+  | "jumps-to-announced-head"
+  | "no-dedupe"
+  | "ignores-sigterm"
+  | "rolls-back-on-lower-head"
+  | "refuses-deep-reorg";
 
 export interface FakeOptions {
   /** Where it writes. A real database: the harness's SQL has to be exercised. */
@@ -119,6 +134,9 @@ export interface FakeOptions {
   /** Blocks per eth_getLogs request, halved whenever the endpoint refuses one. */
   batchBlocks?: number;
 }
+
+/** How far back refuses-deep-reorg will walk: Ponder's mainnet window, near enough. */
+const DEEP_WINDOW = 64;
 
 const SELECTOR_SYMBOL = "0x95d89b41";
 const SELECTOR_NAME = "0x06fdde03";
@@ -205,7 +223,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       const metadata: string[] = [];
       for (const log of logs) {
         const identity = `${BigInt(log.blockNumber)}-${BigInt(log.logIndex)}`;
-        if (seen.has(identity)) continue;
+        if (seen.has(identity) && !defects.has("no-dedupe")) continue;
         seen.add(identity);
         if (log.topics[0] === METADATA_TOPIC) {
           if (defects.has("drops-second-event")) continue;
@@ -309,6 +327,9 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         if (!stored) break;
         const live = await rpc("eth_getBlockByNumber", [hex(height), false]);
         if (live && live.hash === stored) break;
+        if (defects.has("refuses-deep-reorg") && checkpoint - height >= DEEP_WINDOW) {
+          throw new Error(`unrecoverable reorg deeper than ${DEEP_WINDOW} blocks`);
+        }
         height--;
       }
       if (height < checkpoint) await rollbackTo(height);
@@ -380,6 +401,16 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       ) {
         // Straight to the block it was told about.
         checkpoint = head - 1;
+      }
+      if (head < checkpoint && defects.has("rolls-back-on-lower-head")) {
+        // Everything above the head it was just told about, gone - as though
+        // a replica answering from behind were the chain rewriting itself.
+        await sqlAlive(
+          gen,
+          `BEGIN; DELETE FROM transfer WHERE block_number > ${head}; ` +
+            `UPDATE progress SET block = ${head}; COMMIT`
+        );
+        checkpoint = head;
       }
       if (head <= checkpoint) {
         caughtUpOnce = true;
@@ -515,7 +546,13 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
           if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] ${err}`);
           await sleep(1_000);
         }
-        await sleep(defects.has("slow-head") ? 5_000 : 200);
+        // No pause between batches for checkpoint-ahead: the kill arrives a
+        // poll after a write lands, and a pause right after the write is a
+        // pause outside the window the defect is about - three kills could all
+        // land in it, and a defect the harness exists to catch would pass.
+        await sleep(
+          defects.has("slow-head") ? 5_000 : defects.has("checkpoint-ahead") ? 0 : 200
+        );
       }
     }
 
@@ -616,6 +653,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
           ).catch(() => {});
           return true;
         }
+        if (signal === "SIGTERM" && defects.has("ignores-sigterm")) return true;
         running = false;
         await loop?.catch(() => {});
         loop = null;

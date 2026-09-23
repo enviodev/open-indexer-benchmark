@@ -331,7 +331,7 @@ export const SCENARIOS: Scenario[] = [
         label: "stops, rather than carrying on, after a rewrite deeper than it can undo",
         failing: "Wrong data: carries on after a chain rewrite deeper than it can undo, instead of stopping",
         detail:
-          "Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it.",
+          "Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Stopping means writing nothing more on top of rows it cannot undo: exiting counts, and so does staying up and refusing every new block, which is what Ponder and the Squid SDK do. Carrying on with data it can no longer reconcile is the failing outcome. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it.",
       },
       {
         id: "while-down",
@@ -655,7 +655,7 @@ export const SCENARIOS: Scenario[] = [
         label: "gets back to normal speed after a chain rewrite",
         failing: "Stale reads: stays slow for a long time after a chain rewrite",
         detail:
-          "The last four blocks are replaced by a fork one block longer, as a winning fork is. The tool has a minute to reconcile it, and the next fifteen blocks must then reach the database with a median latency no worse than twice what it managed before, or one block time. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record.",
+          "The last four blocks are replaced by a fork one block longer, as a winning fork is. The tool has a minute to write past it, and the next fifteen blocks must then reach the database with a median latency no worse than twice what it managed before, or one block time. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record. Whether the rewrite was undone is not asked here: that is the reorgs column's check, and asking it twice would score one defect twice.",
       },
     ],
     measures: [

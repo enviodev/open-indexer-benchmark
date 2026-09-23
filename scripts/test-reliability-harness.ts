@@ -281,6 +281,36 @@ const EXPECTATIONS: Expectation[] = [
     fails: ["notices-quiet-subscription", "fills-quiet-gap"],
     slow: true,
   },
+  // A SIGTERM that is taken as a suggestion: the orchestrator's fifteen
+  // seconds run out, and the kill that follows leaves consistent state.
+  {
+    scenario: "graceful-shutdown",
+    defects: ["ignores-sigterm"],
+    fails: ["exits-clean"],
+    passes: ["flushes"],
+  },
+  // Logs served twice in one response, written twice over in the balances.
+  {
+    scenario: "rpc-inconsistency",
+    defects: ["no-dedupe"],
+    fails: ["duplicate-delivery"],
+    passes: ["head-goes-backwards"],
+    slow: true,
+  },
+  // A replica answering from behind, taken for the chain rewriting itself.
+  {
+    scenario: "rpc-inconsistency",
+    defects: ["rolls-back-on-lower-head"],
+    fails: ["head-goes-backwards"],
+    slow: true,
+  },
+  // A reorg past what it keeps, refused with the process left up and nothing
+  // more indexed. That is stopping, not carrying on, and passes as one.
+  {
+    scenario: "reorg-cases",
+    defects: ["refuses-deep-reorg"],
+    passes: ["shallow", "while-down", "storm", "during-backfill", "deep"],
+  },
   // One defect per cap, and each fails only its own check. A tool stuck at
   // the range cap was never shown the result cap, so that one is not tested.
   {
@@ -302,6 +332,15 @@ const EXPECTATIONS: Expectation[] = [
   // the scenario rewrote the head and then stood still.
   {
     scenario: "block-to-row",
+    passes: ["median-under-block-time", "tail-bounded", "keeps-up", "recovers-after-reorg"],
+    slow: true,
+  },
+  // A reorg it never undoes is the reorgs column's finding. Asked again here,
+  // it failed head latency too, for one defect, while the blocks after the
+  // rewrite arrived as fast as the ones before it.
+  {
+    scenario: "block-to-row",
+    defects: ["no-reorg-handling"],
     passes: ["median-under-block-time", "tail-bounded", "keeps-up", "recovers-after-reorg"],
     slow: true,
   },

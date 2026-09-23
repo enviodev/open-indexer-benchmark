@@ -872,11 +872,26 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
   // this benchmark went ten blocks past the endpoint's declared finality and
   // found Ponder carrying on with a hundred and forty-eight rows from
   // orphaned blocks, which is the finding this depth exists to reach.
+  const reachedBefore = await ctx.observe.highestBlock().catch(() => 0);
   const deep = await reconciles("eighty-block reorg", () =>
     ctx.chain.reorg({ depth: DEEP_REORG, logs: "changed" })
   );
+  // Refusing does not have to mean exiting. Ponder and the Squid SDK both
+  // stay up, log the reorg as unrecoverable on every block, and index
+  // nothing more, which leaves the orphaned rows in place exactly as an exit
+  // would. What separates that from carrying on is whether anything was
+  // written on top of them, so a tool that never got past the head it had
+  // before the rewrite stopped, whatever its process is doing.
+  const reachedAfter = await ctx.observe.highestBlock().catch(() => Infinity);
+  const halted = reachedAfter <= reachedBefore;
   if (deep.status === "pass") {
     checks["deep"] = deep;
+  } else if (ctx.alive() && halted) {
+    checks["deep"] = pass;
+    ctx.log(
+      `  ${DEEP_REORG}-block reorg: the indexer stopped indexing at block ${reachedAfter} ` +
+        `rather than carry on`
+    );
   } else if (!ctx.alive()) {
     // It stopped rather than going on with data it could not reconcile, which
     // is the honest answer to a reorg past what it can undo.
@@ -1623,13 +1638,26 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
   // as a real one does: a tool on a subscription reads a still chain as a
   // dead feed. Every tool here has just shown it keeps up with a block every
   // two seconds, so a live chain asks nothing more of it than the rewrite.
+  //
+  // What it waits for is the tool writing past the new tip, not its data
+  // agreeing with the chain. Whether the rewrite was undone is the reorgs
+  // column's question; asked here too, a tool that never undoes one failed
+  // this check for the same defect, and head latency stopped measuring speed.
   ctx.chain.reorg({ depth: 4, extend: 1, logs: "changed" });
-  const reconciled = await synced(ctx, 60_000, { heartbeat: "live" });
+  const newTip = ctx.chain.head();
+  const live = startLiveChain(ctx);
+  const reconciled = await ctx
+    .waitFor(
+      "writing past the rewrite",
+      async () => (await ctx.observe.highestBlock().catch(() => 0)) >= newTip,
+      60_000
+    )
+    .finally(() => live.stop());
   const after = await watch(15, ctx.chain.head());
   const afterSorted = [...after.latencies].sort((a, b) => a - b);
   const p50After = afterSorted[Math.floor(afterSorted.length / 2)];
   checks["recovers-after-reorg"] = !reconciled
-    ? fail("had not reconciled the reorg a minute later")
+    ? fail("had written nothing past the rewrite a minute later")
     : after.latencies.length === 0
       ? na("no block reached the database in the window after the reorg")
       : verdict(
