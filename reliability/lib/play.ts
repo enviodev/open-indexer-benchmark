@@ -221,9 +221,13 @@ async function compare(ctx: Ctx, upTo?: number, from?: number): Promise<Comparis
 async function synced(
   ctx: Ctx,
   timeoutMs = ctx.patience.syncMs,
-  { heartbeat = true, judge = () => compare(ctx) } = {}
+  {
+    heartbeat = true,
+    judge = () => compare(ctx),
+  }: { heartbeat?: boolean | "live"; judge?: () => Promise<Comparison> } = {}
 ): Promise<boolean> {
-  const beat = heartbeat ? startHeartbeat(ctx) : null;
+  const beat =
+    heartbeat === "live" ? startLiveChain(ctx) : heartbeat ? startHeartbeat(ctx) : null;
   try {
     return await ctx.waitFor(
       "catching up with the chain",
@@ -373,6 +377,25 @@ function startHeartbeat(ctx: Ctx) {
       clearInterval(timer);
     },
   };
+}
+
+/**
+ * A chain that keeps producing a block every two seconds for as long as the
+ * wait lasts, with no bound.
+ *
+ * For the scenarios that hand a tool a WebSocket. A tool following the head
+ * by subscription learns of blocks only when one is announced, so the
+ * bounded heartbeat - twenty blocks and done - leaves one that took longer
+ * than a minute to backfill with nothing ever announced again: Ponder, which
+ * spends a minute of its backfill retrying a token's empty symbol(), went
+ * live on a chain that had gone still and waited there for good. Over HTTP it
+ * would have polled and found the head; over a socket it is told, and a real
+ * chain always has something to tell.
+ */
+function startLiveChain(ctx: Ctx) {
+  const timer = setInterval(() => ctx.chain.advance(1), 2_000);
+  timer.unref?.();
+  return { stop: () => clearInterval(timer) };
 }
 
 /**
@@ -1188,7 +1211,7 @@ export async function subscriptionStall(ctx: Ctx): Promise<ScenarioResult> {
 
   ctx.chain.advance(100);
   await ctx.launch();
-  if (!(await synced(ctx))) {
+  if (!(await synced(ctx, ctx.patience.syncMs, { heartbeat: "live" }))) {
     return {
       checks: {
         "notices-quiet-subscription": na("the tool never caught up, so it was never at the head"),
@@ -1474,9 +1497,10 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
 
   ctx.chain.advance(100);
   await ctx.launch();
-  // No heartbeat: this scenario publishes its own blocks and times them, and a
-  // second source of blocks would be measuring the harness.
-  if (!(await synced(ctx, ctx.patience.syncMs, { heartbeat: false }))) {
+  // A live chain to catch up with, stopped before the timed window opens: the
+  // window publishes its own blocks and times them, and a second source of
+  // blocks during it would be measuring the harness.
+  if (!(await synced(ctx, ctx.patience.syncMs, { heartbeat: "live" }))) {
     return {
       checks: {
         "median-under-block-time": na("the tool never caught up, so it was never at the head"),

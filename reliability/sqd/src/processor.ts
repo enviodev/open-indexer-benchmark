@@ -54,7 +54,13 @@ export const processor = new EvmBatchProcessor()
   // otherwise, which on this chain's two-second blocks is a median of two and
   // a half seconds before it has even seen a block. An operator on a fast
   // chain sets this; one second is what Ponder polls at out of the box.
-  .setRpcDataIngestionSettings({ headPollInterval: 1_000 })
+  //
+  // newHeadTimeout is the same kind of setting for a WebSocket endpoint: how
+  // long a subscription may go without announcing a block before the
+  // processor resets the connection. Its default is never, and a subscription
+  // that goes quiet without closing then stops the processor for good - which
+  // is what its documentation sets this for. Five blocks of silence.
+  .setRpcDataIngestionSettings({ headPollInterval: 1_000, newHeadTimeout: 10_000 })
   .setFinalityConfirmation(10)
   .setFields({
     log: { transactionHash: true },
