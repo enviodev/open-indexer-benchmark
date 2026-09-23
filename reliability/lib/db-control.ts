@@ -128,3 +128,28 @@ export async function databaseUp(dbUrl: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Have the tool's database record when every transaction committed, so a
+ * row's arrival can be read from the row rather than caught by polling.
+ *
+ * `track_commit_timestamp` takes a restart, which is why it is switched on
+ * before the tool starts rather than while it runs. A database that already
+ * has it on is left alone. The container shares the host's clock, so a
+ * commit time is directly comparable with a block's publication time taken
+ * in this process.
+ *
+ * Returns whether the setting is on. Anything that stops it - a database that
+ * is not in a container, a user that cannot run ALTER SYSTEM - leaves the
+ * scenario to fall back on polling, not to fail.
+ */
+export async function trackCommitTimes(dbUrl: string): Promise<boolean> {
+  const isOn = async () =>
+    (await psql(dbUrl, "SHOW track_commit_timestamp")).trim() === "on";
+  if (await isOn()) return true;
+  await psql(dbUrl, "ALTER SYSTEM SET track_commit_timestamp = on");
+  const container = await containerFor(dbUrl);
+  await run("docker", ["restart", container]);
+  await waitPg(dbUrl, "SELECT 1", 60_000);
+  return isOn();
+}

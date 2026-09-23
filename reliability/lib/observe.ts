@@ -337,6 +337,36 @@ export function observer(sql: SqlRunner) {
       });
     },
 
+    /**
+     * When each block's transfers became readable, in epoch milliseconds, for
+     * blocks above `after`. Read from Postgres's own record of when each row's
+     * transaction committed, which is the moment a reader could first see it -
+     * exact, where polling only brackets it.
+     *
+     * The latest commit among a block's rows, since the block is readable
+     * when all of it is. Null when the database is not recording commit times
+     * or the rows cannot be read that way, such as through a view; a block
+     * whose rows predate the setting is simply absent.
+     */
+    commitTimes(after: number): Promise<Map<number, number> | null> {
+      return withSchema(async ({ transfer }) => {
+        const where = whereClause(transfer.predicate);
+        const out = await sql(
+          `SELECT ${transfer.block}::numeric::text, ` +
+            `(extract(epoch FROM max(pg_xact_commit_timestamp(xmin))) * 1000)::text ` +
+            `FROM ${transfer.qualified}` +
+            `${where ? `${where} AND` : " WHERE"} ${transfer.block}::numeric > ${after} ` +
+            `GROUP BY 1`
+        );
+        const times = new Map<number, number>();
+        for (const line of out.split("\n").map((l) => l.trim()).filter(Boolean)) {
+          const [block, ms] = line.split("|");
+          if (ms) times.set(Number(block), Number(ms));
+        }
+        return times;
+      }).catch(() => null);
+    },
+
     /** The highest block the tool has written a row for, or 0. */
     highestBlock(): Promise<number> {
       return withSchema(async ({ transfer }) => {

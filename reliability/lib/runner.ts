@@ -37,7 +37,12 @@ import {
   type ChainSpec,
 } from "./chain-mock.ts";
 import { NO_END_BLOCK, RELIABILITY_CASE, baseChainSpec } from "./case.ts";
-import { NoDatabaseContainer, pauseDatabase, restartDatabase } from "./db-control.ts";
+import {
+  NoDatabaseContainer,
+  pauseDatabase,
+  restartDatabase,
+  trackCommitTimes,
+} from "./db-control.ts";
 import { ensureEnvioDb, needsEnvioDb } from "./envio-db.ts";
 import { observer } from "./observe.ts";
 import {
@@ -233,6 +238,14 @@ export async function runOnce(
       async pauseDb(downMs: number) {
         const { container, downMs: actual } = await pauseDb(activeDriver.dbUrl, downMs);
         log(`  froze ${container} for ${(actual / 1_000).toFixed(1)}s`);
+      },
+      async trackCommitTimes() {
+        try {
+          return await trackCommitTimes(activeDriver.dbUrl);
+        } catch (err) {
+          log(`  commit timestamps unavailable: ${(err as Error).message}`);
+          return false;
+        }
       },
     };
 

@@ -136,6 +136,12 @@ export interface Ctx {
    * is no container.
    */
   pauseDb(downMs: number): Promise<void>;
+  /**
+   * Have the tool's database record when each transaction committed. Called
+   * before the tool starts, since it takes a restart. False when it could
+   * not be arranged.
+   */
+  trackCommitTimes(): Promise<boolean>;
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────
@@ -1382,6 +1388,13 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
   const BLOCK_MS = 2_000;
   const BLOCKS = 90;
 
+  // Latency is read from the database's own commit times where it can be:
+  // exact to the moment a row became readable, where a poll only brackets it
+  // to within its interval - a quarter of a second, an eighth of the block
+  // time this scenario is judged against.
+  const exact = await ctx.trackCommitTimes();
+  ctx.log(`  timing ${exact ? "from commit timestamps" : "by polling every 250ms"}`);
+
   ctx.chain.advance(100);
   await ctx.launch();
   // No heartbeat: this scenario publishes its own blocks and times them, and a
@@ -1401,6 +1414,8 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
    */
   async function watch(blocks: number, from: number) {
     const seen = { at: from, latencies: [] as number[], worstLag: 0, longestLagMs: 0 };
+    /** Each block's latency as polling saw it, to be replaced by the exact one. */
+    const sampled = new Map<number, number>();
     let lagSince: number | null = null;
     const producing = produce(ctx, blocks, BLOCK_MS);
     const until = performance.now() + (blocks + 5) * BLOCK_MS;
@@ -1422,7 +1437,7 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
         // the backfill's were all published before it started. A row cannot
         // appear before its block, so the midpoint is floored there.
         if (block?.publishedAtMs) {
-          seen.latencies.push(Math.max(0, appearedAt - block.publishedAtMs));
+          sampled.set(seen.at, Math.max(0, appearedAt - block.publishedAtMs));
         }
       }
       const lag = ctx.chain.head() - highest;
@@ -1437,6 +1452,24 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
     if (lagSince !== null) {
       seen.longestLagMs = Math.max(seen.longestLagMs, performance.now() - lagSince);
     }
+    // The poll above decides which blocks arrived in the window and how far
+    // behind the tool ran; when the database knows when each one committed,
+    // that is the latency. A block it has no time for keeps the polled one.
+    const committed = exact ? await ctx.observe.commitTimes(from) : null;
+    let timed = 0;
+    for (const [height, polled] of sampled) {
+      const at = committed?.get(height);
+      const publishedAt = ctx.chain.blockAt(height)?.publishedAtMs ?? 0;
+      if (at !== undefined) timed++;
+      seen.latencies.push(at !== undefined ? Math.max(0, at - publishedAt) : polled);
+    }
+    const median = (values: number[]) =>
+      [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+    ctx.log(
+      `  ${timed} of ${sampled.size} blocks timed from commit timestamps; median ` +
+        `${Math.round(median(seen.latencies))}ms, polling alone read ` +
+        `${Math.round(median([...sampled.values()]))}ms`
+    );
     return seen;
   }
 
