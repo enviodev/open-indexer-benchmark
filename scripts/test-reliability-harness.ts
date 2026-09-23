@@ -192,6 +192,28 @@ const EXPECTATIONS: Expectation[] = [
   },
   { scenario: "process-kill", passes: ["resumes", "no-gap", "no-double-apply", "atomic-batch"] },
   { scenario: "graceful-shutdown", passes: ["exits-clean", "flushes"] },
+  // The same, stopped halfway through the range - which is where every real
+  // tool slower than this double is when the signal lands. Committing five
+  // blocks at a time is what keeps it there. Without this case the check was
+  // only ever put to a tool that had already finished, and it marked down
+  // every tool that had not: the unfinished half of the range read as wrong
+  // balances, and whether a tool passed was decided by how fast it was.
+  {
+    scenario: "graceful-shutdown",
+    batchBlocks: 5,
+    passes: ["exits-clean", "flushes"],
+  },
+  // And a tool that does leave bad state behind still fails it: every
+  // transfer right, and the last batch's balance changes applied twice on
+  // the way out. Stopped mid-range too, so the horizon the check now uses
+  // is the thing under test.
+  {
+    scenario: "graceful-shutdown",
+    batchBlocks: 5,
+    defects: ["double-flush-on-stop"],
+    passes: ["exits-clean"],
+    fails: ["flushes"],
+  },
   { scenario: "rpc-limits", passes: ["splits-range", "splits-results", "recovers-width"] },
   {
     scenario: "db-restart",

@@ -578,14 +578,36 @@ export async function gracefulShutdown(ctx: Ctx): Promise<ScenarioResult> {
 
   // Whatever it wrote has to be consistent with the chain, whether it stopped
   // on the signal or had to be killed: the next start reads this state.
+  //
+  // Consistent up to where it got, which is not the end of the range. The
+  // signal is sent a few dozen transfers in, on purpose, so most tools are
+  // stopped halfway - and comparing against the whole chain read the half it
+  // never reached as balances it had wrong. Every account in the unindexed
+  // half "held 0" where the chain implied something, and whether a tool
+  // passed came down to whether it had finished the range before the signal
+  // landed: Envio Subgraph passed on a fast runner and failed on a slow one
+  // with the same code, and Ponder, slower still, failed every time. None of
+  // them had a wrong row, a duplicate or a torn balance anywhere.
+  //
+  // So the horizon is the last block the tool wrote a row for. Below it, a
+  // missing row is a hole the next start will not come back for and a wrong
+  // balance is a batch half-applied, and both are what this check is for.
+  // Above it is only the part of the range it was stopped before.
+  //
+  // One reading, not a settled one: the tool has been stopped, nothing it
+  // holds is going to change, and waiting for it to agree is two minutes of
+  // asking a stopped process to do something.
   await ctx.stopTool();
-  const result = await settled(ctx);
+  const horizon = await ctx.observe.highestBlock().catch(() => 0);
+  if (horizon === 0) {
+    checks["flushes"] = na("the tool wrote nothing before it was stopped");
+    return { checks, measures: {} };
+  }
+  const result = await compare(ctx, horizon);
   checks["flushes"] = verdict(
-    result.wrong.length === 0 &&
-      result.duplicates === 0 &&
-      result.extra.length === 0 &&
-      (result.balances === null || result.balances.length === 0),
-    `the state left behind does not match the chain: ${result.summary}`
+    result.clean,
+    `the state left behind does not match the chain up to block ${horizon}, ` +
+      `the last one it wrote: ${result.summary}`
   );
   return { checks, measures: {} };
 }

@@ -21,6 +21,11 @@
 //   double-apply        applies a batch's balance changes twice on restart,
 //                       the classic replay bug an append-only table hides
 //   die-on-db-error     exits the moment a query fails, instead of retrying
+//   double-flush-on-stop
+//                       on SIGTERM, flushes its last batch of balance changes
+//                       a second time on the way out - a write-behind cache
+//                       emptied twice. Every transfer is right and the
+//                       balances it leaves for the next start are not
 //   stuck-after-db-error
 //                       survives a failed query and never indexes another row,
 //                       for good: the state is written down, so starting it
@@ -81,6 +86,7 @@ export type Defect =
   | "checkpoint-ahead"
   | "double-apply"
   | "die-on-db-error"
+  | "double-flush-on-stop"
   | "drops-second-event"
   | "stuck-after-db-error"
   | "no-sanitise";
@@ -113,6 +119,8 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
     let running = false;
     /** Indexing nothing from here on, restart or no restart. */
     let stuck = false;
+    /** The balance changes of the batch most recently written. */
+    let lastBalances = new Map<string, bigint>();
     let exited = false;
     let checkpoint = START_BLOCK - 1;
     /**
@@ -207,6 +215,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         );
       }
       if (values.length > 0) {
+        lastBalances = balances;
         statements.push(
           `INSERT INTO transfer (id, block_number, log_index, "from", "to", amount) ` +
             `VALUES ${values.join(",")} ON CONFLICT (id) DO NOTHING`
@@ -518,6 +527,15 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         running = false;
         await loop?.catch(() => {});
         loop = null;
+        if (defects.has("double-flush-on-stop") && lastBalances.size > 0) {
+          const again = [...lastBalances]
+            .map(([address, delta]) => `('${address}', ${delta})`)
+            .join(",");
+          await sql(
+            `INSERT INTO account (id, balance) VALUES ${again} ` +
+              `ON CONFLICT (id) DO UPDATE SET balance = account.balance + EXCLUDED.balance`
+          ).catch(() => {});
+        }
         exited = true;
         return true;
       },
