@@ -53,6 +53,11 @@
 //   rolls-back-on-lower-head
 //                       takes a head lower than its own for a rewrite, and
 //                       deletes everything above it
+//   stuck-after-rpc-error
+//                       the same as stuck-after-db-error, set off by the node
+//                       instead: up, answering, and never indexing again
+//   no-backoff          retries a failed request the moment it fails, so a
+//                       node in trouble is asked as fast as it can answer
 //   refuses-deep-reorg  stops indexing, and says so on every attempt, when a
 //                       reorg goes deeper than it keeps hashes for - the
 //                       Ponder and Squid SDK answer, with the process left up
@@ -125,7 +130,9 @@ export type Defect =
   | "no-dedupe"
   | "ignores-sigterm"
   | "rolls-back-on-lower-head"
-  | "refuses-deep-reorg";
+  | "refuses-deep-reorg"
+  | "no-backoff"
+  | "stuck-after-rpc-error";
 
 export interface FakeOptions {
   /** Where it writes. A real database: the harness's SQL has to be exercised. */
@@ -527,6 +534,10 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
             if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] stuck: ${err}`);
             stuck = true;
           }
+          if (defects.has("stuck-after-rpc-error") && /^Error: rpc /.test(String(err))) {
+            if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] stuck: ${err}`);
+            stuck = true;
+          }
           if (defects.has("die-on-rpc-error") && /^Error: rpc /.test(String(err))) {
             if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] dying: ${err}`);
             running = false;
@@ -544,6 +555,8 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
           // retrying is miserable to debug, and this double exists to be
           // debugged, so the reason is available on request.
           if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] ${err}`);
+          // Straight back to the node that just failed, with no pause at all.
+          if (defects.has("no-backoff")) continue;
           await sleep(1_000);
         }
         // No pause between batches for checkpoint-ahead: the kill arrives a

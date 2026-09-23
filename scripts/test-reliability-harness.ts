@@ -304,6 +304,24 @@ const EXPECTATIONS: Expectation[] = [
     fails: ["head-goes-backwards"],
     slow: true,
   },
+  // Retrying a failing node flat out: every request is still answered in the
+  // end, so nothing is lost, and the node is flooded while it is down.
+  {
+    scenario: "rpc-outage",
+    defects: ["no-backoff"],
+    fails: ["backs-off"],
+    passes: ["survives", "resumes", "no-loss"],
+    slow: true,
+  },
+  // Up and indexing nothing after the first failed request, which is what
+  // "does not resume after the RPC node recovers" looks like from outside.
+  {
+    scenario: "rpc-chaos",
+    defects: ["stuck-after-rpc-error"],
+    fails: ["catches-up"],
+    passes: ["survives", "no-loss", "no-duplicates"],
+    slow: true,
+  },
   // A reorg past what it keeps, refused with the process left up and nothing
   // more indexed. That is stopping, not carrying on, and passes as one.
   {
