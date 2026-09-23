@@ -18,7 +18,7 @@ every handler writes one hand-owned table set in the `safe_case` schema:
   ABI per generation, so each generation gets its own factory definition (the
   two addresses within a generation share one).
 - **Ten dual-layout child events.** Safe 1.4.x made one argument of ten child
-  events `indexed` without changing the signature - one topic0, two layouts -
+  events `indexed` without changing the signature — one topic0, two layouts —
   and a proxy can emit either (it can be re-pointed at another singleton after
   creation). Each layout is registered as its own contract; a log decodes under
   exactly one, so together they capture everything with no duplicates. The

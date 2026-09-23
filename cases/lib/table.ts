@@ -183,10 +183,7 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
   // contain one; a detail string may, and keeps it.
   const notes = new Map<string, string>();
   for (const line of body.split("\n")) {
-    // The separator is a hyphen now and was an em dash before, and a table
-    // published by the older renderer still has to parse: a note that stops
-    // being readable is a row that silently loses its explanation.
-    const note = line.match(/^>\s*\*\*\((\d+)\)\*\*\s*.*?\s[-\u2014]\s*(.+)$/);
+    const note = line.match(/^>\s*\*\*\((\d+)\)\*\*\s*.*?—\s*(.+)$/);
     if (note) notes.set(note[1], note[2].trim());
   }
 
