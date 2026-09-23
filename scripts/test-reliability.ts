@@ -510,7 +510,7 @@ check(
 }
 check(
   "a column passed whole keeps its count beside the tick",
-  table.includes(`✅ ${CRASH_CHECKS}/${CRASH_CHECKS}`),
+  table.includes(`${CRASH_CHECKS}/${CRASH_CHECKS} ✅`),
   table
 );
 check(

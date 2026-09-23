@@ -88,13 +88,15 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
 }
 
 /**
- * The tally, with a tick on the columns a tool passed whole.
+ * The tally, with a tick after it on the columns a tool passed whole.
  *
  * Reading a row of "10/10, 6/6, 8/10" means dividing five fractions to find
  * the one that is not one. The tick does that division for the reader, so the
  * fractions left bare are the findings - but the count stays, because "8/10"
  * next to a tick says nothing about how much was asked unless the tick says it
- * too.
+ * too. The count comes first so the column reads as a column of counts, and
+ * the tick after it lines up with the bold tallies of the columns that fell
+ * short rather than pushing them out of alignment.
  *
  * The link lives on the column heading rather than in every cell: the same URL
  * seven times a column is most of the table's width and none of its meaning.
@@ -106,7 +108,7 @@ function scoreCell(tally: Tally, headline: string | null): string {
   const measure = headline ? ` (${headline})` : "";
   if (tally.asked === 0) return NO_VALUE;
   const count = `${tally.passed}/${tally.asked}`;
-  if (tally.passed === tally.asked) return `✅ ${count}${measure}`;
+  if (tally.passed === tally.asked) return `${count} ✅${measure}`;
   return `**${count}**${measure}`;
 }
 
