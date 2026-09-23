@@ -41,6 +41,7 @@ import {
   parsePublishedReliability,
   reliabilityRowKey,
   toReliabilityRow,
+  unrunRow,
   RELIABILITY_END,
   RELIABILITY_START,
 } from "../reliability/lib/table.ts";
@@ -245,6 +246,7 @@ function perfect(name: string): ToolReliability {
 }
 
 const ALL_CHECKS = SCENARIOS.reduce((n, s) => n + checkCount(s), 0);
+const CRASH_CHECKS = scenariosIn("crash-recovery").reduce((n, s) => n + checkCount(s), 0);
 
 // ── Putting a tool's shards back together ──────────────────────────────
 //
@@ -435,27 +437,77 @@ check(
 );
 check("the headline head lag reaches the table", table.includes("(640ms)"), table);
 check(
-  "a failure is one line of its own, under the column it belongs to",
-  /\n- \*\*Example Indexer\*\*\n  - \*crash recovery\*\n    - stops indexing for good after a database restart\n    - stops following the chain after a database restart\n/.test(
-    table
+  "a tool's failures sit in one collapsed block, counted on its summary line",
+  table.includes(
+    "<details>\n<summary><b>Example Indexer</b> - " +
+      `${CRASH_CHECKS} failing</summary>\n\n- *crash recovery*\n` +
+      "  - stops indexing for good after a database restart\n"
   ),
   table
 );
+// Collapsed, nothing has to be cut: every failure is in the block, and the
+// old "and N more" is gone for good.
 check(
-  "a whole column lost is summarised rather than listed ten times",
-  /^  - and \d+ more$/m.test(table) &&
-    table
-      .split("\n")
-      .filter((line) => line.startsWith("  "))
-      .every((line) => line.length < 120),
+  "every failure is listed, however many there are",
+  scenariosIn("crash-recovery")
+    .flatMap((scenario) => scenario.checks.map((check) => check.failing))
+    .every((failing) => table.includes(`  - ${failing}`)) && !/and \d+ more/.test(table),
   table
 );
 check(
-  "a tool that lost nothing earns no line at all",
-  !table.includes("**Perfect Indexer**\n"),
+  "the block is closed with the blank lines GitHub needs to render a list in it",
+  /<\/summary>\n\n- [\s\S]*?\n\n<\/details>/.test(table),
   table
 );
-const CRASH_CHECKS = scenariosIn("crash-recovery").reduce((n, s) => n + checkCount(s), 0);
+check(
+  "a tool that lost nothing earns no block at all",
+  !table.includes("<b>Perfect Indexer</b>"),
+  table
+);
+
+// What a run could not ask is not a finding, so it is counted apart from the
+// failures and set in italics inside the block.
+{
+  const partial = scoreTool({
+    ...perfect("Partial"),
+    runs: perfect("Partial").runs.map((run) =>
+      run.scenario === "reorg-cases"
+        ? {
+            ...run,
+            checks: {
+              ...run.checks,
+              deep: { status: "na" as const, detail: "stopped early" },
+              storm: fail("lost track"),
+            },
+          }
+        : run
+    ),
+  });
+  const rendered = buildReliabilityTable([toReliabilityRow(partial, measuresOf(partial))]);
+  check(
+    "an unasked check is counted apart from the failures, and set in italics",
+    rendered.includes("<summary><b>Partial</b> - 1 failing, 1 not measured</summary>") &&
+      /  - <i>.* was not asked<\/i>/.test(rendered),
+    rendered
+  );
+}
+
+// A tool nothing ran for has one sentence to say, and a block that opens on
+// one sentence is a click that reveals nothing.
+{
+  const unrun = buildReliabilityTable([
+    unrunRow(
+      { name: "Unrun", toolUrl: "https://x.test", source: "RPC", sourceUrl: "https://x.test" },
+      "not measured yet: no run has published a result"
+    ),
+  ]);
+  check(
+    "a tool nothing ran for gets a plain line, not a block",
+    unrun.includes("- **Unrun** - not measured yet: no run has published a result") &&
+      !unrun.includes("<details>"),
+    unrun
+  );
+}
 check(
   "a column passed whole keeps its count beside the tick",
   table.includes(`✅ ${CRASH_CHECKS}/${CRASH_CHECKS}`),

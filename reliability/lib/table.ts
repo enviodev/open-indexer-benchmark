@@ -35,8 +35,10 @@ const NO_VALUE = "—";
 export interface ReliabilityNote {
   /** The group whose cell carries the reference, or the row when absent. */
   group?: string;
-  /** One line each, in the words of somebody living with the tool. */
-  phrases: string[];
+  /** What broke, one line each, in the words of somebody living with the tool. */
+  failing: string[];
+  /** What the run could not ask, and why - kept apart because it is not a finding. */
+  unmeasured: string[];
 }
 
 export interface ReliabilityRow {
@@ -136,7 +138,8 @@ export function toReliabilityRow(
         .find(Boolean);
       notes.push({
         group: group.id,
-        phrases: [`not measured${why ? ` - ${why}` : ""}`],
+        failing: [],
+        unmeasured: [`not measured${why ? ` - ${why}` : ""}`],
       });
       continue;
     }
@@ -151,10 +154,8 @@ export function toReliabilityRow(
     if (failures.length > 0 || skipped.length > 0) {
       notes.push({
         group: group.id,
-        phrases: [
-          ...unique(failures.map(phraseFor)),
-          ...unique(skipped.map((skip) => `${skip.label} was not asked`)),
-        ],
+        failing: unique(failures.map(phraseFor)),
+        unmeasured: unique(skipped.map((skip) => `${skip.label} was not asked`)),
       });
     }
   }
@@ -190,18 +191,7 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-/**
- * How many findings a tool's list shows before it says how many are left.
- *
- * A tool that exits the moment its database blinks fails most of the suite,
- * and a line for each is a wall of text that hides the tools with one real
- * problem. Six is enough to see what kind of tool it is; the count says how
- * much more there was, and the scenario page has all of it. They are taken a
- * few at a time from each column rather than all from the first, so a tool
- * with one problem in every column does not read as a tool with one broken
- * column.
- */
-const SHOWN = 6;
+
 
 
 
@@ -238,7 +228,7 @@ export function unrunRow(
     cells: Object.fromEntries(GROUPS.map((group) => [group.id, NO_VALUE])),
     overall: { passed: 0, asked: 0 },
     overallCell: NO_VALUE,
-    notes: [{ phrases: [reason] }],
+    notes: [{ failing: [], unmeasured: [reason] }],
   };
 }
 
@@ -277,16 +267,17 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
     `| ${HEAD.map(() => "---").join(" | ")} |`,
   ];
   /**
-   * A list per tool: the tool, then one line per finding, naming the column
-   * it belongs to and what it costs whoever runs the tool.
+   * A collapsed block per tool: the tool and how many things are wrong with
+   * it on the line a reader scans, and every one of them - by column, in the
+   * words of whoever has to live with the tool - one click away.
    *
-   * Numbered references were worse at the one job they had: a reader who
-   * wants to know what a tool does badly had to hold a number in their head,
-   * find it below, and do that again for each of five columns. Running the
-   * findings together in one sentence was not much better - three problems
-   * separated by semicolons read as one long problem. One line each, so the
-   * count of lines is the count of things wrong. Tools that fail nothing are
-   * simply not in the list.
+   * Numbered references made a reader hold a number in their head and go
+   * looking for it. A sentence per tool ran three problems together into one
+   * long one. A list per tool was right but had to be cut short - six lines
+   * and "and 4 more" - or the tool that fails nothing sat three screens below
+   * the one that fails everything. Collapsed, nothing has to be cut: the
+   * summary says how bad, the body says exactly what, and the table stays
+   * where the eye lands. Tools that fail nothing are not in the list.
    */
   const notes: string[] = [];
   for (const row of sorted) {
@@ -300,37 +291,43 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
       ].join(" | ")} |`
     );
     if (row.notes.length === 0) continue;
-    const total = row.notes.reduce((n, note) => n + note.phrases.length, 0);
-    // One from each column in turn, so a tool with a problem in every column
-    // does not read as a tool with one broken column.
-    const shown = new Map<ReliabilityNote, string[]>(row.notes.map((note) => [note, []]));
-    let taken = 0;
-    for (let depth = 0; taken < SHOWN; depth++) {
-      let any = false;
-      for (const note of row.notes) {
-        if (taken >= SHOWN) break;
-        const phrase = note.phrases[depth];
-        if (phrase === undefined) continue;
-        shown.get(note)!.push(phrase);
-        taken++;
-        any = true;
-      }
-      if (!any) break;
+
+    // A note about the row rather than a column - a tool nothing ran for - is
+    // one sentence, and a collapsible block around one sentence is a click
+    // that reveals nothing more.
+    if (row.notes.every((note) => !note.group)) {
+      const said = row.notes.flatMap((note) => [...note.failing, ...note.unmeasured]);
+      notes.push(`- **${row.name}** - ${said.join("; ")}`, "");
+      continue;
     }
 
-    notes.push(`- **${row.name}**`);
+    const failing = row.notes.reduce((n, note) => n + note.failing.length, 0);
+    const unmeasured = row.notes.reduce((n, note) => n + note.unmeasured.length, 0);
+    const counts = [
+      failing > 0 ? `${failing} failing` : "",
+      unmeasured > 0 ? `${unmeasured} not measured` : "",
+    ].filter(Boolean);
+
+    // GitHub renders markdown inside <details> only with a blank line after
+    // the summary and before the close; without them the list comes out as
+    // one run-on paragraph of dashes.
+    notes.push("<details>", `<summary><b>${row.name}</b> - ${counts.join(", ")}</summary>`, "");
     for (const note of row.notes) {
-      const lines = shown.get(note) ?? [];
-      if (lines.length === 0) continue;
+      const items = [
+        ...note.failing,
+        ...note.unmeasured.map((item) => `<i>${item}</i>`),
+      ];
+      if (items.length === 0) continue;
       const group = GROUPS.find((g) => g.id === note.group);
       if (!group) {
-        notes.push(...lines.map((phrase) => `  - ${phrase}`));
+        notes.push(...items.map((item) => `- ${item}`));
         continue;
       }
-      notes.push(`  - *${group.title}*`, ...lines.map((phrase) => `    - ${phrase}`));
+      notes.push(`- *${group.title}*`, ...items.map((item) => `  - ${item}`));
     }
-    if (total > taken) notes.push(`  - and ${total - taken} more`);
+    notes.push("", "</details>", "");
   }
+  while (notes.at(-1) === "") notes.pop();
   if (notes.length > 0) lines.push("", ...notes);
 
   const carried = sorted.filter((row) => row.carriedOver).map((row) => row.name);
