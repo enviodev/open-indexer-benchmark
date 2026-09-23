@@ -1518,7 +1518,12 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
     /** Each block's latency as polling saw it, to be replaced by the exact one. */
     const sampled = new Map<number, number>();
     let lagSince: number | null = null;
-    const producing = produce(ctx, blocks, BLOCK_MS);
+    // The chain never pauses, the tail included: a tool on a subscription
+    // takes a quiet chain for a dead feed, and the Squid SDK, told to reset
+    // after ten seconds without a block, reset in the tail of this window and
+    // crashed - a real bug, and the one subscription-stall exists to find,
+    // but not this scenario's to report.
+    const producing = produce(ctx, blocks + 5, BLOCK_MS);
     const until = performance.now() + (blocks + 5) * BLOCK_MS;
     let previousLook = Date.now();
     while (performance.now() < until) {
@@ -1614,10 +1619,12 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
   // The new fork is one block longer, as a fork that wins is: most tools
   // notice a rewrite when the next block's parent is not the block they
   // stored, and a rewrite at the same height with nothing after it gives them
-  // no next block. The chain stands still for the wait so the verdict is
-  // about the rewrite rather than about keeping up with new blocks.
+  // no next block. The chain goes on producing while the tool reconciles,
+  // as a real one does: a tool on a subscription reads a still chain as a
+  // dead feed. Every tool here has just shown it keeps up with a block every
+  // two seconds, so a live chain asks nothing more of it than the rewrite.
   ctx.chain.reorg({ depth: 4, extend: 1, logs: "changed" });
-  const reconciled = await synced(ctx, 60_000, { heartbeat: false });
+  const reconciled = await synced(ctx, 60_000, { heartbeat: "live" });
   const after = await watch(15, ctx.chain.head());
   const afterSorted = [...after.latencies].sort((a, b) => a - b);
   const p50After = afterSorted[Math.floor(afterSorted.length / 2)];
