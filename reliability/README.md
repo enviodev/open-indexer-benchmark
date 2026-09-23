@@ -330,7 +330,7 @@ Public endpoints cap what one request may ask for: a block range, a number of re
 | --- | --- |
 | copes with a provider's block-range limit | The tool finishes the range, having retried with a smaller one rather than stopping. Configuring the limit up front is not a pass: the point is what happens against a provider whose caps were not known in advance. |
 | copes with a provider's response-size limit | The same for the result-count cap, which needs a different response - a narrower range for the same span - and is the one more often left unhandled. |
-| speeds back up after a rate limit lifts | After a refused range, the tool does not spend the rest of the run at its smallest range. Scored because the alternative - collapsing to single-block queries forever after one refusal - turns a transient limit into a permanent throughput cost. |
+| speeds back up after a rate limit lifts | After the caps are lifted, the tool falls 3,000 blocks behind and catches up. It passes if it asks for wider ranges than the caps forced it down to. The reading is held against the same catch-up by a fresh process that never saw a cap: a tool that asks for no wider a range even then, such as one that follows the head a block at a time, has nothing to widen back to and is not tested. Scored because collapsing to tiny queries for good after one refusal turns a transient limit into a permanent throughput cost. |
 
 <a id="rpc-inconsistency"></a>
 
@@ -393,7 +393,7 @@ Backfill throughput says how long a tool takes to catch up once. Head latency sa
 | new data usually shows up within one block | Half of all blocks are readable within two seconds of being published. This is the property that lets an application read the indexer instead of the chain. |
 | even the slowest 1% of new data shows up within 10 seconds | The tail matters more than the median for anything user-facing. A tool that flushes on a timer has a tail the length of its timer, whatever its median says. |
 | keeps up with new blocks | The gap between the chain head and the tool's position never exceeds five blocks for more than fifteen seconds. A tool that cannot keep up with a two-second block time at the head is only ever catching up. |
-| gets back to normal speed after a chain rewrite | Within thirty seconds of a reorg being reconciled, latency is back in the band it held before. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record. |
+| gets back to normal speed after a chain rewrite | The last four blocks are replaced by a fork one block longer, as a winning fork is. The tool has a minute to reconcile it, and the next fifteen blocks must then reach the database with a median latency no worse than twice what it managed before, or one block time. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record. |
 
 Reported alongside the score, and not part of it:
 

@@ -958,16 +958,41 @@ export async function rpcLimits(ctx: Ctx): Promise<ScenarioResult> {
 
   // With the caps lifted, a tool that permanently collapsed to tiny queries
   // stays slow forever. One that adapts widens again.
-  const narrowest = ctx.chain.stats().widestRange;
+  //
+  // By then the tool is at the head, and what it asks for there is its own
+  // business: Ponder follows the head a block at a time by hash and asks for
+  // no range at all, others poll in small fixed steps. So the reading is
+  // held against the same catch-up done by a fresh process that never saw a
+  // cap, and only a tool that asks for less than that, and no more than the
+  // caps forced it down to, has failed to widen.
+  const CAPPED = MAX_LOGS / LOGS_PER_BLOCK;
+  const CATCH_UP = 3_000;
   ctx.chain.setLimits({});
   ctx.chain.reset();
-  ctx.chain.advance(3_000);
+  ctx.chain.advance(CATCH_UP);
   await synced(ctx);
   const afterLift = ctx.chain.stats().widestRange;
-  checks["recovers-width"] = verdict(
-    afterLift > Math.min(narrowest, MAX_LOGS / LOGS_PER_BLOCK),
-    `still asking for ${afterLift} blocks at a time after the caps were lifted`
-  );
+
+  await ctx.stopTool();
+  await ctx.launch();
+  await synced(ctx);
+  ctx.chain.reset();
+  ctx.chain.advance(CATCH_UP);
+  await synced(ctx);
+  const fresh = ctx.chain.stats().widestRange;
+
+  checks["recovers-width"] =
+    fresh <= CAPPED
+      ? na(
+          `even a fresh start asks for at most ${fresh} blocks at a time when it ` +
+            `falls ${CATCH_UP.toLocaleString("en-US")} blocks behind, so the caps ` +
+            `left it nothing to widen back to`
+        )
+      : verdict(
+          afterLift > CAPPED,
+          `asked for at most ${afterLift} blocks at a time after the caps were ` +
+            `lifted, where a fresh start asks for ${fresh}`
+        );
   return { checks, measures: {} };
 }
 
@@ -1341,7 +1366,12 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
   };
 
   // ── And the same again across a reorg ──
-  ctx.chain.reorg({ depth: 4, logs: "changed" });
+  // The new fork is one block longer, as a fork that wins is: most tools
+  // notice a rewrite when the next block's parent is not the block they
+  // stored, and a rewrite at the same height with nothing after it gives them
+  // no next block. The chain stands still for the wait so the verdict is
+  // about the rewrite rather than about keeping up with new blocks.
+  ctx.chain.reorg({ depth: 4, extend: 1, logs: "changed" });
   const reconciled = await synced(ctx, 60_000, { heartbeat: false });
   const after = await watch(15, ctx.chain.head());
   const afterSorted = [...after.latencies].sort((a, b) => a - b);

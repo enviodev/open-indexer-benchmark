@@ -474,7 +474,7 @@ export const SCENARIOS: Scenario[] = [
         label: "speeds back up after a rate limit lifts",
         failing: "Permanently slower: after one rate limit, fetches in small pieces for good",
         detail:
-          "After a refused range, the tool does not spend the rest of the run at its smallest range. Scored because the alternative - collapsing to single-block queries forever after one refusal - turns a transient limit into a permanent throughput cost.",
+          "After the caps are lifted, the tool falls 3,000 blocks behind and catches up. It passes if it asks for wider ranges than the caps forced it down to. The reading is held against the same catch-up by a fresh process that never saw a cap: a tool that asks for no wider a range even then, such as one that follows the head a block at a time, has nothing to widen back to and is not tested. Scored because collapsing to tiny queries for good after one refusal turns a transient limit into a permanent throughput cost.",
       },
     ],
   },
@@ -609,7 +609,7 @@ export const SCENARIOS: Scenario[] = [
         label: "gets back to normal speed after a chain rewrite",
         failing: "Stale reads: stays slow for a long time after a chain rewrite",
         detail:
-          "Within thirty seconds of a reorg being reconciled, latency is back in the band it held before. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record.",
+          "The last four blocks are replaced by a fork one block longer, as a winning fork is. The tool has a minute to reconcile it, and the next fifteen blocks must then reach the database with a median latency no worse than twice what it managed before, or one block time. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record.",
       },
     ],
     measures: [

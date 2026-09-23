@@ -215,6 +215,14 @@ const EXPECTATIONS: Expectation[] = [
     fails: ["flushes"],
   },
   { scenario: "rpc-limits", passes: ["splits-range", "splits-results", "recovers-width"] },
+  // Never run here until every tool but one failed its last check: this
+  // double, like Envio, notices a rewrite when the next block arrives, and
+  // the scenario rewrote the head and then stood still.
+  {
+    scenario: "block-to-row",
+    passes: ["median-under-block-time", "tail-bounded", "keeps-up", "recovers-after-reorg"],
+    slow: true,
+  },
   {
     scenario: "db-restart",
     outage: true,
@@ -243,6 +251,23 @@ const EXPECTATIONS: Expectation[] = [
     defects: ["checkpoint-ahead"],
     batchBlocks: 25,
     fails: ["no-gap"],
+  },
+  // Held against a fresh start, so it is the narrowing that fails, not
+  // however the tool happens to follow the head.
+  // And a tool that asks for no range at all at the head is not one that
+  // never widened: it is how Ponder follows the head, and it failed there
+  // until the check had a fresh start to hold it against.
+  {
+    scenario: "rpc-limits",
+    defects: ["follows-head-by-hash"],
+    passes: ["splits-range", "splits-results"],
+    unmeasured: ["recovers-width"],
+  },
+  {
+    scenario: "rpc-limits",
+    defects: ["never-widens"],
+    passes: ["splits-range", "splits-results"],
+    fails: ["recovers-width"],
   },
   {
     scenario: "process-kill",
