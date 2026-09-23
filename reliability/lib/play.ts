@@ -66,18 +66,19 @@ export interface Patience {
  * unmeasured there while finishing comfortably on a laptop. Five is a deadline
  * for a tool that is not coming back, not a budget a working one should feel.
  */
-/** How often a reorg's aftermath is re-read while it is still settling. */
+export const DEFAULT_PATIENCE: Patience = { syncMs: 300_000, reactMs: 120_000 };
+
 /**
  * How deep the deep reorg goes.
  *
- * Past the unfinalised window of every tool the suite measures. Ponder's is
- * sixty-five blocks on mainnet, which is the one that sets this floor.
+ * Past the unfinalised window of Ponder, sixty-five blocks on mainnet, which
+ * is the tool it was set for. Envio's window is 200 and graph-node's 250, so
+ * for them it is one more rewrite they are expected to undo.
  */
 const DEEP_REORG = 80;
 
+/** How often a reorg's aftermath is re-read while it is still settling. */
 const RECONCILE_POLL_MS = 500;
-
-export const DEFAULT_PATIENCE: Patience = { syncMs: 300_000, reactMs: 120_000 };
 /** How long the database stays down when it is taken away. */
 const DB_DOWN_MS = 10_000;
 /**
@@ -163,12 +164,17 @@ interface Comparison {
  * transfer the chain holds and still have applied one of them twice, and that
  * is the failure the aggregate exists to catch.
  */
-async function compare(ctx: Ctx, upTo?: number): Promise<Comparison> {
+async function compare(ctx: Ctx, upTo?: number, from?: number): Promise<Comparison> {
   const head = upTo ?? ctx.chain.head();
   const chainRows = ctx.chain.rows(head);
   const stored = await ctx.observe.rows();
-  const rows = diffRows(stored, chainRows, head);
-  const storedBalances = await ctx.observe.balances();
+  const inWindow = <T extends { block: number }>(list: T[]) =>
+    from === undefined ? list : list.filter((row) => row.block >= from);
+  const rows = diffRows(inWindow(stored), inWindow(chainRows), head);
+  // Balances add up the whole chain, so a comparison of a window cannot
+  // include them: an account wrong because of a block outside it would read
+  // as wrong because of one inside.
+  const storedBalances = from === undefined ? await ctx.observe.balances() : null;
   const balances = storedBalances
     ? diffBalances(storedBalances, balancesOf(chainRows))
     : null;
@@ -193,8 +199,8 @@ async function compare(ctx: Ctx, upTo?: number): Promise<Comparison> {
     balances,
     clean,
     summary: clean
-      ? `matches the chain at block ${head}`
-      : `${parts.join(", ")} at block ${head}` +
+      ? `matches the chain ${from === undefined ? "" : `from block ${from} `}at block ${head}`
+      : `${parts.join(", ")} ${from === undefined ? "" : `from block ${from} `}at block ${head}` +
         (rows.wrong[0] ? ` (e.g. ${rows.wrong[0]})` : "") +
         (balances?.[0] ? ` (e.g. ${balances[0]})` : ""),
   };
@@ -209,13 +215,13 @@ async function compare(ctx: Ctx, upTo?: number): Promise<Comparison> {
 async function synced(
   ctx: Ctx,
   timeoutMs = ctx.patience.syncMs,
-  { heartbeat = true } = {}
+  { heartbeat = true, judge = () => compare(ctx) } = {}
 ): Promise<boolean> {
   const beat = heartbeat ? startHeartbeat(ctx) : null;
   try {
     return await ctx.waitFor(
       "catching up with the chain",
-      async () => (await compare(ctx)).clean,
+      async () => (await judge()).clean,
       timeoutMs
     );
   } finally {
@@ -239,14 +245,40 @@ async function synced(
  * waits for the first clean reading, and only a tool that never produces one
  * fails - which is the same rule the reorg cases have used all along.
  */
-async function settled(ctx: Ctx, timeoutMs = ctx.patience.reactMs): Promise<Comparison> {
-  let result = await compare(ctx);
+async function settled(
+  ctx: Ctx,
+  timeoutMs = ctx.patience.reactMs,
+  judge = () => compare(ctx)
+): Promise<Comparison> {
+  let result = await judge();
   const deadline = performance.now() + timeoutMs;
   while (!result.clean && performance.now() < deadline) {
     await sleep(RECONCILE_POLL_MS);
-    result = await compare(ctx);
+    result = await judge();
   }
   return result;
+}
+
+/**
+ * How many transfers the tool holds, as a baseline to measure progress from.
+ *
+ * Retried rather than read as zero on a failure, because zero is the one
+ * baseline every tool clears: a count that could not be taken would pass a
+ * tool that never wrote another row. Throws when the tables stay unreadable,
+ * and the caller reports the check as not tested.
+ */
+async function rowsNow(ctx: Ctx): Promise<number> {
+  const deadline = performance.now() + 30_000;
+  for (;;) {
+    try {
+      return await ctx.observe.count();
+    } catch (err) {
+      if (performance.now() > deadline) {
+        throw new Error(`the tool's tables could not be read: ${(err as Error).message}`);
+      }
+      await sleep(RECONCILE_POLL_MS);
+    }
+  }
 }
 
 /** Wait for the tool to hold at least this many transfers. */
@@ -339,7 +371,6 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   // tool that had caught up would sit the outage out and pass a check it was
   // never really asked - which is how an indexer that exits on its first
   // failed query was, at one point, scored as having survived one.
-  const before = await ctx.observe.count();
   const producingThrough = produce(ctx, 30, 500);
   try {
     await ctx.restartDb(DB_DOWN_MS);
@@ -348,6 +379,15 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     return { checks: { "recovers-backfill": na(String((err as Error).message)) }, measures };
   }
   await producingThrough;
+  // Counted once the database is back, never before it went away: a batch
+  // the tool commits in the moment before the stop would otherwise read as
+  // the tool indexing again, and pass one that died with the database.
+  let before: number;
+  try {
+    before = await rowsNow(ctx);
+  } catch (err) {
+    return { checks: { "recovers-backfill": na((err as Error).message) }, measures };
+  }
   // There has to be work left for "it started indexing again" to mean
   // anything. A tool fast enough to have finished the four hundred blocks
   // before the database went away would otherwise be failed for having
@@ -385,12 +425,13 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
 
   // ── At the head ──
   await synced(ctx);
-  const headBefore = await ctx.observe.count();
   // The chain keeps producing across the second restart, so the tool has both
-  // something to miss and something to come back to.
+  // something to miss and something to come back to: forty seconds of it,
+  // thirty of which fall after the database is back.
   const producing = produce(ctx, 20, 2_000);
   try {
     await ctx.restartDb(DB_DOWN_MS);
+    const headBefore = await rowsNow(ctx);
     const followedOn = await ctx.waitFor(
       "indexing again at the head",
       async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
@@ -430,10 +471,13 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   // up, healthy by every external sign, and not indexing. Unlike the two
   // outages above, a restart is the finding rather than an acceptable cost:
   // nothing crashed, so nothing tells anybody to restart it.
-  const frozenBefore = await ctx.observe.count();
   const producingFrozen = produce(ctx, 20, 500);
   try {
     await ctx.pauseDb(PAUSE_MS);
+    // The blocks produced during the freeze are all out by now, so the tool is
+    // given more to do once it is unfrozen.
+    const frozenBefore = await rowsNow(ctx);
+    ctx.chain.advance(20);
     checks["recovers-pause"] = verdict(
       await ctx.waitFor(
         "indexing again after the database was unfrozen",
@@ -500,21 +544,25 @@ export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
     await sleep(1_000);
     if (attempt === 0) torn = await compare(ctx);
 
+    const atKill = await ctx.observe.count().catch(() => 0);
     await ctx.manualRestart(`killed by the scenario (${transfers} transfers in)`);
-    if (
-      !(await ctx.waitFor(
-        "writing again after the restart",
-        async () => (await ctx.observe.count().catch(() => 0)) > 0,
-        ctx.patience.reactMs
-      ))
-    ) {
-      break;
-    }
-    // Sampled as soon as it is writing again: a tool that discarded rows to
-    // get back to a checkpoint has fewer than it did, and the gap is what a
-    // restart costs it. A tool that discards nothing reports zero.
-    const highestAfter = await ctx.observe.highestBlock().catch(() => 0);
-    discarded = Math.max(discarded, highestBefore - highestAfter);
+    // Watched until it holds more than it did when it was killed, which is
+    // the first moment it has provably written anything. The rows survive the
+    // kill, so "any rows at all" is true before the new process has done a
+    // thing - and a reading taken then would miss the rollback a tool does on
+    // start. So the lowest height seen on the way is what the restart cost.
+    let lowest = highestBefore;
+    const writing = await ctx.waitFor(
+      "writing again after the restart",
+      async () => {
+        const highest = await ctx.observe.highestBlock().catch(() => lowest);
+        lowest = Math.min(lowest, highest);
+        return (await ctx.observe.count().catch(() => 0)) > atKill;
+      },
+      ctx.patience.reactMs
+    );
+    discarded = Math.max(discarded, highestBefore - lowest);
+    if (!writing) break;
   }
 
   if (!torn) {
@@ -618,16 +666,31 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
   const checks: Record<string, Outcome> = {};
   const recoveries: number[] = [];
 
+  /**
+   * Whether the tool's data was already wrong going into the next case.
+   *
+   * Every case runs against the same database, one after another, so a
+   * rewrite a tool never undid is still in its tables when the next one
+   * lands. Judged against the whole chain, every later case then failed on
+   * the first one's rows - one defect published as five - and waited out the
+   * full patience twice over for a clean reading that could not come.
+   */
+  let alreadyWrong = false;
+
   /** Rewrite the chain, let it settle, and report whether the tool agrees. */
   async function reconciles(
     label: string,
-    rewrite: () => void,
+    rewrite: () => { from: number },
     extend = 3
   ): Promise<Outcome> {
-    rewrite();
+    const { from } = rewrite();
     if (extend > 0) ctx.chain.advance(extend);
+    // A case that starts from wrong data is judged on the blocks it rewrote
+    // and nothing else, which is the part of the damage it could have caused.
+    const windowed = alreadyWrong;
+    const judge = windowed ? () => compare(ctx, undefined, from) : () => compare(ctx);
     const startedAt = performance.now();
-    await synced(ctx);
+    await synced(ctx, ctx.patience.syncMs, { judge });
 
     // Agreeing about position is not agreeing about rows. A tool can report
     // the head while the rewrites it is making underneath are still being
@@ -638,13 +701,20 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     // So the comparison is given the same patience the rest of the scenario
     // has, and the first clean reading wins. A tool that never agrees still
     // fails, which is the thing being asked.
-    const result = await settled(ctx);
+    const result = await settled(ctx, ctx.patience.reactMs, judge);
 
     // Timed to when the data agreed, not to when the position did, because
     // that is what "recovered from the reorg" means.
     if (result.clean) recoveries.push((performance.now() - startedAt) / 1_000);
     ctx.log(`  ${label}: ${result.summary}`);
-    return verdict(result.clean, result.summary);
+    alreadyWrong = alreadyWrong ? !(await compare(ctx)).clean : !result.clean;
+    return verdict(
+      result.clean,
+      !windowed
+        ? result.summary
+        : `${result.summary} (only the rewritten blocks were compared, because an ` +
+            `earlier rewrite had already left the data wrong)`
+    );
   }
 
   ctx.chain.advance(200);
@@ -676,20 +746,21 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
   // A reorg the tool can only see by noticing that a block it already stored
   // is no longer on the chain, since it was not watching when it happened.
   await ctx.stopTool();
-  ctx.chain.reorg({ depth: 5, logs: "changed" });
+  const whileDown = ctx.chain.reorg({ depth: 5, logs: "changed" });
   await ctx.launch();
-  checks["while-down"] = await reconciles("reorg while the indexer was down", () => {});
+  checks["while-down"] = await reconciles("reorg while the indexer was down", () => whileDown);
 
   // Three rewrites inside the window a tool needs for one, so the second lands
   // while the first is still being unwound. They are deliberately not waited
   // on individually: the point is that they overlap whatever it is doing.
-  ctx.chain.reorg({ depth: 3, logs: "changed" });
+  const first = ctx.chain.reorg({ depth: 3, logs: "changed" });
   await sleep(4_000);
-  ctx.chain.reorg({ depth: 4, logs: "dropped" });
+  const second = ctx.chain.reorg({ depth: 4, logs: "dropped" });
   await sleep(4_000);
-  checks["storm"] = await reconciles("three reorgs in twelve seconds", () =>
-    ctx.chain.reorg({ depth: 2, logs: "changed" })
-  );
+  checks["storm"] = await reconciles("three reorgs in twelve seconds", () => {
+    const third = ctx.chain.reorg({ depth: 2, logs: "changed" });
+    return { from: Math.min(first.from, second.from, third.from) };
+  });
 
   // A rewrite below the head, at a height the tool has already indexed but is
   // still working towards - the one a head-only reorg check walks past.
@@ -948,19 +1019,32 @@ export async function rpcLimits(ctx: Ctx): Promise<ScenarioResult> {
   await ctx.launch();
 
   const finished = await synced(ctx);
-  const widest = ctx.chain.stats().widestRange;
+  const { widestRange, capped } = ctx.chain.stats();
+  // Two caps, two questions, and they have to be answered separately: one
+  // "finished" verdict for both scored a tool that could not get past the
+  // range cap as failing the result cap too, which it was never shown.
+  //
+  // The range cap is checked first, so a request refused for its result
+  // count had already come in under the range cap - proof the tool narrowed
+  // past it. Only a tool that did that has met the result cap at all. The
+  // result cap trips at 500 logs, which is 250 blocks of this chain.
+  const pastRangeCap = finished || capped.results > 0;
   checks["splits-range"] = verdict(
-    finished,
+    pastRangeCap,
     `did not get through 2,000 blocks against an endpoint capping ranges at ` +
-      `${MAX_RANGE}; widest range asked for was ${widest}`
+      `${MAX_RANGE}; widest range asked for was ${widestRange}`
   );
-  // Only a tool that narrowed below the result cap could have finished: the
-  // cap trips at 500 logs, which is 250 blocks of this chain.
-  checks["splits-results"] = verdict(
-    finished,
-    `did not get through a range whose responses were capped at ${MAX_LOGS} logs ` +
-      `(${MAX_LOGS / LOGS_PER_BLOCK} blocks)`
-  );
+  checks["splits-results"] = finished
+    ? pass
+    : pastRangeCap
+      ? fail(
+          `did not get through a range whose responses were capped at ${MAX_LOGS} logs ` +
+            `(${MAX_LOGS / LOGS_PER_BLOCK} blocks)`
+        )
+      : na(
+          `it never got past the ${MAX_RANGE}-block range cap, so it never met the ` +
+            `${MAX_LOGS}-log result cap`
+        );
 
   return { checks, measures: {} };
 }
@@ -1142,11 +1226,21 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
       );
 
   // ── The values from the contract read ──
-  const tokens = await ctx.observe.tokens().catch(() => []);
-  if (tokens.length === 0) {
-    const missing = na("the tool wrote no token row, so its metadata could not be read");
+  const tokens = await ctx.observe.tokens().catch(() => null);
+  if (tokens === null) {
+    const missing = na("the project has no token table, so its metadata could not be read");
     checks["null-symbol"] = missing;
     checks["nul-byte"] = missing;
+  } else if (tokens.length === 0) {
+    // The table is there and the row is not. The name carries a NUL, which
+    // Postgres refuses in a text column, so a tool that passes it through
+    // unsanitised has its insert rejected - and the row never arriving is
+    // exactly the failure this asks about. The symbol cannot be read from a
+    // row that is not there, so that one is not tested.
+    checks["null-symbol"] = na("the token row never arrived, so there is no symbol to read");
+    checks["nul-byte"] = fail(
+      "never stored the token row: its name carries a NUL byte, which Postgres refuses"
+    );
   } else {
     const token = tokens[0];
     checks["null-symbol"] = verdict(
@@ -1275,15 +1369,26 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
     let lagSince: number | null = null;
     const producing = produce(ctx, blocks, BLOCK_MS);
     const until = performance.now() + (blocks + 5) * BLOCK_MS;
+    let previousLook = Date.now();
     while (performance.now() < until) {
       await sleep(250);
+      const look = Date.now();
       const highest = await ctx.observe.highestBlock().catch(() => 0);
+      // A row seen now appeared at some point since the last look, and the
+      // midpoint is the unbiased guess. Timing it to when the answer came back
+      // instead added half the sampling interval and the query itself to
+      // every reading, about a sixth of a block on each.
+      const appearedAt = (previousLook + look) / 2;
+      previousLook = look;
       while (seen.at < highest) {
         seen.at++;
         const block = ctx.chain.blockAt(seen.at);
         // Only blocks published during this window have a publication time;
-        // the backfill's were all published before it started.
-        if (block?.publishedAtMs) seen.latencies.push(Date.now() - block.publishedAtMs);
+        // the backfill's were all published before it started. A row cannot
+        // appear before its block, so the midpoint is floored there.
+        if (block?.publishedAtMs) {
+          seen.latencies.push(Math.max(0, appearedAt - block.publishedAtMs));
+        }
       }
       const lag = ctx.chain.head() - highest;
       seen.worstLag = Math.max(seen.worstLag, lag);

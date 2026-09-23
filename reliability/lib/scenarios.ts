@@ -534,7 +534,7 @@ export const SCENARIOS: Scenario[] = [
         label: "stores a token name containing a hidden null character",
         failing: "Missing token data: a hidden null character in a token name fails the write",
         detail:
-          "A symbol containing `\\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. Either the tool sanitises it or it fails that row explicitly; what it must not do is fail the whole batch forever and stall the indexer behind one token.",
+          "The token's name contains `\\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. The tool has to store the row, with the character removed or replaced. A row that never arrives is token data missing, and is failed; a project with no token table at all is not tested.",
       },
       {
         id: "second-event",

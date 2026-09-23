@@ -374,9 +374,11 @@ export function observer(sql: SqlRunner) {
      * is a different finding from a row whose symbol is null, so the two are
      * never collapsed.
      */
-    tokens(): Promise<StoredToken[]> {
+    tokens(): Promise<StoredToken[] | null> {
       return withSchema(async ({ token }) => {
-        if (!token) return [];
+        // No table at all is a project that has no token row by design, which
+        // is not the same thing as a table the row never arrived in.
+        if (!token) return null;
         // A null and the string "null" have to stay apart, so nulls are
         // labelled in SQL rather than guessed at from an empty line: psql
         // renders both a null and an empty string as nothing at all.

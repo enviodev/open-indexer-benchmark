@@ -34,6 +34,14 @@
 //                       that stays down without anyone noticing it is up
 //   no-sanitise         writes strings through unchanged, so a NUL byte in
 //                       one reaches Postgres and fails the insert
+//   ignores-range-cap   keeps asking for the same range when the endpoint
+//                       refuses it for its block count
+//   ignores-result-cap  the same, when it is refused for its result count
+//   die-on-rpc-error    exits the moment a request to the node fails, instead
+//                       of retrying
+//   slow-head           looks for new blocks every five seconds, the default
+//                       of at least one real tool, on a chain that makes one
+//                       every two
 //   asks-for-an-unserved-method
 //                       reaches for a JSON-RPC method the generated chain does
 //                       not implement, which stands for every real indexer
@@ -89,7 +97,11 @@ export type Defect =
   | "double-flush-on-stop"
   | "drops-second-event"
   | "stuck-after-db-error"
-  | "no-sanitise";
+  | "no-sanitise"
+  | "ignores-range-cap"
+  | "ignores-result-cap"
+  | "die-on-rpc-error"
+  | "slow-head";
 
 export interface FakeOptions {
   /** Where it writes. A real database: the harness's SQL has to be exercised. */
@@ -146,15 +158,21 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       return sql(query);
     }
 
+    /** Every failure here is the node's, and says so, for die-on-rpc-error. */
     async function rpc(method: string, params: unknown[]): Promise<any> {
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        signal: AbortSignal.timeout(10_000),
-      });
-      const body = await response.json();
-      if (body.error) throw new Error(`${method}: ${body.error.message}`);
+      let body: any;
+      try {
+        const response = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        body = await response.json();
+      } catch (err) {
+        throw new Error(`rpc ${method}: ${(err as Error).message}`);
+      }
+      if (body.error) throw new Error(`rpc ${method}: ${body.error.message}`);
       return body.result;
     }
 
@@ -330,7 +348,12 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         const message = String((err as Error).message);
         // The two caps a public endpoint imposes. Both say the same thing:
         // ask for less.
-        if (/max block range|more than \d+ results/.test(message) && batch > 1) {
+        const refusedFor = /max block range/.test(message)
+          ? "ignores-range-cap"
+          : /more than \d+ results/.test(message)
+            ? "ignores-result-cap"
+            : null;
+        if (refusedFor && !defects.has(refusedFor) && batch > 1) {
           batch = Math.max(1, Math.floor(batch / 2));
           return;
         }
@@ -421,6 +444,12 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
             if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] stuck: ${err}`);
             stuck = true;
           }
+          if (defects.has("die-on-rpc-error") && /^Error: rpc /.test(String(err))) {
+            if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] dying: ${err}`);
+            running = false;
+            exited = true;
+            return;
+          }
           if (defects.has("die-on-db-error") && /psql|connection/i.test(String(err))) {
             if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] dying: ${err}`);
             running = false;
@@ -434,7 +463,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
           if (process.env.RELIABILITY_DEBUG) console.error(`  [fake] ${err}`);
           await sleep(1_000);
         }
-        await sleep(200);
+        await sleep(defects.has("slow-head") ? 5_000 : 200);
       }
     }
 

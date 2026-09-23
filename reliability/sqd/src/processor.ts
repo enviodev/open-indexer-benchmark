@@ -50,6 +50,11 @@ export const rpcClient = new RpcClient({ url: rpcEndpoint });
 
 export const processor = new EvmBatchProcessor()
   .setRpcEndpoint({ url: rpcEndpoint })
+  // The processor looks for a new head every five seconds unless told
+  // otherwise, which on this chain's two-second blocks is a median of two and
+  // a half seconds before it has even seen a block. An operator on a fast
+  // chain sets this; one second is what Ponder polls at out of the box.
+  .setRpcDataIngestionSettings({ headPollInterval: 1_000 })
   .setFinalityConfirmation(10)
   .setFields({
     log: { transactionHash: true },

@@ -181,6 +181,16 @@ const EXPECTATIONS: Expectation[] = [
       "second-event",
     ],
   },
+  // Strings written through unchanged: the NUL in the token's name reaches
+  // Postgres, the insert is refused, and the row never arrives. That is the
+  // failure, not a gap in the benchmark - the table is there, the row is not.
+  {
+    scenario: "awkward-values",
+    defects: ["no-sanitise"],
+    fails: ["nul-byte"],
+    unmeasured: ["null-symbol"],
+    passes: ["max-uint", "empty-blocks"],
+  },
   // A tool that indexes the transfers and ignores the other event it is
   // configured for: every other check in the scenario passes, which is what
   // makes this one worth having.
@@ -215,6 +225,54 @@ const EXPECTATIONS: Expectation[] = [
     fails: ["flushes"],
   },
   { scenario: "rpc-limits", passes: ["splits-range", "splits-results"] },
+  // Asking for 2,000 blocks at a time, so both caps are met: the range cap
+  // first, then, at 1,000 blocks, the result cap.
+  {
+    scenario: "rpc-limits",
+    batchBlocks: 2_000,
+    passes: ["splits-range", "splits-results"],
+  },
+  // A tool that exits on the first failed request, and has to be started by
+  // hand before it indexes again.
+  {
+    scenario: "rpc-outage",
+    defects: ["die-on-rpc-error"],
+    fails: ["survives", "resumes"],
+    passes: ["no-loss"],
+    slow: true,
+  },
+  {
+    scenario: "rpc-chaos",
+    defects: ["die-on-rpc-error"],
+    fails: ["survives"],
+    passes: ["catches-up", "no-loss", "no-duplicates"],
+    slow: true,
+  },
+  // Polling for new blocks every five seconds on a two-second chain: always
+  // within a few blocks of the head, and never faster than half a poll.
+  {
+    scenario: "block-to-row",
+    defects: ["slow-head"],
+    fails: ["median-under-block-time"],
+    passes: ["tail-bounded", "keeps-up"],
+    slow: true,
+  },
+  // One defect per cap, and each fails only its own check. A tool stuck at
+  // the range cap was never shown the result cap, so that one is not tested.
+  {
+    scenario: "rpc-limits",
+    batchBlocks: 2_000,
+    defects: ["ignores-range-cap"],
+    fails: ["splits-range"],
+    unmeasured: ["splits-results"],
+  },
+  {
+    scenario: "rpc-limits",
+    batchBlocks: 2_000,
+    defects: ["ignores-result-cap"],
+    passes: ["splits-range"],
+    fails: ["splits-results"],
+  },
   // Never run here until every tool but one failed its last check: this
   // double, like Envio, notices a rewrite when the next block arrives, and
   // the scenario rewrote the head and then stood still.
@@ -244,7 +302,10 @@ const EXPECTATIONS: Expectation[] = [
   {
     scenario: "reorg-cases",
     defects: ["no-reorg-handling"],
-    fails: ["shallow", "shortening", "removes-event", "while-down"],
+    // Every case, each on its own rewrite: the first leaves the data wrong,
+    // and the rest are judged on the blocks they rewrote rather than failing
+    // on the first one's rows.
+    fails: ["shallow", "shortening", "removes-event", "while-down", "storm", "during-backfill", "deep"],
   },
   {
     scenario: "process-kill",

@@ -310,6 +310,12 @@ export interface ChainStats {
   methods: Record<string, number>;
   /** Widest `eth_getLogs` range asked for, in blocks. */
   widestRange: number;
+  /**
+   * `eth_getLogs` requests refused by each cap. The range cap is checked
+   * first, so a request refused for its result count had already come in
+   * under the range cap.
+   */
+  capped: { range: number; results: number };
 }
 
 export interface ChainControl {
@@ -443,7 +449,14 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   let faultSeed = 0x9e_37_79_b9;
 
   function emptyStats(): ChainStats {
-    return { requests: 0, faulted: 0, methods: {}, widestRange: 0, refused: {} };
+    return {
+      requests: 0,
+      faulted: 0,
+      methods: {},
+      widestRange: 0,
+      refused: {},
+      capped: { range: 0, results: 0 },
+    };
   }
 
   function append(epoch: number, logs: boolean): MockBlock {
@@ -678,6 +691,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     const to = Math.min(blockRef(filter?.toBlock ?? "latest") ?? head, head);
     stats.widestRange = Math.max(stats.widestRange, to - from + 1);
     if (maxBlockRange && to - from + 1 > maxBlockRange) {
+      stats.capped.range++;
       throw rpcFault(-32_600, `query exceeds max block range ${maxBlockRange}`);
     }
     const out: ReturnType<typeof logsOf> = [];
@@ -686,6 +700,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       if (block) out.push(...filterLogs(logsOf(block), filter));
     }
     if (maxLogsPerResponse && out.length > maxLogsPerResponse) {
+      stats.capped.results++;
       throw rpcFault(-32_005, `query returned more than ${maxLogsPerResponse} results`);
     }
     // Doubling happens last, so it is the response that is wrong rather than
@@ -1026,6 +1041,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     stats: () => ({
       ...stats,
       methods: { ...stats.methods },
+      capped: { ...stats.capped },
       refused: { ...stats.refused },
     }),
     reset() {
