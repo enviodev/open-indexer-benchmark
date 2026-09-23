@@ -30,7 +30,7 @@ export interface DecodedLog {
 /**
  * The n-th 32-byte word of a log's data payload, as a lowercase address.
  * Reading a specific word is the only way to get at arguments past the first
- * for events whose payload holds several - `SafeSetup`, for instance.
+ * for events whose payload holds several — `SafeSetup`, for instance.
  */
 export function addressAtWord(data: string, index: number): string {
   return `0x${wordHex(data, index).slice(24)}`;
@@ -78,7 +78,7 @@ export async function post(url: string, token: string, body?: unknown): Promise<
     }
     if (attempt < MAX_ATTEMPTS) await sleep(attempt * 2_000);
   }
-  throw new Error(`HyperSync request failed after ${MAX_ATTEMPTS} attempts - ${lastError}`);
+  throw new Error(`HyperSync request failed after ${MAX_ATTEMPTS} attempts — ${lastError}`);
 }
 
 /**

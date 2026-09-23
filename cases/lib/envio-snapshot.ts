@@ -1,8 +1,8 @@
 // Ground truth taken from an indexer project's own run.
 //
-// A scenario whose logic cannot be replayed from raw chain data - Solana
+// A scenario whose logic cannot be replayed from raw chain data — Solana
 // instructions carry positional accounts and a Borsh payload, and which token
-// moved is only knowable by joining the transaction's balances - would
+// moved is only knowable by joining the transaction's balances — would
 // otherwise need that logic written twice, once in the indexer and once in the
 // harness, with nothing keeping the two in step.
 //
@@ -21,7 +21,7 @@ import { exec } from "./process.ts";
 
 /**
  * Run `project`'s indexer over `[startBlock, endBlock]` and return the rows it
- * wrote, as plain JSON - wide integers arrive as decimal strings, since that
+ * wrote, as plain JSON — wide integers arrive as decimal strings, since that
  * is what survives the round trip.
  *
  * The project is installed and code-generated first, the same way the driver

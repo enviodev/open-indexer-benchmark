@@ -27,7 +27,7 @@ run(dataSource, new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => 
         // Either account answers which token moved, because SPL Token rejects
         // a transfer between different mints, and reading only the source
         // would lose the transfers whose source the transaction itself opened
-        // - such an account has no balance before it, only after.
+        // — such an account has no balance before it, only after.
         const balances = ins.getTransaction().tokenBalances;
         const mintOf = (account: string) => {
           const balance = balances.find((b) => b.account === account);

@@ -21,7 +21,7 @@ export interface Snapshot {
    * Rows committed to the scenario's own tables, where the driver can tell
    * that apart from `events`.
    *
-   * For most drivers the two are the same reading - `events` is a count of
+   * For most drivers the two are the same reading — `events` is a count of
    * those rows. A driver that reads a progress counter the indexer maintains
    * has to report both, because that counter says how much work was done and
    * not how much of it is durable: it can reach the end of the range while the
@@ -82,7 +82,7 @@ export interface Progress {
  * Counts indexed events directly in the indexer's own tables.
  *
  * Every indexer names the same entities differently, so the tables are found by
- * introspection - the same resolution the verification layer uses - rather than
+ * introspection — the same resolution the verification layer uses — rather than
  * being spelled out per indexer in the case config. Resolution is cached after
  * the first success and dropped again whenever a query fails, so a driver that
  * recreates its schema between phases re-resolves instead of going on querying

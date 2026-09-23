@@ -9,7 +9,7 @@ export function handleApproval(event: Approval): void {
 
   // An approval of zero revokes it, and a revoked allowance is zero whatever
   // the token reports, so there is nothing to go and ask. Any other approval is
-  // followed by a read of what the token now reports for the pair - served from
+  // followed by a read of what the token now reports for the pair — served from
   // the call the manifest declared, which Graph Node fetched before the handler
   // was entered.
   let allowance = BigInt.zero();

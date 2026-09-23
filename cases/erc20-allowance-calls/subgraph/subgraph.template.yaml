@@ -6,8 +6,8 @@
 # of a block's declared calls are fetched at once, so the mapping's own
 # `allowance` call is answered from what was already prefetched instead of
 # blocking the single-threaded handler for a round trip. It is declared
-# unconditionally, so the roughly one approval in five that revokes - and needs
-# no call - is prefetched anyway; the manifest has no way to say "only when the
+# unconditionally, so the roughly one approval in five that revokes — and needs
+# no call — is prefetched anyway; the manifest has no way to say "only when the
 # value is non-zero".
 specVersion: 1.3.0
 schema:

@@ -1,5 +1,5 @@
 # Every entity is written once and never updated, so they are declared
-# immutable - the storage layout The Graph's docs recommend for event data.
+# immutable — the storage layout The Graph's docs recommend for event data.
 type Safe @entity(immutable: true) {
   id: ID!
   address: String!

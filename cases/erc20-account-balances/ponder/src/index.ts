@@ -25,7 +25,7 @@ ponder.on("RocketTokenRETH:Transfer", async ({ event, context }) => {
       balance: row.balance + event.args.value,
     }));
 
-  // Transfer event insert is independent - no await needed at the end of handler
+  // Transfer event insert is independent — no await needed at the end of handler
   await context.db.insert(transferEvent).values({
     id: event.id,
     amount: event.args.value,

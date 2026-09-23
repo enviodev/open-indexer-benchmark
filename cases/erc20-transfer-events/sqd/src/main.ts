@@ -13,7 +13,7 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
       if (log.topics[0] === events.Transfer.topic) {
         const { from, to, value } = events.Transfer.decode(log);
 
-        // Store the raw decoded Transfer event only - no balance aggregation.
+        // Store the raw decoded Transfer event only — no balance aggregation.
         transferEvents.push(
           new TransferEvent({
             id: `${block.header.height}-${log.logIndex}`,

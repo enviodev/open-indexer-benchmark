@@ -19,8 +19,8 @@ function requireEndBlock(): number {
 const START_BLOCK = 24600000;
 
 // The canonical Safe proxy factories. A datasource carries one address, and
-// the two generations need different ABIs - `proxy` became indexed in 1.4.1,
-// which is the same event signature over a different payload - so each
+// the two generations need different ABIs — `proxy` became indexed in 1.4.1,
+// which is the same event signature over a different payload — so each
 // deployment gets its own entry.
 const FACTORIES_V1_3_0 = [
   "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2", // canonical

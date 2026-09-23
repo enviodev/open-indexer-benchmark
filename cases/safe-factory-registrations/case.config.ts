@@ -12,7 +12,7 @@ import { addressAtWord, uintAtWord, type DecodedLog } from "../lib/hypersync.ts"
 
 /**
  * `ProxyCreation(address proxy, address singleton)`, and the same signature
- * with `proxy` indexed from 1.4.1 on - one topic0 either way, which is why the
+ * with `proxy` indexed from 1.4.1 on — one topic0 either way, which is why the
  * layouts have to be told apart by the factory that emitted the log.
  */
 const PROXY_CREATION_TOPIC =
@@ -24,7 +24,7 @@ const PROXY_CREATION_TOPIC =
  * layouts, which is the reason the case carries two decode paths rather than
  * one.
  *
- * `ProxyCreation(address proxy, address singleton)` - both arguments in the
+ * `ProxyCreation(address proxy, address singleton)` — both arguments in the
  * data payload, proxy first.
  */
 const FACTORIES_V1_3_0 = [
@@ -33,7 +33,7 @@ const FACTORIES_V1_3_0 = [
 ];
 
 /**
- * `ProxyCreation(address indexed proxy, address singleton)` - proxy moved into
+ * `ProxyCreation(address indexed proxy, address singleton)` — proxy moved into
  * a topic in 1.4.1 and stayed there, so the data payload holds the singleton
  * alone. Same topic0 as above: the signature string is unchanged, only the
  * indexing of its first argument.
@@ -47,11 +47,11 @@ const FACTORIES = [...FACTORIES_V1_3_0, ...FACTORIES_MODERN];
 
 const legacy = new Set(FACTORIES_V1_3_0);
 
-/** The proxy a `ProxyCreation` announced - data word 0, or topic1 since 1.4.1. */
+/** The proxy a `ProxyCreation` announced — data word 0, or topic1 since 1.4.1. */
 const proxyOf = (log: DecodedLog) =>
   legacy.has(log.address) ? addressAtWord(log.data, 0) : log.arg0;
 
-/** The singleton it was pointed at - the word after the proxy, wherever it is. */
+/** The singleton it was pointed at — the word after the proxy, wherever it is. */
 const singletonOf = (log: DecodedLog) =>
   addressAtWord(log.data, legacy.has(log.address) ? 1 : 0);
 
@@ -62,8 +62,8 @@ const START_BLOCK = 24_600_000;
 // blocks register 82,268 children, at 2.7 per block.
 //
 // It used to be twice as long, back when the verification run was capped at ten
-// minutes. At five, the two slowest tools that were finishing the range -
-// Ponder at 462s, the Squid SDK on RPC at 403s - would stop about two thirds
+// minutes. At five, the two slowest tools that were finishing the range —
+// Ponder at 462s, the Squid SDK on RPC at 403s — would stop about two thirds
 // through and report a partial row instead of a verified one; halving it puts
 // them near 200s. What that costs is depth, and the second half is where the
 // depth was: the 30,000 blocks after this one register another 117,709
@@ -80,7 +80,7 @@ const END_BLOCK = 24_630_000;
 //
 // Safe 1.4.x made one argument of eight of these events `indexed` without
 // changing the signature, so those eight arrive under one topic0 in two
-// incompatible layouts - and unlike `ProxyCreation`, where the emitting
+// incompatible layouts — and unlike `ProxyCreation`, where the emitting
 // factory says which to expect, a child can emit either. Which layout a log
 // carries is readable from its shape: the argument that moved is either the
 // first word of the payload or the first topic, never both.
@@ -119,7 +119,7 @@ const ENTITY_OF_TOPIC = new Map(
 const wordCount = (data: string) => Math.floor((data.length - 2) / 64);
 
 /**
- * The single address argument of an event that has exactly one - read from the
+ * The single address argument of an event that has exactly one — read from the
  * payload before 1.4.x and from topic1 after it. An empty payload is the tell:
  * the argument can only have gone into a topic.
  */
@@ -134,7 +134,7 @@ const soleAddressOf = (log: DecodedLog) =>
  * encodes addresses, amounts and timestamps.
  *
  * Both layouts carry at least one word, so an empty payload is not a layout
- * this code has not met - it is a truncated log, and reading it as a payment of
+ * this code has not met — it is a truncated log, and reading it as a payment of
  * zero would bury that in a checksum nobody could trace back.
  */
 const paymentOf = (data: string) => {
@@ -188,7 +188,7 @@ const TIMESTAMP_FIELD = {
 
 /**
  * Most of the Safe ABI is one address argument and nothing else, so the entity
- * is the same shape every time - only what the address is called changes.
+ * is the same shape every time — only what the address is called changes.
  */
 function addressEvent(
   key: string,
@@ -401,7 +401,7 @@ export const caseConfig: EvmCaseConfig = {
 
       switch (log.topic0) {
         // A SafeSetup is emitted by the proxy itself, one log index *below* the
-        // ProxyCreation that announces it - the child's event precedes its own
+        // ProxyCreation that announces it — the child's event precedes its own
         // registration. Indexers that resolve the factory's child set up front
         // capture these; indexers that register strictly in event order cannot.
         case CHILD_TOPICS.safeSetup:

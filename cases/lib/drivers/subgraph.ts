@@ -18,7 +18,7 @@ export const SUBGRAPH_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PO
  * Graph Node release the `gnd` binary is taken from. Pinned rather than
  * resolved as "latest": `graph node install` looks the latest tag up through
  * the unauthenticated GitHub API and, when that call is throttled, installs
- * nothing and reports `release undefined does not exist` - the same failure
+ * nothing and reports `release undefined does not exist` — the same failure
  * that used to drop rindexer from the table.
  */
 const GRAPH_NODE_VERSION = "v0.44.0";
@@ -72,7 +72,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       // cannot be asked: `gnd --version` reports a commit hash, not the release
       // it came from. Taking its presence as proof of its version would mean a
       // developer who ran an earlier revision keeps benchmarking the Graph Node
-      // they already had after a version bump - bin/ is gitignored and nothing
+      // they already had after a version bump — bin/ is gitignored and nothing
       // else ever clears it. CI is covered by the cache key, which changes with
       // this file, but only incidentally, and only in CI.
       const versionFile = resolve(BIN_DIR, ".gnd-version");
@@ -84,7 +84,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       if (installed !== GRAPH_NODE_VERSION) {
         console.log(`Installing Graph Node ${GRAPH_NODE_VERSION}...\n`);
         // `graph node install` renames the downloaded binary into --bin-dir
-        // without creating it first, and fails with ENOENT if it is missing -
+        // without creating it first, and fails with ENOENT if it is missing —
         // which it is on any run the cache did not restore.
         mkdirSync(BIN_DIR, { recursive: true });
         await exec(
@@ -113,7 +113,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
           "run", "-d", "--name", PG_CONTAINER,
           "-e", "POSTGRES_PASSWORD=postgres",
           "-e", "POSTGRES_DB=graphnode",
-          // Graph Node refuses a database that is not UTF8/C - the default
+          // Graph Node refuses a database that is not UTF8/C — the default
           // locale of the postgres image is not.
           "-e", "POSTGRES_INITDB_ARGS=-E UTF8 --locale=C",
           "-p", `${PG_PORT}:5432`,
@@ -125,7 +125,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     },
     async launch() {
       // `gnd dev` deploys the built subgraph itself and starts indexing on
-      // startup, so launching the process is the start of the measured window -
+      // startup, so launching the process is the start of the measured window —
       // there is no separate create/deploy step to keep out of it.
       proc = start(
         gnd,
@@ -148,7 +148,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
           // writes them in one batch every 300 seconds (or 10 MB). Progress is
           // read from PostgreSQL here, so with the default a throughput window
           // shorter than that observes an empty database and reports a rate of
-          // zero for an indexer that was working the whole time - which is what
+          // zero for an indexer that was working the whole time — which is what
           // the erc20-transfer-events table published. Batching stays on, just
           // bounded well inside the window; the reading is then at most this
           // many seconds stale.
@@ -165,7 +165,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     },
     async snapshot() {
       // `subgraphs.head` is Graph Node's own record of where each deployment
-      // has got to - the same position its index-node status API serves. It
+      // has got to — the same position its index-node status API serves. It
       // keeps advancing through ranges that produced no events, which matters
       // for a sparse contract where most scanned blocks write nothing.
       const [{ events }, block] = await Promise.all([

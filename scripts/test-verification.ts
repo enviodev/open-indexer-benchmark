@@ -6,7 +6,7 @@
 //
 // The benchmark itself cannot check this: if table resolution or a canonical
 // SQL expression breaks, every indexer would simply be reported as "unknown"
-// or, worse, uniformly wrong. These cases pin the behaviour down - including
+// or, worse, uniformly wrong. These cases pin the behaviour down — including
 // the negative cases, where corruption must actually be detected.
 //
 // Requires a superuser connection (test databases are created and dropped).
@@ -71,7 +71,7 @@ const logs = await fetchLogs({
 });
 if (logs.length !== expected.totalEvents) {
   console.error(
-    `Fetched ${logs.length} logs but expected.json records ${expected.totalEvents} - ` +
+    `Fetched ${logs.length} logs but expected.json records ${expected.totalEvents} — ` +
       `regenerate it with scripts/generate-expected.ts`
   );
   process.exit(1);
@@ -217,7 +217,7 @@ const shapes: Record<string, () => Promise<string>> = {
   "subgraph (deployment schema, block_range history filtered)": async () => {
     // Graph Node puts each deployment in its own `sgd<n>` schema and keeps
     // superseded versions of mutable entities in the same table, discriminated
-    // by an int4range - the same idea as SubQuery's but a different column
+    // by an int4range — the same idea as SubQuery's but a different column
     // name. Immutable entities instead carry a `block$` column and never have
     // more than one version, so they need no filtering at all.
     const url = await createDb(
@@ -256,7 +256,7 @@ const shapes: Record<string, () => Promise<string>> = {
 
 let failures = 0;
 function check(label: string, passed: boolean, detail = "") {
-  console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}${detail ? ` - ${detail}` : ""}`);
+  console.log(`  ${passed ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
   if (!passed) failures++;
 }
 
@@ -302,7 +302,7 @@ check(
 );
 await sql(`DELETE FROM ${table} WHERE id = 'duplicate'`);
 
-// Row count still matches - only the checksum can catch these two.
+// Row count still matches — only the checksum can catch these two.
 await sql(`UPDATE ${table} SET amount = amount + 1 WHERE id = ${quote(ROWS[1].id)}`);
 result = await verify(sql, caseConfig.entities, expected, withRows);
 check(

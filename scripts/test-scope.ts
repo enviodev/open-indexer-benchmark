@@ -4,7 +4,7 @@
 //
 // The filter decides what a pull request measures. Over-selecting only costs
 // runner time, but under-selecting publishes a green benchmark comment for an
-// indexer nobody re-ran - so the cases that widen the scope (case run logic,
+// indexer nobody re-ran — so the cases that widen the scope (case run logic,
 // shared driver plumbing, the workflows themselves) are the ones worth pinning.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -23,7 +23,7 @@ const INDEXERS = [...REGISTERED];
 
 
 
-/** The given indexers, in every scenario - what a repo-wide change selects. */
+/** The given indexers, in every scenario — what a repo-wide change selects. */
 const inEvery = (indexers: string[]) =>
   Object.fromEntries(CASES.map((c) => [c, indexers]));
 const EVERYTHING = inEvery(INDEXERS);
@@ -32,7 +32,7 @@ let failures = 0;
 
 // The workflow spells its default indexer list out in shell, because the matrix
 // is built before any of this code runs. That makes it the one copy the drivers
-// registry cannot reach - and an indexer missing from it is not selected away,
+// registry cannot reach — and an indexer missing from it is not selected away,
 // it simply never gets a job, which reads as a scenario that has no such row.
 {
   const workflow = readFileSync(
@@ -53,7 +53,7 @@ let failures = 0;
     if (missing.length > 0 || extra.length > 0 || duplicated.length > 0) {
       console.error(
         `FAIL workflow: benchmarks.yml's default indexer list disagrees with the ` +
-          `drivers registry - missing [${missing.join(", ")}], unknown [${extra.join(", ")}], ` +
+          `drivers registry — missing [${missing.join(", ")}], unknown [${extra.join(", ")}], ` +
           `duplicated [${duplicated.join(", ")}]`
       );
       failures++;
@@ -94,7 +94,7 @@ function check(name: string, changed: string[], expected: Record<string, string[
     failures++;
     return;
   }
-  // Derived from what the test expects, not from the scope under test - the
+  // Derived from what the test expects, not from the scope under test — the
   // flag must not be allowed to grade itself.
   const expectFull =
     Object.keys(expected).length === CASES.length &&
@@ -107,13 +107,13 @@ function check(name: string, changed: string[], expected: Record<string, string[
   console.log(`ok ${name}`);
 }
 
-// The filter carries its own copy of the indexer registry's shape - which
+// The filter carries its own copy of the indexer registry's shape — which
 // directory each indexer's projects live in. If they drift, a changed indexer
 // silently keeps its stale carried-forward row instead of being re-measured,
 // which is the one failure mode the filter must not have. Pin the two
 // together: a change in some registered indexer's project directory must
 // select that indexer. Scenario by scenario would be stricter, but a scenario
-// only some tools implement - Solana - has directories for only those, and an
+// only some tools implement — Solana — has directories for only those, and an
 // absent directory would then be indistinguishable from a stale mapping.
 for (const indexer of REGISTERED) {
   const selectable = CASES.some((benchCase) =>
@@ -127,7 +127,7 @@ for (const indexer of REGISTERED) {
   );
   if (!selectable) {
     console.error(
-      `FAIL registry: no directory in any scenario selects "${indexer}" - ` +
+      `FAIL registry: no directory in any scenario selects "${indexer}" — ` +
         `does select-scope.ts's INDEXER_DIRS know about it?`
     );
     failures++;
@@ -137,7 +137,7 @@ if (failures === 0) console.log(`ok registry: all ${REGISTERED.length} indexers 
 
 // Same pin for the driver map: every registered indexer must be narrowly
 // selected by some driver file that exists on disk. A driver renamed away
-// from its registry key falls into the run-everything fallback - safe, but
+// from its registry key falls into the run-everything fallback — safe, but
 // this keeps DRIVER_INDEXERS honest instead of letting the fallback paper
 // over a stale map forever.
 const driverFiles = readdirSync(resolve(ROOT, "cases", "lib", "drivers")).filter((f) =>
@@ -152,7 +152,7 @@ for (const indexer of REGISTERED) {
   });
   if (!file) {
     console.error(
-      `FAIL drivers: no file under cases/lib/drivers/ narrowly selects "${indexer}" - ` +
+      `FAIL drivers: no file under cases/lib/drivers/ narrowly selects "${indexer}" — ` +
         `does select-scope.ts's DRIVER_INDEXERS know about it?`
     );
     failures++;
@@ -175,7 +175,7 @@ const mockScope = selectScope(["cases/lib/rpc-mock.ts"], CASES, INDEXERS);
 if (JSON.stringify(mockScope.cases) !== JSON.stringify(callCases)) {
   console.error(
     `FAIL lib modules: cases/lib/rpc-mock.ts selects ${JSON.stringify(mockScope.cases)}, ` +
-      `but ${JSON.stringify(callCases)} declare ethCall - update LIB_MODULE_CASES ` +
+      `but ${JSON.stringify(callCases)} declare ethCall — update LIB_MODULE_CASES ` +
       `in select-scope.ts`
   );
   failures++;
@@ -280,7 +280,7 @@ check("docs and local scripts run nothing", [
 ], {});
 
 // The inert list is an allowlist, not the default: a file the filter cannot
-// place - a root package.json, a new top-level directory - affects every job
+// place — a root package.json, a new top-level directory — affects every job
 // for all it knows, and selecting nothing would ship it to main unexercised.
 check("an unrecognized root file runs everything", ["package.json"], EVERYTHING);
 

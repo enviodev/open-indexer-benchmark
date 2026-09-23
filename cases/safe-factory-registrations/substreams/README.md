@@ -13,8 +13,8 @@ registers children strictly in event order loses those rows.
 
 Two decoding quirks the case demands:
 
-- `ProxyCreation` carries one topic0 across two layouts - proxy in the payload
-  before 1.4.1, in a topic after - so the factory that emitted the log decides
+- `ProxyCreation` carries one topic0 across two layouts — proxy in the payload
+  before 1.4.1, in a topic after — so the factory that emitted the log decides
   how to read it.
 - The eight events that carry one address and nothing else moved that argument
   into a topic in 1.4.x, so an empty payload is the tell. They share one branch
@@ -39,7 +39,7 @@ D="postgres://postgres:postgres@localhost:25433/substreams?sslmode=disable"
 
 `--batch-block-flush-interval 1` is not optional: the sink batches 1,000 blocks
 by default and drops whatever is pending when it reaches a stop block, so a
-bounded run - which a backfill is - silently loses its tail.
+bounded run — which a backfill is — silently loses its tail.
 
 `substreams.yaml` imports the sink-sql protodefs spkg because the sink resolves
 its type from there. The `substreams` CLI bundles them itself and then rejects

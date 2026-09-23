@@ -1,5 +1,5 @@
 # Approval events are written once and never updated, so they are declared
-# immutable - the storage layout The Graph's docs recommend for event data. The
+# immutable — the storage layout The Graph's docs recommend for event data. The
 # allowance table is one row per (token, owner, spender), rewritten every time
 # that pair approves again, so it stays mutable.
 type ApprovalEvent @entity(immutable: true) {

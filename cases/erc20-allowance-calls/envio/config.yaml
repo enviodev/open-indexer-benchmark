@@ -4,8 +4,8 @@ description: ERC-20 approvals, with the resulting allowance read back from the c
 # A batch is the unit of concurrency for the Effect API: the preload pass puts
 # the whole batch's calls in flight at once, so how many an indexer has
 # outstanding is set by how many events it processes at a time. At the default
-# 5,000 that is about 4,100 calls - the ~82% of approvals that are not
-# revocations - and the run spends its time at a concurrency the endpoint could
+# 5,000 that is about 4,100 calls — the ~82% of approvals that are not
+# revocations — and the run spends its time at a concurrency the endpoint could
 # answer several times over.
 #
 # Measured on the verification range and two 60s windows, holding everything

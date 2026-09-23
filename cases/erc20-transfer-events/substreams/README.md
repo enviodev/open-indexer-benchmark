@@ -10,8 +10,8 @@ the module takes whole blocks and keeps the logs of one contract. That is what
 Substreams gives you on this chain, and it is what the row measures: far more
 data crosses the wire than the filtered sources ship.
 
-A log is kept only if its shape matches a standard ERC-20 `Transfer` - three
-topics and a single data word - so a non-standard event of the same name
+A log is kept only if its shape matches a standard ERC-20 `Transfer` — three
+topics and a single data word — so a non-standard event of the same name
 decodes to nothing rather than to a wrong row.
 
 Rows are keyed `blockNumber-logIndex`, the same as every other implementation
@@ -34,7 +34,7 @@ D="postgres://postgres:postgres@localhost:25433/substreams?sslmode=disable"
 
 `--batch-block-flush-interval 1` is not optional: the sink batches 1,000 blocks
 by default and drops whatever is pending when it reaches a stop block, so a
-bounded run - which a backfill is - silently loses its tail.
+bounded run — which a backfill is — silently loses its tail.
 
 `substreams.yaml` imports the sink-sql protodefs spkg because the sink resolves
 its type from there. The `substreams` CLI bundles them itself and then rejects

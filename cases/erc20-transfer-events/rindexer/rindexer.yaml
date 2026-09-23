@@ -15,7 +15,7 @@ networks:
     #
     # The driver substitutes the values, because this one file backs two rows:
     # the RPC row keeps 1000/10, and the HyperSync row runs rindexer's
-    # defaults (50000/1) - its per-request limits are HyperSync's own, not an
+    # defaults (50000/1) — its per-request limits are HyperSync's own, not an
     # RPC node's.
     max_block_range: ${RINDEXER_MAX_BLOCK_RANGE}
     fetch_concurrency: ${RINDEXER_FETCH_CONCURRENCY}

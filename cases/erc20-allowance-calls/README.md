@@ -1,7 +1,7 @@
 # External Contract Calls
 
 Logs do not hold everything an indexer needs. Sooner or later a handler has to
-go and ask something - a contract, a price feed, an API - and wait for the
+go and ask something — a contract, a price feed, an API — and wait for the
 answer. This scenario is about what happens while it waits.
 
 Index every `Approval` on the eight busiest ERC-20s on Ethereum Mainnet, and for
@@ -12,25 +12,25 @@ approvals in the range need a call, and every call takes 200ms.
 The 200ms is not up to the indexer: the benchmark serves the calls itself, at a
 fixed latency, identically for every tool. How many of them are outstanding at
 any moment *is* up to the indexer, and that is the whole measurement. The
-endpoint neither rate limits nor queues - hand it ten thousand calls at once and
-ten thousand are in flight, all answered 200ms later - so a tool is never
+endpoint neither rate limits nor queues — hand it ten thousand calls at once and
+ten thousand are in flight, all answered 200ms later — so a tool is never
 waiting on anything but its own scheduling.
 
 The difference is not subtle. An indexer that hands the endpoint a whole batch
 at a time gets through the range in seconds. One that waits for each call before
-starting the next pays 15,703 × 200ms - the better part of an hour - for the same
+starting the next pays 15,703 × 200ms — the better part of an hour — for the same
 work, and the five-minute cap stops it long before that.
 
 ## Benchmark Specification
 
 - **Target Contracts**: the eight ERC-20s with the most approval traffic in the
-  range - USDT, USDC, XAUt, WETH, USDe, WBTC, DAI and crvUSD
+  range — USDT, USDC, XAUt, WETH, USDe, WBTC, DAI and crvUSD
 - **Events Indexed**: `Approval`
 - **Block Range**: 25,600,000 to latest
-- **Verification Range**: 25,600,000 to 25,601,199 - indexed to completion, then
+- **Verification Range**: 25,600,000 to 25,601,199 — indexed to completion, then
   checked against `expected.json`
 - **Contract calls**: `allowance(owner, spender)`, at the event's block, for
-  every approval with a non-zero value - 15,703 of the range's 19,125 approvals,
+  every approval with a non-zero value — 15,703 of the range's 19,125 approvals,
   or 14,114 once identical calls in the same block are collapsed. 200ms each,
   with no limit on how many may be outstanding
 - **Features**: `event decoding`, `external calls`, `storage write`,
@@ -41,7 +41,7 @@ work, and the five-minute cap stops it long before that.
 For each **Approval** event:
 
 1. If the approved value is zero the approval was revoked, and a revoked
-   allowance is zero whatever the token reports - record zero, and make no call.
+   allowance is zero whatever the token reports — record zero, and make no call.
 2. Otherwise call `allowance(owner, spender)` on the token that emitted the log,
    **at the block the log was in**, and take the result as the allowance.
 3. Insert an approval event record with the token, owner, spender, the value
@@ -49,7 +49,7 @@ For each **Approval** event:
 4. Upsert the allowance record keyed by (token, owner, spender) to the allowance
    from the call.
 
-Two entities come out of it: 19,125 approval events, and 7,342 allowances -
+Two entities come out of it: 19,125 approval events, and 7,342 allowances —
 one per distinct (token, owner, spender) triple, holding the value from the last
 approval that touched it.
 
@@ -60,8 +60,8 @@ and this step would be redundant. The case does it anyway, and the reason it is
 worth doing is what the step stands in for: `transferFrom` spends an allowance
 without emitting anything, tokens exist whose `approve` does not store what the
 log says, and any indexer maintaining a live allowance table ends up reading
-some of them back. Substituting a real enrichment call - a price at a block, a
-pool's reserves, an NFT's metadata URI - changes nothing about what is measured
+some of them back. Substituting a real enrichment call — a price at a block, a
+pool's reserves, an NFT's metadata URI — changes nothing about what is measured
 here.
 
 ## Where the calls come from
@@ -76,7 +76,7 @@ So the benchmark answers the calls itself. Every tool is pointed at a local
 JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
 
 - **holds every intercepted call for 200ms**, so waiting is visible and equal;
-- **imposes nothing else** - no rate limit, no concurrency ceiling, no queue.
+- **imposes nothing else** — no rate limit, no concurrency ceiling, no queue.
   Whatever arrives together is served together, so the peak number of calls in
   flight is a property of the indexer rather than of a wall it ran into. (The
   practical ceiling is the open-file limit, since a call in flight is a socket;
@@ -85,8 +85,8 @@ JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
   block)` truncated to 64 bits, which is what makes the run reproducible. The
   value is in no log, so an indexer's rows can only match the ground truth if it
   really made the call, at the right block, and stored what came back;
-- **refuses anything else** - a call to another contract, another function, or
-  at the chain head - as a JSON-RPC error, so a tool cannot get a faster row by
+- **refuses anything else** — a call to another contract, another function, or
+  at the chain head — as a JSON-RPC error, so a tool cannot get a faster row by
   making different calls than everyone else. In particular, `multicall`
   aggregates are refused: this case is about scheduling calls, not about
   collapsing them;
@@ -99,7 +99,7 @@ JSON-RPC endpoint ([`cases/lib/rpc-mock.ts`](../lib/rpc-mock.ts)) which:
 
 A call may name its block as a hex number or in either EIP-1898 form
 (`{blockNumber}`, `{blockHash}`). Graph Node uses the hash form, so the endpoint
-resolves a hash to its number upstream - once per block, cached, and alongside
+resolves a hash to its number upstream — once per block, cached, and alongside
 the wait rather than after it, so the latency a tool sees is the same either
 way.
 
@@ -112,7 +112,7 @@ it happened concurrently.
 
 An indexer that issues its whole batch at once still has to get those calls onto
 the wire, and past a few thousand at a time that is where its run goes. A call
-in flight is a socket, and opening one costs about a millisecond - against a
+in flight is a socket, and opening one costs about a millisecond — against a
 round trip of two hundred. Measured against this endpoint, one Node process
 asking for the range's 14,114 calls:
 
@@ -125,22 +125,22 @@ asking for the range's 14,114 calls:
 
 The floor set by the latency alone is under a second, so the top of that table
 is almost entirely the client. Every implementation here that can be told to
-batch is told to batch, and the three that cannot are noted below - which is
+batch is told to batch, and the three that cannot are noted below — which is
 part of what the scenario reports: a tool's contract-call throughput is its
 transport's as much as its scheduler's, in this benchmark and in production
 alike.
 
 ## Implementations
 
-- **Envio** - [envio/](./envio/)
-- **Ponder** - [ponder/](./ponder/)
-- **Rindexer** - [rindexer/](./rindexer/)
-- **Squid SDK** - [sqd/](./sqd/), benchmarked once per source it reads from
-- **Subgraph** - [subgraph/](./subgraph/) (requires Docker)
-- **SubQuery** - [subquery/](./subquery/) (requires Docker)
+- **Envio** — [envio/](./envio/)
+- **Ponder** — [ponder/](./ponder/)
+- **Rindexer** — [rindexer/](./rindexer/)
+- **Squid SDK** — [sqd/](./sqd/), benchmarked once per source it reads from
+- **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
+- **SubQuery** — [subquery/](./subquery/) (requires Docker)
 
-Substreams has no row here. It can call a contract - `substreams-ethereum`
-exposes an `eth_call` extern - but the call runs on the Substreams server
+Substreams has no row here. It can call a contract — `substreams-ethereum`
+exposes an `eth_call` extern — but the call runs on the Substreams server
 against the node it operates, and this case is about calling an endpoint the
 benchmark provides at a latency it fixes so every tool waits the same. A row
 measured against StreamingFast's own archive node would be answering a
@@ -161,8 +161,8 @@ The endpoint that serves the contract calls is started by the runner on
 `127.0.0.1:19878` and shut down when the run ends; nothing has to be started
 separately.
 
-Each indexer indexes the verification range to completion - its database is then
-checked against `expected.json` and measured - before re-running for the
+Each indexer indexes the verification range to completion — its database is then
+checked against `expected.json` and measured — before re-running for the
 throughput window. Indexers too slow to finish the range within that window skip
 it and report their rate from the verification run.
 
@@ -202,7 +202,7 @@ credentials.
 ## Implementation Notes
 
 Progress and correctness are both read straight from each indexer's PostgreSQL
-database, never through its GraphQL API - see the
+database, never through its GraphQL API — see the
 [state aggregation case](../erc20-account-balances/README.md#implementation-notes)
 for why, and for the shared driver behaviour these implementations inherit.
 
@@ -212,7 +212,7 @@ ERC-721's `Approval(address,address,uint256)` hashes to the same topic0 as
 ERC-20's, with the third argument indexed instead of sitting in the data. About
 one Approval log in fourteen on mainnet is therefore an NFT approval that
 decodes under a different layout, and each tool's decoder handles that
-differently - some skip it, some fail. That is a finding about event decoding,
+differently — some skip it, some fail. That is a finding about event decoding,
 and it would sit in the middle of a measurement about contract calls. Naming
 eight contracts keeps the event stream homogeneous; at roughly 16 approvals a
 block they are dense enough that the case is call-bound, which is the point.
@@ -220,7 +220,7 @@ block they are dense enough that the case is call-bound, which is the point.
 ### The one call per approval rule
 
 Each allowance read is its own `eth_call`. No implementation batches them into a
-`multicall` aggregate - the endpoint refuses those - because a case where the
+`multicall` aggregate — the endpoint refuses those — because a case where the
 answer is "put them all in one round trip" measures whether the implementation
 knows that trick rather than what the indexer does with calls it cannot avoid.
 Plenty of real enrichment calls cannot be aggregated: they hit different chains,
@@ -234,15 +234,15 @@ collapse this way for tools that memoize.
 ### Envio
 
 Uses the [Effect API](https://docs.envio.dev/docs/HyperIndex/effect-api):
-`createEffect` wraps the `eth_call` - made through a viem client with request
-batching on - and the handler awaits it through `context.effect`. That is what makes the case work under HyperIndex V3's preload
-optimization - handlers run once across the whole batch with writes suppressed,
+`createEffect` wraps the `eth_call` — made through a viem client with request
+batching on — and the handler awaits it through `context.effect`. That is what makes the case work under HyperIndex V3's preload
+optimization — handlers run once across the whole batch with writes suppressed,
 where every effect in the batch is in flight at once, then again in block order
 with the results already in hand. An ordinary `fetch` in the handler would run
 in both passes, and serially in the second.
 
 Effects deduplicate identical inputs, so a pair that approves twice in one block
-costs one call - 14,114 of the range's 15,703. `rateLimit` is off, since the
+costs one call — 14,114 of the range's 15,703. `rateLimit` is off, since the
 endpoint imposes none either; against a real provider that option is where its
 limit would go.
 
@@ -251,7 +251,7 @@ decides this row. `full_batch_size` is 20,000 here rather than the default
 5,000: a batch's non-revoking approvals are what go out together, so 5,000
 events is about 4,100 calls in flight and 20,000 is about four times that.
 Measured over two windows with everything else fixed, 5,000 gives 8,188
-events/s, 20,000 gives 10,890, and 50,000 gives 9,503 - past 20,000 the batch
+events/s, 20,000 gives 10,890, and 50,000 gives 9,503 — past 20,000 the batch
 costs more in storage writes and memory than the concurrency returns. Envio's own metrics, on port 9898, are the
 quickest way to see where a run's time went: `envio_preload_seconds` is the
 phase the calls happen in, against `envio_processing_seconds` for the handlers'
@@ -278,7 +278,7 @@ operations declaratively and has no way to call a contract from a handler at
 all.
 
 The handler gets the whole batch, so the allowance reads are issued together
-against the provider rindexer already maintains, rather than one after another -
+against the provider rindexer already maintains, rather than one after another —
 but through a bounded window (2,000 in flight) rather than all at once. Its
 provider helper sends one request per call and takes no batching option, so
 unlike the JS implementations this one pays a connection per call. The
@@ -287,7 +287,7 @@ thousand events but a hundred thousand blocks' worth, and a batch that only
 finishes when its very last call does writes nothing for minutes.
 
 `rindexer codegen` generates an insert into the event table it derives from the
-ABI, which has columns for the event's arguments and nothing else - no column
+ABI, which has columns for the event's arguments and nothing else — no column
 for an allowance that is not in the log. The case's two tables are therefore
 created and written by the handler, and codegen's own insert is dropped rather
 than kept alongside them, which would have made rindexer the only implementation
@@ -327,8 +327,8 @@ calls:
 
 A declared call is fetched before the handler runs, and a block's declared calls
 are fetched in parallel, so the mapping's own `allowance` call is answered from
-what was already prefetched. The declaration is unconditional - the manifest has
-no way to say "only when the value is non-zero" - so the roughly one approval in
+what was already prefetched. The declaration is unconditional — the manifest has
+no way to say "only when the value is non-zero" — so the roughly one approval in
 five that revokes is prefetched anyway and the answer thrown away.
 
 A data source takes one address, so the eight tokens are eight data sources over

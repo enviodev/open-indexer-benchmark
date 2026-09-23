@@ -30,7 +30,7 @@ export const events = {
         "ProxyCreation(address,address)",
         {"proxy": p.address, "singleton": p.address}
     ),
-    // Safe 1.4.1 onwards. Identical signature - and so identical topic0 - but
+    // Safe 1.4.1 onwards. Identical signature — and so identical topic0 — but
     // `proxy` is indexed, which moves it out of the data payload.
     ProxyCreationIndexed: event(
         "0x4f51faf6c4561ff95f067657e43439f0f856d97c04d9ec9070a6199ad418e235",

@@ -2,7 +2,7 @@
 //
 // Every indexer goes through the same two phases:
 //
-//   Phase A (verification) - index a committed block range to completion, then
+//   Phase A (verification) — index a committed block range to completion, then
 //     check the resulting database against the ground truth and measure how
 //     much disk the indexed data occupies. Both metrics are only comparable
 //     when every indexer holds exactly the same data, which is what a bounded
@@ -12,9 +12,9 @@
 //     minutes, and an indexer that has not finished by then is verified on what
 //     it did index. That row reports a real check of real data over a known
 //     fraction of the range, with the fraction named and its storage scaled to
-//     what the whole range would have cost - a partial result rather than none.
+//     what the whole range would have cost — a partial result rather than none.
 //
-//   Phase B (throughput) - only for indexers that finished phase A in under
+//   Phase B (throughput) — only for indexers that finished phase A in under
 //     the benchmark window. Wipe state and re-run with an end block just below
 //     the chain head, stopping at whichever comes first: the window elapsing or
 //     the end block being reached. The window is run more than once and the
@@ -60,15 +60,15 @@ const HEAD_OFFSET = 500;
  * Stop the verification run after this long, whatever it has reached. Every
  * case gets the same five minutes: a range an indexer cannot finish inside it is
  * itself the finding, and the run is verified and rated from where it got to
- * rather than discarded - so a slow tool reports how much of the data it holds
+ * rather than discarded — so a slow tool reports how much of the data it holds
  * instead of reporting nothing at all.
  */
 const PHASE_A_TIMEOUT_S = 300;
 
 /**
  * How many throughput windows to run for indexers fast enough to get one.
- * A single window is noticeably noisy on shared CI runners - repeat rates have
- * been seen to differ by ~30% - so the window is run more than once and the
+ * A single window is noticeably noisy on shared CI runners — repeat rates have
+ * been seen to differ by ~30% — so the window is run more than once and the
  * best result is reported. Interference only ever slows a run down, so the
  * fastest of the samples is the one least polluted by it.
  */
@@ -151,7 +151,7 @@ async function runPhase(
   /**
    * Whether a reading means the phase is done. A driver that reports rows
    * apart from events has told us its progress counter can run ahead of what
-   * is committed, so the range is only finished once the rows are there too -
+   * is committed, so the range is only finished once the rows are there too —
    * otherwise the phase ends while the last batch is still being written and
    * verification reads a table that is still filling.
    */
@@ -174,7 +174,7 @@ async function runPhase(
       console.log(
         `  Warning: ${opts.name} already reports ${baseline.blocks.toLocaleString(
           "en-US"
-        )} blocks / ${baseline.events.toLocaleString("en-US")} events at launch - ` +
+        )} blocks / ${baseline.events.toLocaleString("en-US")} events at launch — ` +
           `its database was not empty, so this run's rate is not trustworthy.`
       );
     }
@@ -194,21 +194,21 @@ async function runPhase(
     try {
       last = (await driver.snapshot()) ?? last;
     } catch {
-      // Not queryable yet, or briefly unavailable - keep the previous reading.
+      // Not queryable yet, or briefly unavailable — keep the previous reading.
     }
   }
 
   // A target being met is not by itself proof that everything before it has
-  // landed. Two drivers read position from the rows the indexer wrote - the
-  // highest block that produced one - and an indexer that works on several
+  // landed. Two drivers read position from the rows the indexer wrote — the
+  // highest block that produced one — and an indexer that works on several
   // block ranges at once can commit a later range before an earlier one, so
   // the position can arrive before the rows behind it do. Wait for the row
   // count to stop moving before calling the phase finished: on a run that is
   // genuinely done this costs one extra reading, and on one that is not it is
   // the difference between verifying complete data and reporting a hole in it
   // as a data mismatch.
-  // Leaving the loop before the deadline means something broke out of it - a
-  // target met, or the indexer exiting - and both are worth settling on. A
+  // Leaving the loop before the deadline means something broke out of it — a
+  // target met, or the indexer exiting — and both are worth settling on. A
   // phase that ran out of time has nothing left to wait for.
   const metTarget = performance.now() < deadline;
   for (let settle = 0; metTarget && settle < SETTLE_READS; settle++) {
@@ -245,7 +245,7 @@ async function runPhase(
       if (attempt === 3) {
         console.log(
           `  Warning: could not read final progress for ${opts.name} ` +
-            `(${String((err as Error)?.message ?? err).split("\n")[0]}) - ` +
+            `(${String((err as Error)?.message ?? err).split("\n")[0]}) — ` +
             `reporting the last reading taken during the run.`
         );
         break;
@@ -275,7 +275,7 @@ async function runPhase(
  * records the checksum found missing that the report has to account for.
  *
  * `indexedShare` is 0 for a run that produced nothing at all, which is not the
- * same finding as a run that got part of the way - the tool did not index this
+ * same finding as a run that got part of the way — the tool did not index this
  * case, and nothing is extrapolated from it.
  */
 function coverageOf(run: PhaseOutcome, expected: Expected) {
@@ -295,7 +295,7 @@ function coverageOf(run: PhaseOutcome, expected: Expected) {
 /**
  * Why a partial run is partial, and how much of the range it is missing. This
  * is the whole note under the results table: everything else verification says
- * about such a run - rows missing, entities short - follows from it, and reads
+ * about such a run — rows missing, entities short — follows from it, and reads
  * as a data bug without it.
  */
 function describeShortfall(
@@ -405,7 +405,7 @@ function reportCalls(mock: RpcMock | null) {
     `  Contract calls: ${calls.toLocaleString("en-US")} served, ` +
       `peak ${peakInFlight} in flight` +
       (rejected > 0
-        ? ` - ${rejected.toLocaleString("en-US")} refused as outside the case`
+        ? ` — ${rejected.toLocaleString("en-US")} refused as outside the case`
         : "")
   );
 }
@@ -432,7 +432,7 @@ async function benchmarkIndexer(
   //
   // The target is the last block that carries an event rather than the end
   // block itself, because half the drivers read progress from the rows the
-  // indexer wrote - the highest block that produced one - and a range whose
+  // indexer wrote — the highest block that produced one — and a range whose
   // final blocks hold nothing leaves them permanently short. Safe's factory
   // range ends seven blocks after its last ProxyCreation, which was enough to
   // publish a completed run as "exited without finishing the verification
@@ -444,7 +444,7 @@ async function benchmarkIndexer(
   // ── Phase A: bounded verification run ──
   const phaseA = factory({ config, rpcUrl, endBlock: config.verifyEndBlock });
   activeDriver = phaseA;
-  console.log(`\n--- ${name} - verification range ---\n`);
+  console.log(`\n--- ${name} — verification range ---\n`);
   console.log(
     `Indexing blocks ${config.startBlock.toLocaleString(
       "en-US"
@@ -465,9 +465,9 @@ async function benchmarkIndexer(
 
   console.log(
     rangeRun.completed
-      ? `\nIndexed the range in ${rangeRun.elapsedS.toFixed(1)}s - verifying...`
+      ? `\nIndexed the range in ${rangeRun.elapsedS.toFixed(1)}s — verifying...`
       : `\nStopped after ${rangeRun.elapsedS.toFixed(0)}s short of the end block ` +
-          `- verifying what was indexed...`
+          `— verifying what was indexed...`
   );
   let verification: Verification = await verify(
     (query) => psql(phaseA.dbUrl, query),
@@ -476,12 +476,12 @@ async function benchmarkIndexer(
     // Rebuilding the ground-truth rows turns "the checksum differs" into
     // "512 of 1,747 balances hold the wrong value", which is worth a second
     // pass over HyperSync when a completed run disagrees. A run that stopped
-    // early disagrees by construction - every entity is short - so the diff
+    // early disagrees by construction — every entity is short — so the diff
     // would cost the same fetch to restate what the shortfall already says.
     rangeRun.completed
       ? {
           fetchExpectedRows: async () => {
-            console.log("  Mismatch found - rebuilding ground truth to diff it...");
+            console.log("  Mismatch found — rebuilding ground truth to diff it...");
             return (await buildGroundTruth(config, apiToken)).entities;
           },
         }
@@ -496,7 +496,7 @@ async function benchmarkIndexer(
   if (!rangeRun.completed) {
     const { indexedShare, indexedNothing } = coverageOf(rangeRun, expected);
     // The rows that are there were still checked, so a partial run reports a
-    // real verdict on real data - but it is a verdict on a fraction of the
+    // real verdict on real data — but it is a verdict on a fraction of the
     // range, and that fraction is the only thing worth publishing about it.
     // The per-entity breakdown stays in the log above: every entity is short
     // for the same reason, and a note listing all sixteen of them says no more
@@ -537,7 +537,7 @@ async function benchmarkIndexer(
     const events = rangeRun.completed ? expected.totalEvents : rangeRun.events;
     console.log(
       `\n${name}: slower than the ${windowS}s window over the ` +
-        `verification range - reporting its rate from that run.\n`
+        `verification range — reporting its rate from that run.\n`
     );
     return buildResult(key, verification, {
       blocks,
@@ -559,7 +559,7 @@ async function benchmarkIndexer(
     const phaseB = factory({ config, rpcUrl, endBlock: headEndBlock });
     activeDriver = phaseB;
     console.log(
-      `\n--- ${name} - throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
+      `\n--- ${name} — throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
     );
     console.log(
       `Running for up to ${windowS}s, stopping at block ${headEndBlock.toLocaleString(
@@ -583,8 +583,8 @@ async function benchmarkIndexer(
       targetEvents: Number.POSITIVE_INFINITY,
       maxSeconds: windowS,
     });
-    // Reaching the end block is a legitimate way for a run to finish - a case
-    // may pin one close enough to get to - and that leaves `completed` set.
+    // Reaching the end block is a legitimate way for a run to finish — a case
+    // may pin one close enough to get to — and that leaves `completed` set.
     // Exiting *without* it means the indexer died, and whatever partial work it
     // did is not a throughput measurement: keeping it risks publishing a rate
     // from a broken run.
@@ -598,34 +598,34 @@ async function benchmarkIndexer(
       console.log(
         `\nRun ${attempt}: the indexer exited after ${windowRun.elapsedS.toFixed(
           1
-        )}s without reaching the end block - discarding this sample.\n`
+        )}s without reaching the end block — discarding this sample.\n`
       );
       continue;
     }
 
     // A window that recorded nothing is not a measurement of zero. An indexer
     // whose first batch is still in flight when the window closes has written
-    // no rows yet, and phase A - which this tool finished, or it would not be
-    // here - is a real measurement of the same work. Publishing the zero would
+    // no rows yet, and phase A — which this tool finished, or it would not be
+    // here — is a real measurement of the same work. Publishing the zero would
     // put a tool that indexed the range correctly at the bottom of the table
     // with a rate no run actually produced.
     if (windowRun.events === 0) {
       console.log(
         `\nRun ${attempt}: nothing had been written when the ${windowS}s window ` +
-          `closed - discarding this sample.\n`
+          `closed — discarding this sample.\n`
       );
       continue;
     }
 
     // Rows but no position. Every driver reads the two from different places,
-    // and a window that recorded events cannot have covered no blocks - so
+    // and a window that recorded events cannot have covered no blocks — so
     // this is a progress reading that failed or had not been written yet, not
     // a measurement. Publishing it would put a real events/s next to a
     // blocks/s of zero.
     if (windowRun.blocks === 0) {
       console.log(
         `\nRun ${attempt}: ${windowRun.events.toLocaleString("en-US")} events were ` +
-          `written but the indexer's block position still read zero - discarding ` +
+          `written but the indexer's block position still read zero — discarding ` +
           `this sample.\n`
       );
       continue;
@@ -635,7 +635,7 @@ async function benchmarkIndexer(
       console.log(
         `\nReached the end block after ${windowRun.elapsedS.toFixed(
           1
-        )}s - rate computed over that time.`
+        )}s — rate computed over that time.`
       );
     }
 
@@ -653,11 +653,11 @@ async function benchmarkIndexer(
     );
   }
 
-  // Every throughput run died. Phase A completed, so its rate is still sound -
+  // Every throughput run died. Phase A completed, so its rate is still sound —
   // fall back to it rather than reporting nothing or a rate from a broken run.
   if (windowRuns.length === 0) {
     console.log(
-      `\n${name}: no throughput run survived - reporting the rate from the ` +
+      `\n${name}: no throughput run survived — reporting the rate from the ` +
         `verification range instead.\n`
     );
     return buildResult(key, verification, {
@@ -809,7 +809,7 @@ async function run(config: CaseConfig) {
       // finding indistinguishable from a job that crashed.
       const result = unsupportedResult(name, reason);
       results.push(result);
-      console.log(`\n--- ${result.name} - not run ---\n  ${reason}\n`);
+      console.log(`\n--- ${result.name} — not run ---\n  ${reason}\n`);
       console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);
       continue;
     }
@@ -827,7 +827,7 @@ async function run(config: CaseConfig) {
     results.push(result);
 
     console.log(
-      `\nSummary - ${result.name}: ${formatRate(
+      `\nSummary — ${result.name}: ${formatRate(
         result.eventsPerSec
       )} events/s, ${formatRate(result.blocksPerSec)} blocks/s, ` +
         `data ${result.correctness}, db ${formatBytes(result.dbSizeBytes)}\n`

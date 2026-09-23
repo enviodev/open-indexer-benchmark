@@ -4,7 +4,7 @@
 //
 // CI publishes the tables for scenarios every tool can be pointed at a shared
 // endpoint for. A scenario with a row that reads an endpoint someone pays for
-// by the request - Carbon on Solana - cannot be published that way, so it is
+// by the request — Carbon on Solana — cannot be published that way, so it is
 // measured by hand and the result committed. The table is rendered by the same
 // module the CI summary uses, so a hand-run row and a published one cannot
 // drift apart in format.
@@ -47,7 +47,7 @@ const { caseConfig } = await import(resolve(caseDir, "case.config.ts"));
 /**
  * What this machine can run: everything the scenario has a project for, less
  * what it declares unsupported. Unlike the CI matrix this keeps the local-only
- * tools - running them is the whole point of being here.
+ * tools — running them is the whole point of being here.
  */
 const runnable = INDEXERS.filter(
   (indexer) =>
@@ -102,7 +102,7 @@ for (const prior of parsePublishedTable(readme, benchCase)) {
   rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
 }
 // The README publishes results, so it carries no mark for which rows this run
-// re-measured - see scripts/build-tables.ts, which does the same for CI.
+// re-measured — see scripts/build-tables.ts, which does the same for CI.
 const table = buildTable(
   rows.map((row) => ({ ...row, carriedOver: false, localOnly: false }))
 );
@@ -164,7 +164,7 @@ function runCase(argv: string[]): Promise<BenchmarkResult[]> {
     });
 
     child.on("exit", (code) =>
-      // A tool that fails is a result in its own right - the others still have
+      // A tool that fails is a result in its own right — the others still have
       // a row, and refusing to publish them would lose a whole run to one
       // failure.
       code === 0 || results.length > 0

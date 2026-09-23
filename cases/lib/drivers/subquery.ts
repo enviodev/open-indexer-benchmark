@@ -76,7 +76,7 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     async snapshot() {
       // `_metadata` is the same key/value table the GraphQL `_metadata` field
       // is served from, so the height read here is the node's own sync
-      // position - it keeps advancing through ranges that produced no events.
+      // position — it keeps advancing through ranges that produced no events.
       // The value column is jsonb, whose text rendering of a JSON string keeps
       // its quotes; stripping them also makes this work unchanged if SubQuery
       // ever stores the column as plain text.

@@ -1,7 +1,7 @@
 // The shape a benchmark run reports, and how it renders into a table row.
 //
 // Kept apart from the runner so the CI summary job can turn recorded results
-// into tables without importing every driver - and without the process-level
+// into tables without importing every driver — and without the process-level
 // signal handlers the runner installs to tear down containers.
 
 import { formatBytes, formatRate, type TableRow } from "./table.ts";
@@ -40,7 +40,7 @@ export interface BenchmarkResult {
   windowRuns?: { eventsPerSec: number; blocksPerSec: number; seconds: number }[];
   /**
    * Why the tool cannot express this case. Present only for tools the case
-   * declares unsupported - they are never run, so every metric above is zero
+   * declares unsupported — they are never run, so every metric above is zero
    * and must not be read as a measurement.
    */
   unsupported?: string;

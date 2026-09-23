@@ -12,18 +12,18 @@ export interface ResultCells {
   source: string;
   blocks: string;
   events: string;
-  /** Status marker only - "✅", "❌" or "❓". */
+  /** Status marker only — "✅", "❌" or "❓". */
   correctness: string;
   /** Why it is not ✅, rendered as a numbered note under the table. */
   correctnessDetail: string;
   dbSize: string;
 }
 
-/** A metric cell with no value - an unsupported tool has one in every column. */
+/** A metric cell with no value — an unsupported tool has one in every column. */
 const NO_VALUE = "—";
 
 export interface TableRow {
-  /** Display name. Not unique - the same tool appears once per data source. */
+  /** Display name. Not unique — the same tool appears once per data source. */
   name: string;
   /** Sort key; also drives the "vs best" column. */
   eventsPerSec: number;
@@ -73,7 +73,7 @@ function relative(best: number, rate: number): string {
   if (!Number.isFinite(rate) || rate <= 0) return "—";
   // Round to the precision that gets displayed before deciding anything, so a
   // ratio of 1.04 reads as "—" rather than as the nonsensical "1.0x slower",
-  // and a whole number drops its ".0" - testing `ratio % 1` on a raw rate ratio
+  // and a whole number drops its ".0" — testing `ratio % 1` on a raw rate ratio
   // never fired.
   const ratio = Math.round((best / rate) * 10) / 10;
   if (ratio <= 1) return "—";
@@ -103,10 +103,10 @@ export function buildTable(rows: TableRow[]): string {
     const name = row.carriedOver ? `${tool} ⚠️` : tool;
 
     if (row.unsupported) {
-      // Every measured column is a dash - there is nothing to report - and the
+      // Every measured column is a dash — there is nothing to report — and the
       // note explains why, so the tool's absence from the ranking is legible
       // rather than looking like a job that failed to run.
-      notes.push(`**(${notes.length + 1})** ${row.name} - ${row.unsupported}`);
+      notes.push(`**(${notes.length + 1})** ${row.name} — ${row.unsupported}`);
       lines.push(
         `| ${[
           name,
@@ -123,7 +123,7 @@ export function buildTable(rows: TableRow[]): string {
 
     let correctness = row.cells.correctness;
     if (correctness !== "✅" && row.cells.correctnessDetail) {
-      notes.push(`**(${notes.length + 1})** ${row.name} - ${row.cells.correctnessDetail}`);
+      notes.push(`**(${notes.length + 1})** ${row.name} — ${row.cells.correctnessDetail}`);
       correctness = `${correctness} (${notes.length})`;
     }
     lines.push(
@@ -148,7 +148,7 @@ export function buildTable(rows: TableRow[]): string {
       "",
       `> ⚠️ ${carried.join(
         ", "
-      )} - carried forward from a previous run; the latest run produced no fresh result.`
+      )} — carried forward from a previous run; the latest run produced no fresh result.`
     );
   }
 
@@ -156,7 +156,7 @@ export function buildTable(rows: TableRow[]): string {
   if (local.length > 0) {
     lines.push(
       "",
-      `> ⚠️ ${local.join(", ")} - measured by hand rather than in CI, so these ` +
+      `> ⚠️ ${local.join(", ")} — measured by hand rather than in CI, so these ` +
         `numbers are from the last local run rather than from this one.`
     );
   }
@@ -178,7 +178,7 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
   const body = markdown.slice(start + startMarker.length, end);
   const rows: TableRow[] = [];
 
-  // Notes are rendered as "> **(1)** Tool - detail" beneath the table. The
+  // Notes are rendered as "> **(1)** Tool — detail" beneath the table. The
   // split is on the first em-dash, which is safe because tool names never
   // contain one; a detail string may, and keeps it.
   const notes = new Map<string, string>();
@@ -207,7 +207,7 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
 
     // A published unsupported row has no rate to parse. Recovering it as such
     // matters: dropping it would silently delete the tool from the table on
-    // any run where its job produced nothing, which is every run - it is
+    // any run where its job produced nothing, which is every run — it is
     // skipped by design.
     if (name && cells[2] === NO_VALUE && reference?.[1] === NO_VALUE) {
       rows.push({

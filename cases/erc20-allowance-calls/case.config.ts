@@ -19,7 +19,7 @@ import type { EthCall } from "../lib/rpc-mock.ts";
  * the chain. ERC-721's `Approval(address,address,uint256)` hashes to the same
  * topic0 as ERC-20's, with the third argument indexed instead of in the data,
  * so an unfiltered subscription hands every indexer a stream in which roughly
- * one log in fourteen decodes under a different layout - and each tool's
+ * one log in fourteen decodes under a different layout — and each tool's
  * decoder deals with that differently. That is a finding about event decoding,
  * not about contract calls, and it does not belong in the middle of this
  * measurement.
@@ -54,7 +54,7 @@ export const ALLOWANCE_SELECTOR = "0xdd62ed3e";
  * The allowance the chain reports for a pair at a block.
  *
  * Derived from the call's own arguments rather than fetched, which is what
- * makes the case reproducible - and unguessable. The value appears in no log,
+ * makes the case reproducible — and unguessable. The value appears in no log,
  * so the only way an indexer's rows can match the ground truth is by having
  * made the call, at the block the event was in, and stored the answer.
  *
@@ -84,8 +84,8 @@ function addressArg(data: string, index: number): string {
  * Answer an intercepted `eth_call`, or refuse it.
  *
  * Only `allowance(owner, spender)` on one of the case's tokens is defined.
- * Everything else - a `multicall` aggregate that would collapse a batch of
- * reads into one round trip, a token metadata read, a call at the chain head -
+ * Everything else — a `multicall` aggregate that would collapse a batch of
+ * reads into one round trip, a token metadata read, a call at the chain head —
  * is refused, so every tool is measured making the same calls rather than
  * whichever ones its implementation found a way to avoid.
  */
@@ -122,8 +122,8 @@ export const caseConfig: EvmCaseConfig = {
     answer: answerCall,
   },
 
-  // Substreams can make contract calls - `substreams-ethereum` exposes an
-  // eth_call extern - but only against the node its own server runs. This case
+  // Substreams can make contract calls — `substreams-ethereum` exposes an
+  // eth_call extern — but only against the node its own server runs. This case
   // is about calling an endpoint the benchmark provides, at a latency it fixes
   // so every tool waits the same; a row measured against StreamingFast's own
   // archive node instead would be answering a different question.

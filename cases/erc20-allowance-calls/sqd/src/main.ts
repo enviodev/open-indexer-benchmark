@@ -23,13 +23,13 @@ processor.run(new TypeormDatabase({ supportHotBlocks: true }), async (ctx) => {
   );
 
   // An approval of zero revokes it, and a revoked allowance is zero whatever
-  // the token reports - no call needed.
+  // the token reports — no call needed.
   const needCall = decoded.filter((entry) => entry.approved !== 0n);
 
   // The generated `Contract` binding sends one HTTP request per read, which for
   // a batch of thousands costs more in sockets than the round trips it is
   // waiting on. The client's own `batchCall` merges them into JSON-RPC batches
-  // instead - the same calls, at the same blocks, carried by a couple of dozen
+  // instead — the same calls, at the same blocks, carried by a couple of dozen
   // requests rather than thousands.
   const answers = needCall.length
     ? await rpcClient.batchCall(

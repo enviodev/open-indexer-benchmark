@@ -1,4 +1,4 @@
-# Subgraph - External Contract Calls
+# Subgraph — External Contract Calls
 
 Graph Node's mappings are single-threaded and their contract calls synchronous,
 so the manifest declares the call

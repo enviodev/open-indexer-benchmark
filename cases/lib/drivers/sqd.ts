@@ -14,7 +14,7 @@ export const SQD_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/s
 /**
  * The Squid SDK reads chain data from either of two places, and the benchmark
  * measures both: the SQD Network gateway, or an RPC endpoint. `SQD_SOURCE`
- * tells the processor which to configure, and it configures only that one - a
+ * tells the processor which to configure, and it configures only that one — a
  * processor holding both falls back to RPC near the head, so the network row
  * would be measuring a mixture. The RPC endpoint is dropped from the
  * environment of the network run rather than merely left unread, so a stray

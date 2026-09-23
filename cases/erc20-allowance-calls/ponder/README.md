@@ -1,4 +1,4 @@
-# Ponder - External Contract Calls
+# Ponder — External Contract Calls
 
 `context.client.readContract` in [`src/index.ts`](./src/index.ts) reads the
 allowance at the event's block. Ponder profiles the reads an indexing function

@@ -73,7 +73,7 @@ export async function handleProxyCreationIndexed(
 
 // The child handlers. Eight of these events made an argument `indexed` in Safe
 // 1.4.x without changing the signature, and SubQuery resolves an event from its
-// topic0 alone - two fragments sharing one would make every such log ambiguous
+// topic0 alone — two fragments sharing one would make every such log ambiguous
 // and lose both layouts, so only the 1.4.x layout is declared and the older one
 // goes undecoded.
 export async function handleSafeSetup(log: SafeSetupLog): Promise<void> {
@@ -136,7 +136,7 @@ export async function handleSafeMultiSigTransaction(log: SafeMultiSigTransaction
 }
 
 export async function handleExecutionSuccess(log: ExecutionSuccessLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 
@@ -151,7 +151,7 @@ export async function handleExecutionSuccess(log: ExecutionSuccessLog): Promise<
 }
 
 export async function handleExecutionFailure(log: ExecutionFailureLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 
@@ -192,7 +192,7 @@ export async function handleChangedMasterCopy(log: ChangedMasterCopyLog): Promis
 }
 
 export async function handleChangedFallbackHandler(log: ChangedFallbackHandlerLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 
@@ -207,7 +207,7 @@ export async function handleChangedFallbackHandler(log: ChangedFallbackHandlerLo
 }
 
 export async function handleChangedGuard(log: ChangedGuardLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 
@@ -235,7 +235,7 @@ export async function handleChangedModuleGuard(log: ChangedModuleGuardLog): Prom
 }
 
 export async function handleEnabledModule(log: EnabledModuleLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 
@@ -250,7 +250,7 @@ export async function handleEnabledModule(log: EnabledModuleLog): Promise<void> 
 }
 
 export async function handleDisabledModule(log: DisabledModuleLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 
@@ -265,7 +265,7 @@ export async function handleDisabledModule(log: DisabledModuleLog): Promise<void
 }
 
 export async function handleAddedOwner(log: AddedOwnerLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 
@@ -280,7 +280,7 @@ export async function handleAddedOwner(log: AddedOwnerLog): Promise<void> {
 }
 
 export async function handleRemovedOwner(log: RemovedOwnerLog): Promise<void> {
-  // A log of the pre-1.4 layout reaches this handler too - same topic0 - and
+  // A log of the pre-1.4 layout reaches this handler too — same topic0 — and
   // SubQuery leaves `args` undefined when the ABI cannot decode it.
   if (!log.args) return;
 

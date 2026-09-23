@@ -13,7 +13,7 @@ export async function handleApproval(log: ApprovalLog): Promise<void> {
 
   // An approval of zero revokes it, and a revoked allowance is zero whatever
   // the token reports, so there is nothing to go and ask. Anything else is a
-  // contract read through `api`, the provider SubQuery hands the mapping -
+  // contract read through `api`, the provider SubQuery hands the mapping —
   // pinned to the block the approval was in, since the allowance is a value at
   // a point in the chain's history rather than at the head.
   let allowance = BigInt(0);

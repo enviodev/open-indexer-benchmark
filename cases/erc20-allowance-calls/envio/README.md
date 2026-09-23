@@ -1,4 +1,4 @@
-# Envio - External Contract Calls
+# Envio — External Contract Calls
 
 The [Effect API](https://docs.envio.dev/docs/HyperIndex/effect-api) is what this
 implementation turns on. `createEffect` in
@@ -17,7 +17,7 @@ What is left after that is the size of a batch, because a batch is the unit of
 concurrency: preload puts the whole batch's calls in flight together, so an
 indexer holds about as many calls as the batch has non-revoking approvals in it.
 `full_batch_size` in [`config.yaml`](./config.yaml) is 20,000 rather than the
-default 5,000 for that reason - measured here, 5,000 gives 8,188 events/s at
+default 5,000 for that reason — measured here, 5,000 gives 8,188 events/s at
 3,921 calls in flight and 20,000 gives 10,890 at 15,473. It does not keep
 climbing: 50,000 falls back to 9,503, where the batch costs more in storage
 writes than the concurrency returns.

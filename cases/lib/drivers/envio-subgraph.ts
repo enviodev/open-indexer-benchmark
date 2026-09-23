@@ -20,7 +20,7 @@ const CLI_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "envio-su
  * Runs the case's existing Subgraph project on HyperIndex, reading from
  * HyperSync or from a plain RPC endpoint.
  *
- * There is no envio config anywhere in that directory - `subgraph.yaml` is the
+ * There is no envio config anywhere in that directory — `subgraph.yaml` is the
  * config, and envio picks it up because no `config.yaml` sits beside it. The
  * mappings, schema and ABIs are the same files Graph Node reads. On start,
  * envio builds `generated/` with the project's own graph-cli.

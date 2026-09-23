@@ -11,7 +11,7 @@ never sees a block it does not need. That is the shape of Substreams indexing,
 and it is what the row measures.
 
 The endpoint bills by the request and needs an API key, so this row is measured
-by hand rather than in CI - see the case README.
+by hand rather than in CI — see the case README.
 
 ### Relationship to the upstream package
 
@@ -25,7 +25,7 @@ crate, so the wire format is not restated here.
 
 **The unchecked mint rule is not upstream's.** A plain `transfer` names no
 mint, and upstream asks whether *any* token balance in the transaction carries
-it - which marks the SOL leg of a USDC swap as a USDC transfer, and whose
+it — which marks the SOL leg of a USDC swap as a USDC transfer, and whose
 `|| token_balance.owner == contract` clause compares an account owner against a
 mint address, so it cannot match. This module resolves the transfer's own two
 accounts, reading pre- and post-balances together so an account opened inside
@@ -40,7 +40,7 @@ and what `solana-common`'s own instruction stream implies by carrying `tx_hash`
 and no index at all.
 
 The other three implementations key on `slot-transactionIndex-path`, which is
-cheaper - a base58 signature is 88 characters against roughly 17 - and the
+cheaper — a base58 signature is 88 characters against roughly 17 — and the
 storage column shows it. The transaction's index within its block is not
 recoverable here: the filtered stream hands over the transactions that touch
 the Token program without the block they came from, and computing it would mean
@@ -93,7 +93,7 @@ substreams protogen ./substreams.yaml \
 `sf/solana/type` is excluded because `buf.gen.yaml` maps it to
 `::substreams_solana::pb::...`, so the crate's own Solana types are used rather
 than a second copy; `sf/firehose` because nothing here reads it. Both need the
-sink import commented out - see below.
+sink import commented out — see below.
 
 ### A note on the two CLIs
 
@@ -107,7 +107,7 @@ restore it for the sink.
 ### Pins
 
 `substreams` and `substreams-sink-sql` are pinned in `fetch-tools.sh` and
-downloaded into `.bin/`, which is gitignored - neither comes from a package
+downloaded into `.bin/`, which is gitignored — neither comes from a package
 manager the benchmark already runs. The toolchain is `stable` rather than the
 1.80 the upstream package pins, because a transitive dependency of `spl-token`
 needs edition 2024.

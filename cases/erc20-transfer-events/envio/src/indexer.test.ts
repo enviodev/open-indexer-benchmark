@@ -14,7 +14,7 @@ describe("Indexer Testing", () => {
       },
     });
 
-    // Only TransferEvent records are written - no Account / Allowance aggregation.
+    // Only TransferEvent records are written — no Account / Allowance aggregation.
     const transferSets = result.changes.flatMap(
       (change: any) => change.TransferEvent?.sets ?? []
     );

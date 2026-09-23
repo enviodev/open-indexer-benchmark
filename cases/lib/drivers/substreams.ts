@@ -28,7 +28,7 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
   const apiKey = process.env.SUBSTREAMS_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "SUBSTREAMS_API_KEY must be set to a StreamingFast key - the CLI " +
+      "SUBSTREAMS_API_KEY must be set to a StreamingFast key — the CLI " +
         "exchanges it for a JWT and Substreams serves nothing without one"
     );
   }
@@ -57,7 +57,7 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
   // Solana rows carry their slot as a column and are keyed on a signature,
   // which says nothing about position. EVM rows are keyed `block-logIndex`
   // like every other implementation of those scenarios, so the block is read
-  // back out of the key rather than stored a second time - a column the others
+  // back out of the key rather than stored a second time — a column the others
   // do not have would show up in the storage comparison.
   const readProgress = createProgressReader(
     SUBSTREAMS_DB_URL,
@@ -86,7 +86,7 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
       );
 
       // Measured by hand, so a Postgres already listening on the port is taken
-      // as one someone put there on purpose - a machine without a Docker
+      // as one someone put there on purpose — a machine without a Docker
       // daemon can still run the scenario. The sink keeps its own bookkeeping
       // beside the rows, so the whole schema goes rather than one table.
       const existing = await waitPg(SUBSTREAMS_DB_URL, "SELECT 1", 2_000).then(
@@ -125,8 +125,8 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
           "0",
           "--final-blocks-only",
           // The sink batches 1,000 blocks by default and drops whatever is
-          // pending when it reaches a stop block, so a bounded run - which is
-          // what a backfill is, and what this benchmark measures - loses its
+          // pending when it reaches a stop block, so a bounded run — which is
+          // what a backfill is, and what this benchmark measures — loses its
           // tail: over this scenario's range that was 29,723 of 119,152
           // transfers, and over a 100-block range it wrote 25 rows of 2,914.
           // Flushing every block is what makes it complete, and it is not what

@@ -9,8 +9,8 @@ const HYPERSYNC_URL = "https://solana.hypersync.xyz/query";
 /**
  * Fails unless `slot` is inside the retention window.
  *
- * Solana HyperSync keeps a rolling window - tens of millions of slots behind
- * the head - and answers a request from below its floor with data from the
+ * Solana HyperSync keeps a rolling window — tens of millions of slots behind
+ * the head — and answers a request from below its floor with data from the
  * floor rather than refusing it. A range that has aged out would otherwise
  * verify happily against whatever the floor happens to hold.
  */
@@ -21,11 +21,11 @@ export async function assertSlotRetained(token: string, slot: number): Promise<v
   });
   const floor: number | undefined = response.blocks?.[0]?.[0]?.slot;
   if (floor === undefined) {
-    throw new Error("HyperSync returned no block for slot 0 - cannot read the retention floor");
+    throw new Error("HyperSync returned no block for slot 0 — cannot read the retention floor");
   }
   if (floor > slot) {
     throw new Error(
-      `slot ${slot} has aged out of Solana HyperSync, which now starts at ${floor} - ` +
+      `slot ${slot} has aged out of Solana HyperSync, which now starts at ${floor} — ` +
         `move the case's range forward`
     );
   }

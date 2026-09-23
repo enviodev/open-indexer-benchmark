@@ -5,14 +5,14 @@
 // neither of the obvious sources works for a benchmark. A real archive node
 // answers an `eth_call` in anywhere from a few milliseconds to a few hundred,
 // depending on the node, the call and how busy it is, so the same run measured
-// twice would not produce the same number - and the shared endpoint the rest of
+// twice would not produce the same number — and the shared endpoint the rest of
 // the benchmark reads from (HyperRPC) does not serve `eth_call` at all.
 //
 // So the benchmark serves them. Every intercepted call is held for a fixed
 // delay and answered from the call's own arguments, which makes the external
 // dependency the one thing in the case that is identical for every tool: same
 // latency, same answers, no limit on how many it will take at once, run after
-// run. What is left to measure is the only thing that differs - how well an
+// run. What is left to measure is the only thing that differs — how well an
 // indexer overlaps calls it cannot avoid making.
 //
 // The answers are derived from the arguments rather than fetched, which also
@@ -48,7 +48,7 @@ export interface EthCallInterceptor {
    * number the whole scenario is calibrated around.
    *
    * It is also the only limit. The endpoint answers as many calls at once as
-   * it is given - no rate limit, no concurrency ceiling - so nothing outside
+   * it is given — no rate limit, no concurrency ceiling — so nothing outside
    * the indexer decides how many it may have outstanding, and the peak in
    * flight is a measurement of the tool rather than of a cap it ran into.
    */
@@ -71,7 +71,7 @@ export interface RpcMockStats {
   rejected: number;
   /**
    * Highest number of intercepted calls in flight at once. Since nothing here
-   * limits that, it is how many the indexer chose to have outstanding - the
+   * limits that, it is how many the indexer chose to have outstanding — the
    * number that explains its rate.
    */
   peakInFlight: number;
@@ -130,7 +130,7 @@ type BlockRef = { number: number } | { hash: string };
  * The block an `eth_call` is made against.
  *
  * Three spellings are in use among the tools here: a hex block number, and
- * both EIP-1898 forms - `{blockNumber}` and `{blockHash}`. Graph Node uses the
+ * both EIP-1898 forms — `{blockNumber}` and `{blockHash}`. Graph Node uses the
  * hash form, so refusing it would refuse every call a subgraph makes.
  *
  * A tag of "latest" is refused rather than resolved. The answers are a function
@@ -142,7 +142,7 @@ type BlockRef = { number: number } | { hash: string };
 function decodeBlockRef(blockTag: unknown): BlockRef | string {
   if (typeof blockTag === "string") {
     if (!blockTag.startsWith("0x")) {
-      return `eth_call at block tag "${blockTag}" - this case's calls must name the block they read at`;
+      return `eth_call at block tag "${blockTag}" — this case's calls must name the block they read at`;
     }
     return { number: Number(BigInt(blockTag)) };
   }
@@ -156,7 +156,7 @@ function decodeBlockRef(blockTag: unknown): BlockRef | string {
     }
   }
   return (
-    `eth_call at block tag "${JSON.stringify(blockTag)}" - this case's calls ` +
+    `eth_call at block tag "${JSON.stringify(blockTag)}" — this case's calls ` +
     `must name the block they read at`
   );
 }
@@ -186,7 +186,7 @@ export async function startRpcMock(
   const secure = target.protocol === "https:";
   // Keep-alive on the upstream side: without it every forwarded request pays a
   // fresh TLS handshake, which would show up as the endpoint being slow rather
-  // than as what it is - the benchmark's own plumbing.
+  // than as what it is — the benchmark's own plumbing.
   const agent = secure
     ? new Agent({ keepAlive: true, maxSockets: 256 })
     : new HttpAgent({ keepAlive: true, maxSockets: 256 });
@@ -212,8 +212,8 @@ export async function startRpcMock(
     try {
       // A call that named its block by hash needs the number before it can be
       // answered, since the answers are a function of the block. That lookup
-      // runs alongside the wait rather than after it - cached, so it is one
-      // upstream request per block whatever the tool's call volume - which
+      // runs alongside the wait rather than after it — cached, so it is one
+      // upstream request per block whatever the tool's call volume — which
       // keeps the latency every tool sees identical to the tools that name the
       // number outright.
       const [, block] = await Promise.all([
@@ -335,7 +335,7 @@ export async function startRpcMock(
       try {
         // Nothing to intercept: hand the whole request over untouched. This is
         // the path every log, block and receipt read takes, so it stays a plain
-        // relay - the case is about contract calls, and the rest of an
+        // relay — the case is about contract calls, and the rest of an
         // indexer's traffic should not be measuring this process.
         if (!isCall.some(Boolean)) {
           const relayed = await proxy(raw);
@@ -345,7 +345,7 @@ export async function startRpcMock(
 
         // A batch can hold both. The calls are served here, the rest goes
         // upstream in one request, and the answers are put back in the order
-        // they were asked for - a client matches on id, but not every client
+        // they were asked for — a client matches on id, but not every client
         // sends distinct ones.
         const answers = new Array<object | undefined>(batch.length);
         const passthrough = batch.filter((_, i) => !isCall[i]);
@@ -355,7 +355,7 @@ export async function startRpcMock(
               // Upstream owes one response per request it was given. A rate
               // limit or a 500 answers the batch with a single error object
               // instead, and mapping that back by position would leave the
-              // other slots holding `undefined` - which serialises to `null`,
+              // other slots holding `undefined` — which serialises to `null`,
               // under a 200, and reads to an indexer as a block range that
               // genuinely held nothing. Whatever upstream said becomes a
               // JSON-RPC error on each slot it failed to answer, so the client

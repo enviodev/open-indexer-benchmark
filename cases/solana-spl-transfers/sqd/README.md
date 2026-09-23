@@ -10,7 +10,7 @@ switch to, so this project has none of their `SQD_SOURCE` branching.
 `transferChecked` names its mint in account slot 1, so the Portal filters on it
 through `accountSelection` and nothing arrives that has to be discarded. Plain
 `transfer` names no mint at all, so every one of them is read and the
-transaction's token balances decide - `preMint` for an account older than the
+transaction's token balances decide — `preMint` for an account older than the
 transaction, `postMint` for one the transaction opened.
 
 Instruction layouts are hand-written in `src/abi/token-program.ts`: SPL Token

@@ -1,4 +1,4 @@
-# Events are written once and never updated, so they are declared immutable -
+# Events are written once and never updated, so they are declared immutable —
 # the storage layout The Graph's docs recommend for event data. Accounts and
 # allowances are updated in place and so stay mutable, which is what makes this
 # case a read-after-write test rather than an ingestion one.
