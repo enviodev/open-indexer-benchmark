@@ -189,11 +189,11 @@ Postgres restarts. It happens for maintenance, for a failover, for an OOM kill, 
 
 | check | what a pass means |
 | --- | --- |
-| indexes again after a database restart mid-backfill | Progress has moved since Postgres came back - on its own, or after the harness started the tool again. Exiting is a real cost and it is published beside this score as "restarts needed" rather than counted twice: a tool that comes back and gets the data right recovered, however ungracefully, and the checks below are what say whether the data is right. What fails here is the tool that indexes nothing more, restart or no restart. |
-| follows the head again after a database restart | The same, while tracking the head. Separate from the backfill check because the two are different code paths in most tools, and because at the head a lost in-flight batch is data an indexer will not naturally come back for. |
-| notices when a frozen database thaws | The database is frozen rather than stopped - SIGSTOP, so the connections stay open and no query is ever answered - and the tool starts indexing again by itself once it is thawed. This is the one outage where needing a restart is the finding rather than a cost: nothing crashed, no error was raised, and every health check still answers, so nothing tells anybody there is something to restart. A tool with a statement timeout comes back on its own; one without waits in the silence until somebody notices the data is an hour old. |
-| loses nothing across the restart | Once the range is complete - restarting the tool by hand if it will not restart itself - every row matches ground truth. This is scored separately from survival because the two failures are unrelated: a tool can crash and recover perfectly, and a tool can stay up while quietly skipping the batch it was mid-write on. |
-| writes no duplicates across the restart | The other half of the same question. A batch retried after a failed commit must not land twice: the row count matches ground truth exactly, and no aggregate - a balance, a running total - has been applied more than once. |
+| keeps indexing after the database restarts mid-sync | Progress has moved since Postgres came back - on its own, or after the harness started the tool again. Exiting is a real cost and it is published beside this score as "restarts needed" rather than counted twice: a tool that comes back and gets the data right recovered, however ungracefully, and the checks below are what say whether the data is right. What fails here is the tool that indexes nothing more, restart or no restart. |
+| keeps picking up new blocks after the database restarts | The same, while tracking the head. Separate from the backfill check because the two are different code paths in most tools, and because at the head a lost in-flight batch is data an indexer will not naturally come back for. |
+| recovers by itself when an unresponsive database comes back | The database is frozen rather than stopped - SIGSTOP, so the connections stay open and no query is ever answered - and the tool starts indexing again by itself once it is thawed. This is the one outage where needing a restart is the finding rather than a cost: nothing crashed, no error was raised, and every health check still answers, so nothing tells anybody there is something to restart. A tool with a statement timeout comes back on its own; one without waits in the silence until somebody notices the data is an hour old. |
+| loses no data when the database restarts | Once the range is complete - restarting the tool by hand if it will not restart itself - every row matches ground truth. This is scored separately from survival because the two failures are unrelated: a tool can crash and recover perfectly, and a tool can stay up while quietly skipping the batch it was mid-write on. |
+| counts nothing twice when the database restarts | The other half of the same question. A batch retried after a failed commit must not land twice: the row count matches ground truth exactly, and no aggregate - a balance, a running total - has been applied more than once. |
 
 Reported alongside the score, and not part of it:
 
@@ -212,10 +212,10 @@ A deploy, an OOM, a node draining - the process disappears without getting to fi
 
 | check | what a pass means |
 | --- | --- |
-| resumes without being told to | The restarted process continues from its own recorded position rather than starting over or refusing to start. A tool that re-indexes the range from scratch passes this check - it is correct, just expensive - and the cost shows up as re-indexed blocks in the measures below. |
-| leaves no gap at the kill point | Every event in the range is present afterwards. The blocks around the kill are the ones to watch: a tool that advances its checkpoint before the rows it covers are durable loses exactly the batch it was holding, and nothing later will go back for it. |
-| applies nothing twice | Aggregated entities match ground truth exactly. This is where a checkpoint that is behind the data bites: replaying blocks that were already written is harmless for an insert and wrong for a balance, and only a scenario that kills the process mid-commit will show it. |
-| never exposes a half-written batch | The database is read immediately after the kill, before the restart. Either the batch is entirely there or entirely absent - a partial batch visible to a reader means anything querying the indexer during a crash gets an inconsistent answer. |
+| catches up again after the process crashes | The restarted process continues from its own recorded position rather than starting over or refusing to start. A tool that re-indexes the range from scratch passes this check - it is correct, just expensive - and the cost shows up as re-indexed blocks in the measures below. |
+| leaves no gap in the data where it crashed | Every event in the range is present afterwards. The blocks around the kill are the ones to watch: a tool that advances its checkpoint before the rows it covers are durable loses exactly the batch it was holding, and nothing later will go back for it. |
+| counts nothing twice after a crash | Aggregated entities match ground truth exactly. This is where a checkpoint that is behind the data bites: replaying blocks that were already written is harmless for an insert and wrong for a balance, and only a scenario that kills the process mid-commit will show it. |
+| never shows half-written data during a crash | The database is read immediately after the kill, before the restart. Either the batch is entirely there or entirely absent - a partial batch visible to a reader means anything querying the indexer during a crash gets an inconsistent answer. |
 
 Reported alongside the score, and not part of it:
 
@@ -233,7 +233,7 @@ The ordinary case, and the one most likely to be assumed rather than tested: SIG
 
 | check | what a pass means |
 | --- | --- |
-| exits cleanly within fifteen seconds | The process exits zero without needing SIGKILL. A tool that ignores SIGTERM entirely is killed by its orchestrator every time, so its real shutdown path is the crash path above. |
+| shuts down within 15 seconds when asked | The process exits zero without needing SIGKILL. A tool that ignores SIGTERM entirely is killed by its orchestrator every time, so its real shutdown path is the crash path above. |
 | leaves correct data behind when it stops | What is in the database after the stop matches the chain: no duplicated rows, no amounts that were never on the chain, no balances left half-applied. This is the state the next start reads and builds on, so whatever is wrong here is wrong from then on - a restart continues from it rather than rechecking it, and the error is still there weeks later with nothing in any log to say where it came from. |
 
 <a id="reorgs"></a>
@@ -254,13 +254,13 @@ Every indexer claims to handle reorgs, and a one-block reorg where an event's va
 
 | check | what a pass means |
 | --- | --- |
-| a one-block reorg that changes an event | The head block is replaced with one carrying different transfer amounts. Afterwards the stored amounts are the new ones. The baseline case: a tool that fails here has no reorg handling at all. |
-| a fork that leaves the chain shorter | Six blocks are replaced by three, so the canonical chain is shorter than the one the tool has already stored and its head has to move backwards. An indexer that only ever moves forward - overwriting each block as it reads it, never deleting - handles every other reorg on this page and silently keeps three blocks' worth of rows that are on no chain at all. |
-| a reorg that removes an event entirely | The replacement blocks carry no logs. The rows for the discarded events must be gone, and any aggregate they contributed to must be back to what it was. This is the case an upsert-shaped rollback fails silently: writing the new state over the old works when there is new state, and does nothing at all when the event simply stopped existing. |
-| a reorg deeper than the unfinalised window | Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it. |
-| a reorg that happens while the indexer is down | The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg - the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists. |
-| reorgs arriving faster than they can be unwound | Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion - a rollback that is not itself atomic - leaves a mixture of two branches. |
-| a reorg touching blocks still being backfilled | The chain is rewritten at a height the tool has already indexed but has not yet caught up to, so the reorg is behind the head it is working towards. A tool that only checks for reorgs at the head walks straight past it. |
+| handles the chain replacing its latest block | The head block is replaced with one carrying different transfer amounts. Afterwards the stored amounts are the new ones. The baseline case: a tool that fails here has no reorg handling at all. |
+| handles the chain switching to a shorter fork | Six blocks are replaced by three, so the canonical chain is shorter than the one the tool has already stored and its head has to move backwards. An indexer that only ever moves forward - overwriting each block as it reads it, never deleting - handles every other reorg on this page and silently keeps three blocks' worth of rows that are on no chain at all. |
+| removes an event the chain dropped | The replacement blocks carry no logs. The rows for the discarded events must be gone, and any aggregate they contributed to must be back to what it was. This is the case an upsert-shaped rollback fails silently: writing the new state over the old works when there is new state, and does nothing at all when the event simply stopped existing. |
+| stops, rather than carrying on, after a rewrite deeper than it can undo | Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it. |
+| catches a chain rewrite that happened while it was offline | The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg - the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists. |
+| keeps up with several chain rewrites in a row | Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion - a rollback that is not itself atomic - leaves a mixture of two branches. |
+| catches a chain rewrite in blocks it is still syncing | The chain is rewritten at a height the tool has already indexed but has not yet caught up to, so the reorg is behind the head it is working towards. A tool that only checks for reorgs at the head walks straight past it. |
 
 Reported alongside the score, and not part of it:
 
@@ -286,10 +286,10 @@ Providers rate limit, time out, return 502s from a load balancer, and occasional
 
 | check | what a pass means |
 | --- | --- |
-| survives every fault without exiting | The process is still running after all four windows. The stall is the one that catches tools out: an error comes back and can be reacted to, while a request that is simply never answered needs a client-side timeout to exist at all. |
-| resumes promptly once the node recovers | Progress moves again within the scenario's patience of the endpoint healing. A tool that backed off exponentially without a ceiling is technically fine and practically down; how long it took is reported as a measure rather than judged at an arbitrary cut. |
-| loses nothing to a failed request | The finished range matches ground truth. A range whose request failed has to be retried, not skipped - and a tool that treats an error body as an empty result set records the blocks it never read as blocks that held nothing. |
-| backs off rather than hammering | Requests during a fault window stay under twenty times the tool's own healthy rate. Not a correctness property, but the difference between a provider that recovers and one that stays down because every indexer pointed at it is retrying in a tight loop. |
+| stays up while the RPC node is failing | The process is still running after all four windows. The stall is the one that catches tools out: an error comes back and can be reacted to, while a request that is simply never answered needs a client-side timeout to exist at all. |
+| resumes once the RPC node recovers | Progress moves again within the scenario's patience of the endpoint healing. A tool that backed off exponentially without a ceiling is technically fine and practically down; how long it took is reported as a measure rather than judged at an arbitrary cut. |
+| loses no data to failed RPC requests | The finished range matches ground truth. A range whose request failed has to be retried, not skipped - and a tool that treats an error body as an empty result set records the blocks it never read as blocks that held nothing. |
+| backs off instead of flooding a failing RPC node | Requests during a fault window stay under twenty times the tool's own healthy rate. Not a correctness property, but the difference between a provider that recovers and one that stays down because every indexer pointed at it is retrying in a tight loop. |
 
 Reported alongside the score, and not part of it:
 
@@ -307,10 +307,10 @@ A provider having a bad hour does not fail every request and then stop. It fails
 
 | check | what a pass means |
 | --- | --- |
-| stays up through a bad hour | The process is still running after two minutes of mixed faults. Every one of them is a condition a provider really produces, none of them lasts, and a tool that exits has turned a provider's bad hour into an outage of its own. |
-| finishes the range once the endpoint is healthy | The tool reaches the head within the scenario's patience after the faults stop. A tool whose backoff has no ceiling, or that is still retrying a request the endpoint dropped, is indistinguishable from one that is down. |
-| loses nothing to the faults | Every row the chain holds is in the database. This is the check the scenario exists for: a truncated body and a null block are both answers a careless client reads as "nothing there", and a tool that advances its cursor past them finishes looking finished, with holes nothing will come back for. |
-| writes nothing twice while retrying | No row appears twice and no balance is off. The mirror of the check above: a request that fails after the node has served it is retried, and a tool that applies what comes back without checking what it already has doubles exactly the range it retried. |
+| stays up through a spell of flaky RPC | The process is still running after two minutes of mixed faults. Every one of them is a condition a provider really produces, none of them lasts, and a tool that exits has turned a provider's bad hour into an outage of its own. |
+| catches up once the RPC provider is healthy again | The tool reaches the head within the scenario's patience after the faults stop. A tool whose backoff has no ceiling, or that is still retrying a request the endpoint dropped, is indistinguishable from one that is down. |
+| loses no data to flaky RPC | Every row the chain holds is in the database. This is the check the scenario exists for: a truncated body and a null block are both answers a careless client reads as "nothing there", and a tool that advances its cursor past them finishes looking finished, with holes nothing will come back for. |
+| counts nothing twice while retrying | No row appears twice and no balance is off. The mirror of the check above: a request that fails after the node has served it is retried, and a tool that applies what comes back without checking what it already has doubles exactly the range it retried. |
 
 Reported alongside the score, and not part of it:
 
@@ -328,9 +328,9 @@ Public endpoints cap what one request may ask for: a block range, a number of re
 
 | check | what a pass means |
 | --- | --- |
-| narrows its range when one is refused | The tool finishes the range, having retried with a smaller one rather than stopping. Configuring the limit up front is not a pass: the point is what happens against a provider whose caps were not known in advance. |
-| narrows when the result set is too large | The same for the result-count cap, which needs a different response - a narrower range for the same span - and is the one more often left unhandled. |
-| widens again once it can | After a refused range, the tool does not spend the rest of the run at its smallest range. Scored because the alternative - collapsing to single-block queries forever after one refusal - turns a transient limit into a permanent throughput cost. |
+| copes with a provider's block-range limit | The tool finishes the range, having retried with a smaller one rather than stopping. Configuring the limit up front is not a pass: the point is what happens against a provider whose caps were not known in advance. |
+| copes with a provider's response-size limit | The same for the result-count cap, which needs a different response - a narrower range for the same span - and is the one more often left unhandled. |
+| speeds back up after a rate limit lifts | After a refused range, the tool does not spend the rest of the run at its smallest range. Scored because the alternative - collapsing to single-block queries forever after one refusal - turns a transient limit into a permanent throughput cost. |
 
 <a id="rpc-inconsistency"></a>
 
@@ -342,10 +342,10 @@ The failure nobody plans for, because it should not happen and does: a load-bala
 
 | check | what a pass means |
 | --- | --- |
-| tolerates a head that moves backwards | The tool neither crashes nor rewinds its own data on the strength of one lagging answer, and carries on once the head recovers. Treating a lagging replica as a reorg is a real and expensive false positive. |
-| ignores a block range delivered twice | The same logs arriving a second time produce no second row and no doubled aggregate. Idempotent ingestion, tested by asking for it rather than hoping. |
-| gets past a block the endpoint says is not there | Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as "no such block" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself. |
-| handles a block hash that stops existing | A request against a hash the chain has reorged away comes back an error, not an empty result. The tool has to treat that as a reorg signal; treating it as a failed request and retrying forever is the stall this check finds. |
+| keeps its data when an RPC node briefly reports an older block | The tool neither crashes nor rewinds its own data on the strength of one lagging answer, and carries on once the head recovers. Treating a lagging replica as a reorg is a real and expensive false positive. |
+| counts nothing twice when the RPC node sends it twice | The same logs arriving a second time produce no second row and no doubled aggregate. Idempotent ingestion, tested by asking for it rather than hoping. |
+| handles a block the RPC node briefly fails to return | Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as "no such block" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself. |
+| handles a block being replaced while it asks for it | A request against a hash the chain has reorged away comes back an error, not an empty result. The tool has to treat that as a reorg signal; treating it as a failed request and retrying forever is the stall this check finds. |
 
 <a id="data-fidelity"></a>
 
@@ -365,12 +365,12 @@ Chain data is not the tidy subset a schema was designed around. A token's `symbo
 
 | check | what a pass means |
 | --- | --- |
-| an empty symbol() is stored as null | `symbol()` returns `0x` - no data, which is what a token that does not implement it does. The row must exist with a null symbol. Decoding empty returndata as an empty string is acceptable; crashing, skipping the row, or storing the literal text "undefined" is not. |
-| a NUL byte in a string does not kill the write | A symbol containing `\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. Either the tool sanitises it or it fails that row explicitly; what it must not do is fail the whole batch forever and stall the indexer behind one token. |
+| stores a token with an empty symbol | `symbol()` returns `0x` - no data, which is what a token that does not implement it does. The row must exist with a null symbol. Decoding empty returndata as an empty string is acceptable; crashing, skipping the row, or storing the literal text "undefined" is not. |
+| stores a token name containing a hidden null character | A symbol containing `\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. Either the tool sanitises it or it fails that row explicitly; what it must not do is fail the whole batch forever and stall the indexer behind one token. |
 | indexes both of the events it is configured for | Every project in this suite handles two events - the transfers everything else here is about, and a MetadataUpdated the chain emits every twenty-five blocks - and both are stored. A tool that indexes the event it was written around and ignores the other passes every other check on this page, because every other check reads transfers. It is not a hypothetical failure: an earlier revision of this benchmark caught a no-code project doing exactly this, silently, with no error anywhere. |
-| a log index near the 32-bit ceiling | Logs with index `0xffffffe2`, as some providers emit for synthetic logs. Storing it in a signed 32-bit column overflows and halts the backfill outright - the failure reported in ponder-sh/ponder#2373. The check is that the range finishes and the index round-trips. |
-| an unsigned 256-bit maximum survives the round trip | A transfer of 2^256-1. The stored value must equal it exactly. Anything that goes through a double loses precision quietly, which is worse than failing. |
-| long empty stretches advance progress | Five hundred blocks with no logs at all. The tool has to come out the other side: either its own position moves through them, or it holds rows from beyond them. A tool that does neither has stalled on a stretch of chain that asked nothing of it. Both answers count because the benchmark reads position from the rows written for two of these tools, which is the harness's choice rather than theirs. |
+| stores events with very large log indexes | Logs with index `0xffffffe2`, as some providers emit for synthetic logs. Storing it in a signed 32-bit column overflows and halts the backfill outright - the failure reported in ponder-sh/ponder#2373. The check is that the range finishes and the index round-trips. |
+| stores the largest possible token amount correctly | A transfer of 2^256-1. The stored value must equal it exactly. Anything that goes through a double loses precision quietly, which is worse than failing. |
+| keeps going through long runs of empty blocks | Five hundred blocks with no logs at all. The tool has to come out the other side: either its own position moves through them, or it holds rows from beyond them. A tool that does neither has stalled on a stretch of chain that asked nothing of it. Both answers count because the benchmark reads position from the rows written for two of these tools, which is the harness's choice rather than theirs. |
 
 <a id="head-latency"></a>
 
@@ -390,10 +390,10 @@ Backfill throughput says how long a tool takes to catch up once. Head latency sa
 
 | check | what a pass means |
 | --- | --- |
-| median latency inside one block time | Half of all blocks are readable within two seconds of being published. This is the property that lets an application read the indexer instead of the chain. |
-| the slowest one percent stays under ten seconds | The tail matters more than the median for anything user-facing. A tool that flushes on a timer has a tail the length of its timer, whatever its median says. |
-| never falls behind the chain | The gap between the chain head and the tool's position never exceeds five blocks for more than fifteen seconds. A tool that cannot keep up with a two-second block time at the head is only ever catching up. |
-| returns to its normal latency after a reorg | Within thirty seconds of a reorg being reconciled, latency is back in the band it held before. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record. |
+| new data usually shows up within one block | Half of all blocks are readable within two seconds of being published. This is the property that lets an application read the indexer instead of the chain. |
+| even the slowest 1% of new data shows up within 10 seconds | The tail matters more than the median for anything user-facing. A tool that flushes on a timer has a tail the length of its timer, whatever its median says. |
+| keeps up with new blocks | The gap between the chain head and the tool's position never exceeds five blocks for more than fifteen seconds. A tool that cannot keep up with a two-second block time at the head is only ever catching up. |
+| gets back to normal speed after a chain rewrite | Within thirty seconds of a reorg being reconciled, latency is back in the band it held before. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record. |
 
 Reported alongside the score, and not part of it:
 

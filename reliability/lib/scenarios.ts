@@ -93,6 +93,12 @@ export interface Check {
    * again once it can" - which reads oddly as a finding. The results table is
    * read by people who did not write the suite, and a column below full marks
    * has to say what breaks, not which sentence stopped being true.
+   *
+   * Written "Impact: trigger" - what it costs whoever runs the tool, from a
+   * short vocabulary a reader learns once ("Missing data", "Wrong balances",
+   * "Stops indexing"), then what set it off in plain words. The table sets
+   * the impact in bold; scripts/test-reliability.ts holds the vocabulary and
+   * fails a phrase that strays from it.
    */
   failing: string;
   /** What the harness does, and what counts as a pass. Becomes the detail page. */
@@ -145,36 +151,36 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "recovers-backfill",
-        label: "indexes again after a database restart mid-backfill",
-        failing: "stops indexing for good after a database restart",
+        label: "keeps indexing after the database restarts mid-sync",
+        failing: "Stops indexing: never recovers after the database restarts mid-sync",
         detail:
           "Progress has moved since Postgres came back - on its own, or after the harness started the tool again. Exiting is a real cost and it is published beside this score as \"restarts needed\" rather than counted twice: a tool that comes back and gets the data right recovered, however ungracefully, and the checks below are what say whether the data is right. What fails here is the tool that indexes nothing more, restart or no restart.",
       },
       {
         id: "recovers-head",
-        label: "follows the head again after a database restart",
-        failing: "stops following the chain after a database restart",
+        label: "keeps picking up new blocks after the database restarts",
+        failing: "Stops indexing: stops picking up new blocks after the database restarts",
         detail:
           "The same, while tracking the head. Separate from the backfill check because the two are different code paths in most tools, and because at the head a lost in-flight batch is data an indexer will not naturally come back for.",
       },
       {
         id: "recovers-pause",
-        label: "notices when a frozen database thaws",
-        failing: "hangs for ever when the database stops answering",
+        label: "recovers by itself when an unresponsive database comes back",
+        failing: "Stops indexing silently: hangs with no error when the database stops responding",
         detail:
           "The database is frozen rather than stopped - SIGSTOP, so the connections stay open and no query is ever answered - and the tool starts indexing again by itself once it is thawed. This is the one outage where needing a restart is the finding rather than a cost: nothing crashed, no error was raised, and every health check still answers, so nothing tells anybody there is something to restart. A tool with a statement timeout comes back on its own; one without waits in the silence until somebody notices the data is an hour old.",
       },
       {
         id: "no-loss",
-        label: "loses nothing across the restart",
-        failing: "data loss: rows missing after a database restart",
+        label: "loses no data when the database restarts",
+        failing: "Missing data: rows lost when the database restarts",
         detail:
           "Once the range is complete - restarting the tool by hand if it will not restart itself - every row matches ground truth. This is scored separately from survival because the two failures are unrelated: a tool can crash and recover perfectly, and a tool can stay up while quietly skipping the batch it was mid-write on.",
       },
       {
         id: "no-duplicates",
-        label: "writes no duplicates across the restart",
-        failing: "wrong balances: rows written twice after a database restart",
+        label: "counts nothing twice when the database restarts",
+        failing: "Wrong balances: some transfers counted twice after a database restart",
         detail:
           "The other half of the same question. A batch retried after a failed commit must not land twice: the row count matches ground truth exactly, and no aggregate - a balance, a running total - has been applied more than once.",
       },
@@ -209,29 +215,29 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "resumes",
-        label: "resumes without being told to",
-        failing: "never catches up again after a crash",
+        label: "catches up again after the process crashes",
+        failing: "Stops indexing: never catches up after the process crashes",
         detail:
           "The restarted process continues from its own recorded position rather than starting over or refusing to start. A tool that re-indexes the range from scratch passes this check - it is correct, just expensive - and the cost shows up as re-indexed blocks in the measures below.",
       },
       {
         id: "no-gap",
-        label: "leaves no gap at the kill point",
-        failing: "data loss: a hole in the data where it crashed",
+        label: "leaves no gap in the data where it crashed",
+        failing: "Missing data: a gap in the data around the moment it crashed",
         detail:
           "Every event in the range is present afterwards. The blocks around the kill are the ones to watch: a tool that advances its checkpoint before the rows it covers are durable loses exactly the batch it was holding, and nothing later will go back for it.",
       },
       {
         id: "no-double-apply",
-        label: "applies nothing twice",
-        failing: "wrong balances: events applied twice after a crash",
+        label: "counts nothing twice after a crash",
+        failing: "Wrong balances: some transfers counted twice after a crash",
         detail:
           "Aggregated entities match ground truth exactly. This is where a checkpoint that is behind the data bites: replaying blocks that were already written is harmless for an insert and wrong for a balance, and only a scenario that kills the process mid-commit will show it.",
       },
       {
         id: "atomic-batch",
-        label: "never exposes a half-written batch",
-        failing: "reads see a half-written batch while it crashes",
+        label: "never shows half-written data during a crash",
+        failing: "Inconsistent reads: queries during a crash see a half-written update",
         detail:
           "The database is read immediately after the kill, before the restart. Either the batch is entirely there or entirely absent - a partial batch visible to a reader means anything querying the indexer during a crash gets an inconsistent answer.",
       },
@@ -257,15 +263,15 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "exits-clean",
-        label: "exits cleanly within fifteen seconds",
-        failing: "every deploy waits fifteen seconds for it to stop",
+        label: "shuts down within 15 seconds when asked",
+        failing: "Slow deploys: ignores the shutdown signal for over 15 seconds and gets force-killed",
         detail:
           "The process exits zero without needing SIGKILL. A tool that ignores SIGTERM entirely is killed by its orchestrator every time, so its real shutdown path is the crash path above.",
       },
       {
         id: "flushes",
         label: "leaves correct data behind when it stops",
-        failing: "wrong rows survive a clean stop, and the restart keeps them",
+        failing: "Wrong data: bad rows left by a clean shutdown are still there after the restart",
         detail:
           "What is in the database after the stop matches the chain: no duplicated rows, no amounts that were never on the chain, no balances left half-applied. This is the state the next start reads and builds on, so whatever is wrong here is wrong from then on - a restart continues from it rather than rechecking it, and the error is still there weeks later with nothing in any log to say where it came from.",
       },
@@ -284,50 +290,50 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "shallow",
-        label: "a one-block reorg that changes an event",
-        failing: "stale data: keeps the old event after a one-block reorg",
+        label: "handles the chain replacing its latest block",
+        failing: "Stale data: keeps an event after the chain replaced its block",
         detail:
           "The head block is replaced with one carrying different transfer amounts. Afterwards the stored amounts are the new ones. The baseline case: a tool that fails here has no reorg handling at all.",
       },
       {
         id: "shortening",
-        label: "a fork that leaves the chain shorter",
-        failing: "stale data: keeps blocks a shorter fork left behind",
+        label: "handles the chain switching to a shorter fork",
+        failing: "Stale data: keeps blocks from a fork the chain abandoned for a shorter one",
         detail:
           "Six blocks are replaced by three, so the canonical chain is shorter than the one the tool has already stored and its head has to move backwards. An indexer that only ever moves forward - overwriting each block as it reads it, never deleting - handles every other reorg on this page and silently keeps three blocks' worth of rows that are on no chain at all.",
       },
       {
         id: "removes-event",
-        label: "a reorg that removes an event entirely",
-        failing: "stale data: keeps an event the chain removed",
+        label: "removes an event the chain dropped",
+        failing: "Stale data: keeps an event the chain removed",
         detail:
           "The replacement blocks carry no logs. The rows for the discarded events must be gone, and any aggregate they contributed to must be back to what it was. This is the case an upsert-shaped rollback fails silently: writing the new state over the old works when there is new state, and does nothing at all when the event simply stopped existing.",
       },
       {
         id: "deep",
-        label: "a reorg deeper than the unfinalised window",
-        failing: "wrong data after a reorg deeper than its rollback window",
+        label: "stops, rather than carrying on, after a rewrite deeper than it can undo",
+        failing: "Wrong data: carries on after a chain rewrite deeper than it can undo, instead of stopping",
         detail:
           "Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it.",
       },
       {
         id: "while-down",
-        label: "a reorg that happens while the indexer is down",
-        failing: "stale data: misses a reorg that happened while it was down",
+        label: "catches a chain rewrite that happened while it was offline",
+        failing: "Stale data: misses a chain rewrite that happened while it was offline",
         detail:
           "The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg - the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists.",
       },
       {
         id: "storm",
-        label: "reorgs arriving faster than they can be unwound",
-        failing: "wrong data when reorgs arrive in bursts",
+        label: "keeps up with several chain rewrites in a row",
+        failing: "Wrong data: loses track when the chain rewrites several times in a row",
         detail:
           "Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion - a rollback that is not itself atomic - leaves a mixture of two branches.",
       },
       {
         id: "during-backfill",
-        label: "a reorg touching blocks still being backfilled",
-        failing: "stale data: misses a reorg behind the head while backfilling",
+        label: "catches a chain rewrite in blocks it is still syncing",
+        failing: "Stale data: misses a chain rewrite in blocks it was still syncing",
         detail:
           "The chain is rewritten at a height the tool has already indexed but has not yet caught up to, so the reorg is behind the head it is working towards. A tool that only checks for reorgs at the head walks straight past it.",
       },
@@ -355,29 +361,29 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "survives",
-        label: "survives every fault without exiting",
-        failing: "goes down when the node starts failing",
+        label: "stays up while the RPC node is failing",
+        failing: "Stops indexing: crashes when the RPC node errors or times out",
         detail:
           "The process is still running after all four windows. The stall is the one that catches tools out: an error comes back and can be reacted to, while a request that is simply never answered needs a client-side timeout to exist at all.",
       },
       {
         id: "resumes",
-        label: "resumes promptly once the node recovers",
-        failing: "stays stopped after the node recovers",
+        label: "resumes once the RPC node recovers",
+        failing: "Stops indexing: does not resume after the RPC node recovers",
         detail:
           "Progress moves again within the scenario's patience of the endpoint healing. A tool that backed off exponentially without a ceiling is technically fine and practically down; how long it took is reported as a measure rather than judged at an arbitrary cut.",
       },
       {
         id: "no-loss",
-        label: "loses nothing to a failed request",
-        failing: "data loss: rows missing after a failed request",
+        label: "loses no data to failed RPC requests",
+        failing: "Missing data: rows lost to failed RPC requests",
         detail:
           "The finished range matches ground truth. A range whose request failed has to be retried, not skipped - and a tool that treats an error body as an empty result set records the blocks it never read as blocks that held nothing.",
       },
       {
         id: "backs-off",
-        label: "backs off rather than hammering",
-        failing: "hammers a struggling node instead of backing off",
+        label: "backs off instead of flooding a failing RPC node",
+        failing: "Overloads the provider: retries in a tight loop while the RPC node is failing",
         detail:
           "Requests during a fault window stay under twenty times the tool's own healthy rate. Not a correctness property, but the difference between a provider that recovers and one that stays down because every indexer pointed at it is retrying in a tight loop.",
       },
@@ -403,29 +409,29 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "survives",
-        label: "stays up through a bad hour",
-        failing: "goes down when a provider starts failing some requests",
+        label: "stays up through a spell of flaky RPC",
+        failing: "Stops indexing: crashes when the RPC provider fails some of its requests",
         detail:
           "The process is still running after two minutes of mixed faults. Every one of them is a condition a provider really produces, none of them lasts, and a tool that exits has turned a provider's bad hour into an outage of its own.",
       },
       {
         id: "catches-up",
-        label: "finishes the range once the endpoint is healthy",
-        failing: "never catches up after a provider's bad hour",
+        label: "catches up once the RPC provider is healthy again",
+        failing: "Stops indexing: never catches up after a spell of flaky RPC",
         detail:
           "The tool reaches the head within the scenario's patience after the faults stop. A tool whose backoff has no ceiling, or that is still retrying a request the endpoint dropped, is indistinguishable from one that is down.",
       },
       {
         id: "no-loss",
-        label: "loses nothing to the faults",
-        failing: "data loss: rows missing after a provider's bad hour",
+        label: "loses no data to flaky RPC",
+        failing: "Missing data: rows lost during a spell of flaky RPC",
         detail:
           "Every row the chain holds is in the database. This is the check the scenario exists for: a truncated body and a null block are both answers a careless client reads as \"nothing there\", and a tool that advances its cursor past them finishes looking finished, with holes nothing will come back for.",
       },
       {
         id: "no-duplicates",
-        label: "writes nothing twice while retrying",
-        failing: "wrong balances: retries write some rows twice",
+        label: "counts nothing twice while retrying",
+        failing: "Wrong balances: retried requests count some transfers twice",
         detail:
           "No row appears twice and no balance is off. The mirror of the check above: a request that fails after the node has served it is retried, and a tool that applies what comes back without checking what it already has doubles exactly the range it retried.",
       },
@@ -451,22 +457,22 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "splits-range",
-        label: "narrows its range when one is refused",
-        failing: "stops indexing when the node refuses a block range",
+        label: "copes with a provider's block-range limit",
+        failing: "Stops indexing: cannot cope with a provider's block-range limit",
         detail:
           "The tool finishes the range, having retried with a smaller one rather than stopping. Configuring the limit up front is not a pass: the point is what happens against a provider whose caps were not known in advance.",
       },
       {
         id: "splits-results",
-        label: "narrows when the result set is too large",
-        failing: "stops indexing when a result set is too large",
+        label: "copes with a provider's response-size limit",
+        failing: "Stops indexing: cannot cope with a provider's response-size limit",
         detail:
           "The same for the result-count cap, which needs a different response - a narrower range for the same span - and is the one more often left unhandled.",
       },
       {
         id: "recovers-width",
-        label: "widens again once it can",
-        failing: "slow for good: never widens its range after one rate limit",
+        label: "speeds back up after a rate limit lifts",
+        failing: "Permanently slower: after one rate limit, fetches in small pieces for good",
         detail:
           "After a refused range, the tool does not spend the rest of the run at its smallest range. Scored because the alternative - collapsing to single-block queries forever after one refusal - turns a transient limit into a permanent throughput cost.",
       },
@@ -483,29 +489,29 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "head-goes-backwards",
-        label: "tolerates a head that moves backwards",
-        failing: "data loss: drops rows when the head moves backwards",
+        label: "keeps its data when an RPC node briefly reports an older block",
+        failing: "Missing data: deletes rows when an RPC node briefly reports an older block",
         detail:
           "The tool neither crashes nor rewinds its own data on the strength of one lagging answer, and carries on once the head recovers. Treating a lagging replica as a reorg is a real and expensive false positive.",
       },
       {
         id: "duplicate-delivery",
-        label: "ignores a block range delivered twice",
-        failing: "wrong balances: a block counted twice when the node repeats it",
+        label: "counts nothing twice when the RPC node sends it twice",
+        failing: "Wrong balances: counts a transfer twice when the RPC node sends it twice",
         detail:
           "The same logs arriving a second time produce no second row and no doubled aggregate. Idempotent ingestion, tested by asking for it rather than hoping.",
       },
       {
         id: "missing-block",
-        label: "gets past a block the endpoint says is not there",
-        failing: "data loss: skips a block the endpoint wrongly calls missing",
+        label: "handles a block the RPC node briefly fails to return",
+        failing: "Missing data: skips a block the RPC node briefly failed to return",
         detail:
           "Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as \"no such block\" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself.",
       },
       {
         id: "stale-hash",
-        label: "handles a block hash that stops existing",
-        failing: "goes down when a block hash stops existing",
+        label: "handles a block being replaced while it asks for it",
+        failing: "Stops indexing: crashes when a block it asked for has just been replaced",
         detail:
           "A request against a hash the chain has reorged away comes back an error, not an empty result. The tool has to treat that as a reorg signal; treating it as a failed request and retrying forever is the stall this check finds.",
       },
@@ -524,43 +530,43 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "null-symbol",
-        label: "an empty symbol() is stored as null",
-        failing: "cannot store a token whose symbol() is empty",
+        label: "stores a token with an empty symbol",
+        failing: "Missing token data: cannot store a token with an empty symbol",
         detail:
           "`symbol()` returns `0x` - no data, which is what a token that does not implement it does. The row must exist with a null symbol. Decoding empty returndata as an empty string is acceptable; crashing, skipping the row, or storing the literal text \"undefined\" is not.",
       },
       {
         id: "nul-byte",
-        label: "a NUL byte in a string does not kill the write",
-        failing: "a NUL byte in a token name breaks the write",
+        label: "stores a token name containing a hidden null character",
+        failing: "Missing token data: a hidden null character in a token name fails the write",
         detail:
           "A symbol containing `\\u0000`, which is legal in a Solidity string and which Postgres will not accept in a `text` column. Either the tool sanitises it or it fails that row explicitly; what it must not do is fail the whole batch forever and stall the indexer behind one token.",
       },
       {
         id: "second-event",
         label: "indexes both of the events it is configured for",
-        failing: "data loss: silently drops a whole event type",
+        failing: "Missing data: silently ignores one of the event types it is configured for",
         detail:
           "Every project in this suite handles two events - the transfers everything else here is about, and a MetadataUpdated the chain emits every twenty-five blocks - and both are stored. A tool that indexes the event it was written around and ignores the other passes every other check on this page, because every other check reads transfers. It is not a hypothetical failure: an earlier revision of this benchmark caught a no-code project doing exactly this, silently, with no error anywhere.",
       },
       {
         id: "huge-log-index",
-        label: "a log index near the 32-bit ceiling",
-        failing: "data loss: drops logs with a huge log index",
+        label: "stores events with very large log indexes",
+        failing: "Missing data: drops events with very large log indexes, which some providers emit",
         detail:
           "Logs with index `0xffffffe2`, as some providers emit for synthetic logs. Storing it in a signed 32-bit column overflows and halts the backfill outright - the failure reported in ponder-sh/ponder#2373. The check is that the range finishes and the index round-trips.",
       },
       {
         id: "max-uint",
-        label: "an unsigned 256-bit maximum survives the round trip",
-        failing: "wrong values: mangles an unsigned 256-bit maximum",
+        label: "stores the largest possible token amount correctly",
+        failing: "Wrong values: corrupts the largest possible token amount (2^256-1)",
         detail:
           "A transfer of 2^256-1. The stored value must equal it exactly. Anything that goes through a double loses precision quietly, which is worse than failing.",
       },
       {
         id: "empty-blocks",
-        label: "long empty stretches advance progress",
-        failing: "stalls on a long stretch of empty blocks",
+        label: "keeps going through long runs of empty blocks",
+        failing: "Stops indexing: stalls on a long run of blocks with no events",
         detail:
           "Five hundred blocks with no logs at all. The tool has to come out the other side: either its own position moves through them, or it holds rows from beyond them. A tool that does neither has stalled on a stretch of chain that asked nothing of it. Both answers count because the benchmark reads position from the rows written for two of these tools, which is the harness's choice rather than theirs.",
       },
@@ -579,29 +585,29 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       {
         id: "median-under-block-time",
-        label: "median latency inside one block time",
-        failing: "stale reads: typical lag is longer than one block",
+        label: "new data usually shows up within one block",
+        failing: "Stale reads: new data usually takes longer than one block to show up",
         detail:
           "Half of all blocks are readable within two seconds of being published. This is the property that lets an application read the indexer instead of the chain.",
       },
       {
         id: "tail-bounded",
-        label: "the slowest one percent stays under ten seconds",
-        failing: "stale reads: worst lag runs past ten seconds",
+        label: "even the slowest 1% of new data shows up within 10 seconds",
+        failing: "Stale reads: new data sometimes takes over 10 seconds to show up",
         detail:
           "The tail matters more than the median for anything user-facing. A tool that flushes on a timer has a tail the length of its timer, whatever its median says.",
       },
       {
         id: "keeps-up",
-        label: "never falls behind the chain",
-        failing: "falls behind the chain head",
+        label: "keeps up with new blocks",
+        failing: "Falls behind: cannot keep up with new blocks",
         detail:
           "The gap between the chain head and the tool's position never exceeds five blocks for more than fifteen seconds. A tool that cannot keep up with a two-second block time at the head is only ever catching up.",
       },
       {
         id: "recovers-after-reorg",
-        label: "returns to its normal latency after a reorg",
-        failing: "stale reads: stays slow long after a reorg",
+        label: "gets back to normal speed after a chain rewrite",
+        failing: "Stale reads: stays slow for a long time after a chain rewrite",
         detail:
           "Within thirty seconds of a reorg being reconciled, latency is back in the band it held before. Reorg handling that pauses ingestion for a minute is a correctness win and an availability cost, and both belong in the record.",
       },

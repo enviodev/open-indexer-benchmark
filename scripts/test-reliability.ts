@@ -186,6 +186,44 @@ for (const [tool, reason] of Object.entries(AWAITING_PROJECT)) {
   );
 }
 
+// ── How a failure reads ──
+//
+// Every failure phrase is "Impact: trigger" - what it costs whoever runs the
+// tool, from a short vocabulary a reader learns once, then what set it off.
+// The table sets the impact in bold, so a phrase that drifts from the shape
+// renders as an unmarked sentence among marked ones.
+const IMPACTS = new Set([
+  "Missing data",
+  "Missing token data",
+  "Wrong balances",
+  "Wrong data",
+  "Wrong values",
+  "Stale data",
+  "Stale reads",
+  "Stops indexing",
+  "Stops indexing silently",
+  "Inconsistent reads",
+  "Slow deploys",
+  "Overloads the provider",
+  "Permanently slower",
+  "Falls behind",
+]);
+{
+  const off = SCENARIOS.flatMap((scenario) =>
+    scenario.checks
+      .filter((check) => {
+        const [impact, trigger] = check.failing.split(/: (.*)/s);
+        return !IMPACTS.has(impact) || !trigger;
+      })
+      .map((check) => `${scenario.id}/${check.id}: "${check.failing}"`)
+  );
+  check(
+    "every failure phrase leads with a known impact",
+    off.length === 0,
+    `${off.join("\n  ")}\n  (an impact is one of: ${[...IMPACTS].join(", ")})`
+  );
+}
+
 // ── The CI matrix ──────────────────────────────────────────────────────
 //
 // CI runs one job per tool per column, so the matrix is the suite's coverage
@@ -437,21 +475,24 @@ check(
 );
 check("the headline head lag reaches the table", table.includes("(640ms)"), table);
 check(
-  "a tool's failures sit in one collapsed block, counted on its summary line",
-  table.includes(
-    "<details>\n<summary><b>Example Indexer</b> - " +
-      `${CRASH_CHECKS} failing</summary>\n\n- *crash recovery*\n` +
-      "  - stops indexing for good after a database restart\n"
-  ),
+  "every tool's failures sit in one collapsed block, counted on its summary line",
+  (table.match(/<details>/g) ?? []).length === 1 &&
+    table.includes(
+      `<summary>What failed, and what it means for you - ${CRASH_CHECKS} failing checks ` +
+        "across 1 tool</summary>\n\n- **Example Indexer**\n  - *crash recovery*\n" +
+        "    - **Stops indexing**: never recovers after the database restarts mid-sync\n"
+    ),
   table
 );
-// Collapsed, nothing has to be cut: every failure is in the block, and the
-// old "and N more" is gone for good.
+// Nothing below the table is in the way of anything, so nothing is cut.
 check(
-  "every failure is listed, however many there are",
+  "every failure is listed, impact first and in bold",
   scenariosIn("crash-recovery")
     .flatMap((scenario) => scenario.checks.map((check) => check.failing))
-    .every((failing) => table.includes(`  - ${failing}`)) && !/and \d+ more/.test(table),
+    .every((failing) => {
+      const [impact, trigger] = failing.split(/: (.*)/s);
+      return table.includes(`    - **${impact}**: ${trigger}`);
+    }) && !/and \d+ more/.test(table),
   table
 );
 check(
@@ -460,8 +501,8 @@ check(
   table
 );
 check(
-  "a tool that lost nothing earns no block at all",
-  !table.includes("<b>Perfect Indexer</b>"),
+  "a tool that lost nothing is not in the block",
+  !table.includes("**Perfect Indexer**"),
   table
 );
 
@@ -485,9 +526,9 @@ check(
   });
   const rendered = buildReliabilityTable([toReliabilityRow(partial, measuresOf(partial))]);
   check(
-    "an unasked check is counted apart from the failures, and set in italics",
-    rendered.includes("<summary><b>Partial</b> - 1 failing, 1 not measured</summary>") &&
-      /  - <i>.* was not asked<\/i>/.test(rendered),
+    "an untested check is listed in italics, and not counted as a failure",
+    rendered.includes("1 failing check across 1 tool</summary>") &&
+      /    - <i>not tested: .*<\/i>/.test(rendered),
     rendered
   );
 }
@@ -502,9 +543,8 @@ check(
     ),
   ]);
   check(
-    "a tool nothing ran for gets a plain line, not a block",
-    unrun.includes("- **Unrun** - not measured yet: no run has published a result") &&
-      !unrun.includes("<details>"),
+    "a tool nothing ran for gets one line beside its name",
+    unrun.includes("- **Unrun** - <i>not measured yet: no run has published a result</i>"),
     unrun
   );
 }

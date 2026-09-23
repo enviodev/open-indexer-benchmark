@@ -141,7 +141,7 @@ export function toReliabilityRow(
       notes.push({
         group: group.id,
         failing: [],
-        unmeasured: [`not measured${why ? ` - ${why}` : ""}`],
+        unmeasured: [why ? `not tested: ${why}` : "not tested"],
       });
       continue;
     }
@@ -157,7 +157,7 @@ export function toReliabilityRow(
       notes.push({
         group: group.id,
         failing: unique(failures.map(phraseFor)),
-        unmeasured: unique(skipped.map((skip) => `${skip.label} was not asked`)),
+        unmeasured: unique(skipped.map((skip) => `not tested: ${skip.label}`)),
       });
     }
   }
@@ -186,6 +186,18 @@ export function toReliabilityRow(
 function phraseFor(failure: { failing: string; detail: string }): string {
   const some = /\(failed (\d+) of (\d+) runs\)/.exec(failure.detail);
   return some ? `${failure.failing} (only ${some[1]} of ${some[2]} runs)` : failure.failing;
+}
+
+/**
+ * "Missing data: rows lost when the database restarts" with the impact in
+ * bold, so a reader scanning a column of failures sees what kind each one is
+ * before reading what set it off. A phrase without an impact prefix is left
+ * as it is rather than guessed at.
+ */
+function impactFirst(phrase: string): string {
+  const colon = phrase.indexOf(": ");
+  if (colon <= 0) return phrase;
+  return `**${phrase.slice(0, colon)}**: ${phrase.slice(colon + 2)}`;
 }
 
 /** In order, without repeats: two checks failing the same way say it once. */
@@ -269,19 +281,21 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
     `| ${HEAD.map(() => "---").join(" | ")} |`,
   ];
   /**
-   * A collapsed block per tool: the tool and how many things are wrong with
-   * it on the line a reader scans, and every one of them - by column, in the
-   * words of whoever has to live with the tool - one click away.
+   * One collapsed block under the table for every tool's failures, so the
+   * table stays where the eye lands and the reasons are one click away.
    *
-   * Numbered references made a reader hold a number in their head and go
-   * looking for it. A sentence per tool ran three problems together into one
-   * long one. A list per tool was right but had to be cut short - six lines
-   * and "and 4 more" - or the tool that fails nothing sat three screens below
-   * the one that fails everything. Collapsed, nothing has to be cut: the
-   * summary says how bad, the body says exactly what, and the table stays
-   * where the eye lands. Tools that fail nothing are not in the list.
+   * Inside, a tool, its columns, and every failure in the column - nothing
+   * cut, since nothing below the table is in the way of anything. Each
+   * failure leads with what it costs whoever runs the tool, in bold, from a
+   * short fixed vocabulary - Missing data, Wrong balances, Stops indexing -
+   * so a reader scanning the block learns the kinds once and reads the
+   * triggers after them. What a run could not test is in italics beside the
+   * failures, because a cell's denominator is shorter by it and the cell
+   * cannot say so. Tools that fail nothing are not in the block.
    */
-  const notes: string[] = [];
+  const entries: string[] = [];
+  let failingTotal = 0;
+  let toolsFailing = 0;
   for (const row of sorted) {
     const name = row.carriedOver ? `${row.tool} ⚠️` : row.tool;
     lines.push(
@@ -293,41 +307,54 @@ export function buildReliabilityTable(rows: ReliabilityRow[]): string {
       ].join(" | ")} |`
     );
     if (row.notes.length === 0) continue;
+    if (row.notes.some((note) => note.failing.length > 0)) toolsFailing++;
 
     // A note about the row rather than a column - a tool nothing ran for - is
-    // one sentence, and a collapsible block around one sentence is a click
-    // that reveals nothing more.
+    // one sentence beside the tool's name.
     if (row.notes.every((note) => !note.group)) {
       const said = row.notes.flatMap((note) => [...note.failing, ...note.unmeasured]);
-      notes.push(`- **${row.name}** - ${said.join("; ")}`, "");
+      entries.push(`- **${row.name}** - <i>${said.join("; ")}</i>`);
       continue;
     }
 
-    const failing = row.notes.reduce((n, note) => n + note.failing.length, 0);
-    const unmeasured = row.notes.reduce((n, note) => n + note.unmeasured.length, 0);
-    const counts = [
-      failing > 0 ? `${failing} failing` : "",
-      unmeasured > 0 ? `${unmeasured} not measured` : "",
-    ].filter(Boolean);
-
-    // GitHub renders markdown inside <details> only with a blank line after
-    // the summary and before the close; without them the list comes out as
-    // one run-on paragraph of dashes.
-    notes.push("<details>", `<summary><b>${row.name}</b> - ${counts.join(", ")}</summary>`, "");
+    entries.push(`- **${row.name}**`);
     for (const note of row.notes) {
+      failingTotal += note.failing.length;
       const items = [
-        ...note.failing,
+        ...note.failing.map(impactFirst),
         ...note.unmeasured.map((item) => `<i>${item}</i>`),
       ];
       if (items.length === 0) continue;
       const group = GROUPS.find((g) => g.id === note.group);
       if (!group) {
-        notes.push(...items.map((item) => `- ${item}`));
+        entries.push(...items.map((item) => `  - ${item}`));
         continue;
       }
-      notes.push(`- *${group.title}*`, ...items.map((item) => `  - ${item}`));
+      entries.push(`  - *${group.title}*`, ...items.map((item) => `    - ${item}`));
     }
-    notes.push("", "</details>", "");
+  }
+
+  const notes: string[] = [];
+  if (entries.length > 0) {
+    // Counted over the tools that failed something: a tool nothing ran for
+    // is in the list, but "3 failing checks across 7 tools" would spread
+    // three findings over five tools that had none.
+    const count =
+      failingTotal > 0
+        ? `${failingTotal} failing ${failingTotal === 1 ? "check" : "checks"} across ` +
+          `${toolsFailing} ${toolsFailing === 1 ? "tool" : "tools"}`
+        : "nothing failed; some checks were not tested";
+    // GitHub renders markdown inside <details> only with a blank line after
+    // the summary and before the close; without them the list comes out as
+    // one run-on paragraph of dashes.
+    notes.push(
+      "<details>",
+      `<summary>What failed, and what it means for you - ${count}</summary>`,
+      "",
+      ...entries,
+      "",
+      "</details>"
+    );
   }
   while (notes.at(-1) === "") notes.pop();
   if (notes.length > 0) lines.push("", ...notes);

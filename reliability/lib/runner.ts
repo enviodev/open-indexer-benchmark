@@ -349,7 +349,7 @@ export function mergeCheck(outcomes: Outcome[]): Outcome {
   const asked = outcomes.filter((o) => o.status !== "na");
   if (asked.length === 0) {
     const first = outcomes.find((o) => o.status === "na");
-    return first ?? { status: "na", detail: "this run did not ask for it" };
+    return first ?? { status: "na", detail: "not part of this run" };
   }
   if (failures.length === 0) return { status: "pass" };
   const detail = (failures[0] as { detail: string }).detail;
@@ -379,7 +379,7 @@ export function mergeRuns(scenario: string, results: ScenarioResult[]): Scenario
       results.map(
         (result) =>
           result.checks[check.id] ??
-          { status: "na" as const, detail: "this run did not ask for it" }
+          { status: "na" as const, detail: "not part of this run" }
       )
     );
   }

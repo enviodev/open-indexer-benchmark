@@ -98,7 +98,7 @@ function scoreScenario(scenario: Scenario, run: ScenarioRun | undefined): Scenar
   for (const check of scenario.checks) {
     const outcome = run?.checks[check.id] ?? {
       status: "na" as const,
-      detail: "this run did not ask for it",
+      detail: "not part of this run",
     };
     if (outcome.status === "na") {
       skipped.push({ label: check.label, detail: outcome.detail });
