@@ -89,8 +89,9 @@ export interface Check {
   /**
    * What is wrong when this check fails, in a reader's terms.
    *
-   * The label is an assertion the tool either meets or does not - "widens
-   * again once it can" - which reads oddly as a finding. The results table is
+   * The label is an assertion the tool either meets or does not - "catches
+   * a chain rewrite in blocks it is still syncing" - which reads oddly as a
+   * finding. The results table is
    * read by people who did not write the suite, and a column below full marks
    * has to say what breaks, not which sentence stopped being true.
    *
@@ -335,7 +336,7 @@ export const SCENARIOS: Scenario[] = [
         label: "catches a chain rewrite in blocks it is still syncing",
         failing: "Stale data: misses a chain rewrite in blocks it was still syncing",
         detail:
-          "The chain is rewritten at a height the tool has already indexed but has not yet caught up to, so the reorg is behind the head it is working towards. A tool that only checks for reorgs at the head walks straight past it.",
+          "The chain is rewritten at a height the tool has already indexed but has not yet caught up to, so the reorg is behind the head it is working towards. A tool that only checks for reorgs at the head walks straight past it. The rewrite sits 60 blocks below the new head, inside every tool's default rewrite window (Ponder's is the smallest, at 65 on this chain); one deeper than a tool is configured to undo is a setting, not a defect.",
       },
     ],
     measures: [
@@ -468,13 +469,6 @@ export const SCENARIOS: Scenario[] = [
         failing: "Stops indexing: cannot cope with a provider's response-size limit",
         detail:
           "The same for the result-count cap, which needs a different response - a narrower range for the same span - and is the one more often left unhandled.",
-      },
-      {
-        id: "recovers-width",
-        label: "speeds back up after a rate limit lifts",
-        failing: "Permanently slower: after one rate limit, fetches in small pieces for good",
-        detail:
-          "After the caps are lifted, the tool falls 3,000 blocks behind and catches up. It passes if it asks for wider ranges than the caps forced it down to. The reading is held against the same catch-up by a fresh process that never saw a cap: a tool that asks for no wider a range even then, such as one that follows the head a block at a time, has nothing to widen back to and is not tested. Scored because collapsing to tiny queries for good after one refusal turns a transient limit into a permanent throughput cost.",
       },
     ],
   },

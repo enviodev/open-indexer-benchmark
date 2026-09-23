@@ -205,7 +205,6 @@ const IMPACTS = new Set([
   "Inconsistent reads",
   "Slow deploys",
   "Overloads the provider",
-  "Permanently slower",
   "Falls behind",
 ]);
 {

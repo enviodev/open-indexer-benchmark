@@ -260,7 +260,7 @@ Every indexer claims to handle reorgs, and a one-block reorg where an event's va
 | stops, rather than carrying on, after a rewrite deeper than it can undo | Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Carrying on with data it can no longer reconcile is the failing outcome, and it is the common one. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it. |
 | catches a chain rewrite that happened while it was offline | The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg - the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists. |
 | keeps up with several chain rewrites in a row | Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion - a rollback that is not itself atomic - leaves a mixture of two branches. |
-| catches a chain rewrite in blocks it is still syncing | The chain is rewritten at a height the tool has already indexed but has not yet caught up to, so the reorg is behind the head it is working towards. A tool that only checks for reorgs at the head walks straight past it. |
+| catches a chain rewrite in blocks it is still syncing | The chain is rewritten at a height the tool has already indexed but has not yet caught up to, so the reorg is behind the head it is working towards. A tool that only checks for reorgs at the head walks straight past it. The rewrite sits 60 blocks below the new head, inside every tool's default rewrite window (Ponder's is the smallest, at 65 on this chain); one deeper than a tool is configured to undo is a setting, not a defect. |
 
 Reported alongside the score, and not part of it:
 
@@ -274,7 +274,7 @@ Reported alongside the score, and not part of it:
 
 Whether a node that errors, stalls, rate limits or contradicts itself costs throughput or costs data.
 
-4 scenarios, 15 checks between them; the column counts all of them together.
+4 scenarios, 14 checks between them; the column counts all of them together.
 
 <a id="rpc-outage"></a>
 
@@ -330,7 +330,6 @@ Public endpoints cap what one request may ask for: a block range, a number of re
 | --- | --- |
 | copes with a provider's block-range limit | The tool finishes the range, having retried with a smaller one rather than stopping. Configuring the limit up front is not a pass: the point is what happens against a provider whose caps were not known in advance. |
 | copes with a provider's response-size limit | The same for the result-count cap, which needs a different response - a narrower range for the same span - and is the one more often left unhandled. |
-| speeds back up after a rate limit lifts | After the caps are lifted, the tool falls 3,000 blocks behind and catches up. It passes if it asks for wider ranges than the caps forced it down to. The reading is held against the same catch-up by a fresh process that never saw a cap: a tool that asks for no wider a range even then, such as one that follows the head a block at a time, has nothing to widen back to and is not tested. Scored because collapsing to tiny queries for good after one refusal turns a transient limit into a permanent throughput cost. |
 
 <a id="rpc-inconsistency"></a>
 

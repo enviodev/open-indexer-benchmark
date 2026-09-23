@@ -89,9 +89,7 @@ export type Defect =
   | "double-flush-on-stop"
   | "drops-second-event"
   | "stuck-after-db-error"
-  | "no-sanitise"
-  | "never-widens"
-  | "follows-head-by-hash";
+  | "no-sanitise";
 
 export interface FakeOptions {
   /** Where it writes. A real database: the harness's SQL has to be exercised. */
@@ -125,8 +123,6 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
     let lastBalances = new Map<string, bigint>();
     let exited = false;
     let checkpoint = START_BLOCK - 1;
-    /** Caught up at least once since this process started. */
-    let reachedHead = false;
     /**
      * Bumped by a kill, so writes already in flight are abandoned.
      *
@@ -319,7 +315,6 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       if (head <= checkpoint) {
         // The head moved backwards, or has not moved. A replica answering from
         // behind is not a reorg, so nothing is undone on the strength of it.
-        reachedHead = true;
         return;
       }
       await reconcile();
@@ -328,20 +323,9 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       const to = Math.min(head, from + batch - 1);
       let logs: any[];
       try {
-        if (defects.has("follows-head-by-hash") && reachedHead) {
-          // Not a defect, a design: Ponder follows the head a block at a
-          // time, asking for each block's logs by its hash, and never asks
-          // for a range again once it gets there - whatever it was capped to.
-          logs = [];
-          for (let height = from; height <= to; height++) {
-            const block = await rpc("eth_getBlockByNumber", [hex(height), false]);
-            logs.push(...(await rpc("eth_getLogs", [{ blockHash: block.hash, address: TOKEN }])));
-          }
-        } else {
-          logs = await rpc("eth_getLogs", [
-            { fromBlock: hex(from), toBlock: hex(to), address: TOKEN },
-          ]);
-        }
+        logs = await rpc("eth_getLogs", [
+          { fromBlock: hex(from), toBlock: hex(to), address: TOKEN },
+        ]);
       } catch (err) {
         const message = String((err as Error).message);
         // The two caps a public endpoint imposes. Both say the same thing:
@@ -364,8 +348,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
 
       await writeBatch(logs, to, { hashRows, gen });
       checkpoint = to;
-      if (to === head) reachedHead = true;
-      if (!defects.has("never-widens") && logs.length > 0 && batch < (options.batchBlocks ?? 500)) {
+      if (logs.length > 0 && batch < (options.batchBlocks ?? 500)) {
         // Widen again once the endpoint stops refusing, so a transient cap
         // does not become a permanent cost.
         batch = Math.min(options.batchBlocks ?? 500, batch * 2);
@@ -496,7 +479,6 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         generation++;
         // A new process: whatever it had narrowed to lived in the old one.
         batch = options.batchBlocks ?? 500;
-        reachedHead = false;
         running = true;
         exited = false;
         loop = run(generation);

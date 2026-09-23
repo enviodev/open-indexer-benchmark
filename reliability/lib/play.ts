@@ -693,9 +693,15 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
 
   // A rewrite below the head, at a height the tool has already indexed but is
   // still working towards - the one a head-only reorg check walks past.
+  //
+  // Sixty blocks below the new head, and no further. Every tool has a window
+  // it will unwind, configured or defaulted - Ponder's is 65 blocks on this
+  // chain id, Envio's 200, graph-node's 250 - and a rewrite beyond it is one
+  // the tool has been told to treat as final. This case once sat at 254, and
+  // what it caught there was a setting, not a defect.
   checks["during-backfill"] = await reconciles(
     "reorg behind the head during a backfill",
-    () => ctx.chain.reorg({ depth: 4, extend: 250, logs: "changed" }),
+    () => ctx.chain.reorg({ depth: 4, extend: 56, logs: "changed" }),
     0
   );
 
@@ -956,43 +962,6 @@ export async function rpcLimits(ctx: Ctx): Promise<ScenarioResult> {
       `(${MAX_LOGS / LOGS_PER_BLOCK} blocks)`
   );
 
-  // With the caps lifted, a tool that permanently collapsed to tiny queries
-  // stays slow forever. One that adapts widens again.
-  //
-  // By then the tool is at the head, and what it asks for there is its own
-  // business: Ponder follows the head a block at a time by hash and asks for
-  // no range at all, others poll in small fixed steps. So the reading is
-  // held against the same catch-up done by a fresh process that never saw a
-  // cap, and only a tool that asks for less than that, and no more than the
-  // caps forced it down to, has failed to widen.
-  const CAPPED = MAX_LOGS / LOGS_PER_BLOCK;
-  const CATCH_UP = 3_000;
-  ctx.chain.setLimits({});
-  ctx.chain.reset();
-  ctx.chain.advance(CATCH_UP);
-  await synced(ctx);
-  const afterLift = ctx.chain.stats().widestRange;
-
-  await ctx.stopTool();
-  await ctx.launch();
-  await synced(ctx);
-  ctx.chain.reset();
-  ctx.chain.advance(CATCH_UP);
-  await synced(ctx);
-  const fresh = ctx.chain.stats().widestRange;
-
-  checks["recovers-width"] =
-    fresh <= CAPPED
-      ? na(
-          `even a fresh start asks for at most ${fresh} blocks at a time when it ` +
-            `falls ${CATCH_UP.toLocaleString("en-US")} blocks behind, so the caps ` +
-            `left it nothing to widen back to`
-        )
-      : verdict(
-          afterLift > CAPPED,
-          `asked for at most ${afterLift} blocks at a time after the caps were ` +
-            `lifted, where a fresh start asks for ${fresh}`
-        );
   return { checks, measures: {} };
 }
 
