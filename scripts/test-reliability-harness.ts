@@ -327,7 +327,12 @@ const EXPECTATIONS: Expectation[] = [
     scenario: "db-restart",
     defects: ["stuck-after-db-error"],
     outage: true,
+    // One stall, one finding. It lost nothing and counted nothing twice -
+    // it stopped - and a tool that never came back from the first restart
+    // was never asked about the second or the freeze.
     fails: ["recovers-backfill"],
+    unmeasured: ["recovers-head", "recovers-pause"],
+    passes: ["no-loss", "no-duplicates"],
   },
   {
     scenario: "db-restart",

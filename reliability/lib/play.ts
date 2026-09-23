@@ -260,6 +260,40 @@ async function settled(
 }
 
 /**
+ * What a tool holds once it has been given every chance to finish.
+ *
+ * A tool that caught up is compared with the whole chain. One that did not is
+ * compared up to the furthest block it wrote, the way a clean shutdown is:
+ * above that is the part it never reached, and that is what "did not catch
+ * up" or "did not recover" already says. Compared with the whole chain, a tool
+ * that stopped indexing was also published as having lost data, and - because
+ * the balances of the transfers it never read are wrong - as having counted
+ * transfers twice. One stall, three findings.
+ */
+async function finalState(ctx: Ctx): Promise<{ caughtUp: boolean; result: Comparison }> {
+  const caughtUp = await synced(ctx);
+  if (caughtUp) return { caughtUp, result: await settled(ctx) };
+  const horizon = await ctx.observe.highestBlock().catch(() => 0);
+  const result = await compare(ctx, horizon);
+  return {
+    caughtUp,
+    result: { ...result, summary: `${result.summary}, the furthest it got` },
+  };
+}
+
+/**
+ * Whether the tool holds something twice: a row, a row the chain does not
+ * have, or balances that disagree with rows that are all correct. Balances
+ * are wrong whenever a row is missing too, and that is a missing row, not a
+ * transfer counted twice.
+ */
+function doubleCounted(result: Comparison): boolean {
+  if (result.duplicates > 0 || result.extra.length > 0) return true;
+  if (result.missing.length > 0 || result.wrong.length > 0) return false;
+  return result.balances !== null && result.balances.length > 0;
+}
+
+/**
  * How many transfers the tool holds, as a baseline to measure progress from.
  *
  * Retried rather than read as zero on a failure, because zero is the one
@@ -424,44 +458,54 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   );
 
   // ── At the head ──
-  await synced(ctx);
-  // The chain keeps producing across the second restart, so the tool has both
-  // something to miss and something to come back to: forty seconds of it,
-  // thirty of which fall after the database is back.
-  const producing = produce(ctx, 20, 2_000);
-  try {
-    await ctx.restartDb(DB_DOWN_MS);
-    const headBefore = await rowsNow(ctx);
-    const followedOn = await ctx.waitFor(
-      "indexing again at the head",
-      async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
-      ctx.patience.reactMs
-    );
-    // Same rule as the backfill above: restarted by hand if it has to be, and
-    // asked again.
-    const restarted = await reviveIfNeeded(
-      ctx,
-      "exited when the database went away while tracking the head"
-    );
-    const following =
-      followedOn ||
-      (restarted &&
-        (await ctx.waitFor(
-          "following the head again after being restarted by hand",
-          async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
-          ctx.patience.reactMs
-        )));
-    checks["recovers-head"] = verdict(
-      following,
-      restarted
-        ? "exited at the head and stopped following the chain even after a restart"
-        : "stopped following the head after the database came back"
-    );
-  } catch (err) {
-    checks["recovers-head"] = na(String((err as Error).message));
+  //
+  // Asked only of a tool that came back from the first restart. One that is
+  // still stuck from it cannot be at the head, and failing it here as well
+  // publishes one stall as three findings.
+  const notAsked = (outage: string) =>
+    na(`it had not recovered from the ${outage}, so it was never asked this`);
+  if (!indexingAgain) {
+    checks["recovers-head"] = notAsked("restart during the backfill");
+  } else {
+    await synced(ctx);
+    // The chain keeps producing across the second restart, so the tool has both
+    // something to miss and something to come back to: forty seconds of it,
+    // thirty of which fall after the database is back.
+    const producing = produce(ctx, 20, 2_000);
+    try {
+      await ctx.restartDb(DB_DOWN_MS);
+      const headBefore = await rowsNow(ctx);
+      const followedOn = await ctx.waitFor(
+        "indexing again at the head",
+        async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
+        ctx.patience.reactMs
+      );
+      // Same rule as the backfill above: restarted by hand if it has to be, and
+      // asked again.
+      const restarted = await reviveIfNeeded(
+        ctx,
+        "exited when the database went away while tracking the head"
+      );
+      const following =
+        followedOn ||
+        (restarted &&
+          (await ctx.waitFor(
+            "following the head again after being restarted by hand",
+            async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
+            ctx.patience.reactMs
+          )));
+      checks["recovers-head"] = verdict(
+        following,
+        restarted
+          ? "exited at the head and stopped following the chain even after a restart"
+          : "stopped following the head after the database came back"
+      );
+    } catch (err) {
+      checks["recovers-head"] = na(String((err as Error).message));
+    }
+    await producing;
+    await reviveIfNeeded(ctx, "exited during the second database restart");
   }
-  await producing;
-  await reviveIfNeeded(ctx, "exited during the second database restart");
 
   // ── Frozen rather than stopped ──
   //
@@ -471,43 +515,43 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
   // up, healthy by every external sign, and not indexing. Unlike the two
   // outages above, a restart is the finding rather than an acceptable cost:
   // nothing crashed, so nothing tells anybody to restart it.
-  const producingFrozen = produce(ctx, 20, 500);
-  try {
-    await ctx.pauseDb(PAUSE_MS);
-    // The blocks produced during the freeze are all out by now, so the tool is
-    // given more to do once it is unfrozen.
-    const frozenBefore = await rowsNow(ctx);
-    ctx.chain.advance(20);
-    checks["recovers-pause"] = verdict(
-      await ctx.waitFor(
-        "indexing again after the database was unfrozen",
-        async () => (await ctx.observe.count().catch(() => 0)) > frozenBefore,
-        ctx.patience.reactMs
-      ),
-      ctx.alive()
-        ? "waits for ever on a frozen database: no error, no exit, and no rows"
-        : "exited while its database was frozen"
-    );
-  } catch (err) {
-    checks["recovers-pause"] = na(String((err as Error).message));
+  if (!indexingAgain) {
+    checks["recovers-pause"] = notAsked("restart during the backfill");
+  } else if (checks["recovers-head"]?.status === "fail") {
+    checks["recovers-pause"] = notAsked("restart at the head");
+  } else {
+    const producingFrozen = produce(ctx, 20, 500);
+    try {
+      await ctx.pauseDb(PAUSE_MS);
+      // The blocks produced during the freeze are all out by now, so the tool is
+      // given more to do once it is unfrozen.
+      const frozenBefore = await rowsNow(ctx);
+      ctx.chain.advance(20);
+      checks["recovers-pause"] = verdict(
+        await ctx.waitFor(
+          "indexing again after the database was unfrozen",
+          async () => (await ctx.observe.count().catch(() => 0)) > frozenBefore,
+          ctx.patience.reactMs
+        ),
+        ctx.alive()
+          ? "waits for ever on a frozen database: no error, no exit, and no rows"
+          : "exited while its database was frozen"
+      );
+    } catch (err) {
+      checks["recovers-pause"] = na(String((err as Error).message));
+    }
+    await producingFrozen;
+    await reviveIfNeeded(ctx, "exited while its database was frozen");
   }
-  await producingFrozen;
-  await reviveIfNeeded(ctx, "exited while its database was frozen");
 
   // ── What it holds once it is allowed to finish ──
   ctx.chain.advance(20);
-  const caughtUp = await synced(ctx);
-  const result = await settled(ctx);
+  const { result } = await finalState(ctx);
   checks["no-loss"] = verdict(
     result.missing.length === 0 && result.wrong.length === 0,
-    caughtUp ? result.summary : `never caught up: ${result.summary}`
-  );
-  checks["no-duplicates"] = verdict(
-    result.duplicates === 0 &&
-      result.extra.length === 0 &&
-      (result.balances === null || result.balances.length === 0),
     result.summary
   );
+  checks["no-duplicates"] = verdict(!doubleCounted(result), result.summary);
   measures["manual-restarts"] = ctx.restarts();
   return { checks, measures };
 }
@@ -578,8 +622,7 @@ export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
   );
 
   ctx.chain.advance(20);
-  const caughtUp = await synced(ctx);
-  const result = await settled(ctx);
+  const { caughtUp, result } = await finalState(ctx);
   checks["resumes"] = verdict(
     caughtUp,
     ctx.alive()
@@ -592,9 +635,7 @@ export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
       `${result.missing[0]?.split(":")[0] ?? "?"}`
   );
   checks["no-double-apply"] = verdict(
-    result.duplicates === 0 &&
-      result.extra.length === 0 &&
-      (result.balances === null || result.balances.length === 0),
+    !doubleCounted(result),
     result.balances && result.balances.length > 0
       ? `${result.balances.length} balances wrong after the restarts (e.g. ${result.balances[0]})`
       : result.summary
@@ -903,8 +944,7 @@ export async function rpcOutage(ctx: Ctx): Promise<ScenarioResult> {
   }
 
   ctx.chain.advance(20);
-  await synced(ctx);
-  const result = await settled(ctx);
+  const { result } = await finalState(ctx);
   checks["no-loss"] = verdict(
     result.missing.length === 0 && result.wrong.length === 0,
     `a failed request cost data: ${result.summary}`
@@ -985,22 +1025,17 @@ export async function rpcChaos(ctx: Ctx): Promise<ScenarioResult> {
   // being asked is not whether it was fast under load; it is whether the
   // range it says it finished is the range the chain holds.
   ctx.chain.advance(20);
-  const caughtUp = await synced(ctx);
-  const result = await settled(ctx);
+  const { caughtUp, result } = await finalState(ctx);
   checks["catches-up"] = verdict(
     caughtUp,
     `never caught up once the endpoint was healthy again: ${result.summary}`
   );
   checks["no-loss"] = verdict(
     result.missing.length === 0 && result.wrong.length === 0,
-    caughtUp
-      ? `finished the range with data missing: ${result.summary}`
-      : `did not finish the range: ${result.summary}`
+    `lost data under the faults: ${result.summary}`
   );
   checks["no-duplicates"] = verdict(
-    result.duplicates === 0 &&
-      result.extra.length === 0 &&
-      (result.balances === null || result.balances.length === 0),
+    !doubleCounted(result),
     `retries left rows behind twice over: ${result.summary}`
   );
   return { checks, measures };
