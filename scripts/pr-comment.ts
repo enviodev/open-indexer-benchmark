@@ -4,7 +4,7 @@
 //
 // Two workflows have something to say about a pull request - what the tools do
 // when things go wrong, and how fast they are when they do not - and a reader
-// wants both in one place, in the order the README puts them. So every run
+// wants both in one place. So every run
 // posts a new comment carrying both sections: its own, freshly measured, and
 // the other workflow's carried forward from the last such comment.
 //
@@ -36,9 +36,8 @@ const MARKER = "<!-- ci-results -->";
 /**
  * The order sections appear in, whichever workflow finishes first.
  *
- * Reliability comes first for the same reason it does in the README: what a
- * tool does when its database goes away is worth more than how fast it is when
- * nothing does.
+ * Reliability comes first: what a tool does when its database goes away is
+ * worth more than how fast it is when nothing does.
  */
 const ORDER = ["reliability", "benchmarks"];
 
