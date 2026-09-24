@@ -184,6 +184,8 @@ export async function runOnce(
 
   let chain: ChainMock | null = null;
   let driver: Driver | null = null;
+  /** Set while the tool is being prepared, so teardown can wait for it. */
+  let preparing: Promise<void> | null = null;
   let restarts = 0;
   let launched = false;
   /**
@@ -215,8 +217,9 @@ export async function runOnce(
     const observe = observer(sql);
 
     log(`  preparing ${tool}...`);
+    preparing = activeDriver.prepare();
     await withTimeout(
-      activeDriver.prepare(),
+      preparing,
       PREPARE_TIMEOUT_MS,
       `preparing ${tool} did not finish within ${PREPARE_TIMEOUT_MS / 60_000} minutes`,
       () => (abandoned = true)
@@ -330,8 +333,9 @@ export async function runOnce(
   } finally {
     const bounded = async (step: string, work: (() => Promise<void>) | undefined) => {
       if (!work) return;
-      const pending = work();
-      pending.catch(() => {});
+      // A step that fails is ignored, as it always was; only one that hangs
+      // is worth a line in the log.
+      const pending = work().catch(() => {});
       try {
         await withTimeout(
           pending,
@@ -343,6 +347,12 @@ export async function runOnce(
         log(`  ${tool}/${scenario}: ${(err as Error)?.message ?? err}`);
       }
     };
+    // None of these can be cancelled, only waited on - so a preparation that
+    // ran out of time is given the chance to finish first, and whatever it
+    // started is then stopped with everything else rather than coming up
+    // after the teardown, underneath the next run.
+    const prepared = preparing;
+    await bounded("finishing preparation", prepared ? () => prepared : undefined);
     await bounded("stopping the tool", driver ? () => driver!.stop() : undefined);
     await bounded("cleaning up after the tool", driver ? () => driver!.cleanup() : undefined);
     await bounded("closing the chain", chain ? () => chain!.close() : undefined);

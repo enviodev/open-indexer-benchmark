@@ -243,14 +243,25 @@ interface Still {
   atHead: boolean;
 }
 
-/** The chain's head and the tool's row count and highest block. */
+/**
+ * Where the tool says it is, which moves where its rows cannot: a tool walking
+ * through blocks that carry no logs writes nothing, and is still working. For
+ * the drivers that read their position from their rows it adds nothing, and
+ * takes nothing away.
+ */
+async function position(ctx: Ctx): Promise<number> {
+  return (await ctx.progress())?.blocks ?? -1;
+}
+
+/** The chain's head and the tool's row count, highest block and position. */
 async function storedState(ctx: Ctx): Promise<Still> {
-  const [count, highest] = await Promise.all([
+  const [count, highest, at] = await Promise.all([
     ctx.observe.count().catch(() => -1),
     ctx.observe.highestBlock().catch(() => -1),
+    position(ctx),
   ]);
   const head = ctx.chain.head();
-  return { key: `${head}:${count}:${highest}`, atHead: highest >= head };
+  return { key: `${head}:${count}:${highest}:${at}`, atHead: highest >= head };
 }
 
 /**
@@ -258,12 +269,15 @@ async function storedState(ctx: Ctx): Promise<Still> {
  * rows in place is moving even when its row count is not.
  */
 async function comparisonState(ctx: Ctx, result: Comparison | null): Promise<Still> {
-  const highest = await ctx.observe.highestBlock().catch(() => -1);
+  const [highest, at] = await Promise.all([
+    ctx.observe.highestBlock().catch(() => -1),
+    position(ctx),
+  ]);
   const head = ctx.chain.head();
   const found = result
     ? [result.missing, result.wrong, result.extra, result.duplicates, result.balances]
     : "unreadable";
-  return { key: JSON.stringify([head, highest, found]), atHead: highest >= head };
+  return { key: JSON.stringify([head, highest, at, found]), atHead: highest >= head };
 }
 
 /**
