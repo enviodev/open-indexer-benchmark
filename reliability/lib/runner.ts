@@ -28,7 +28,7 @@ import {
   type Driver,
   type DriverFactory,
 } from "../../cases/lib/drivers/index.ts";
-import { killRunningCommands, psql, sleep } from "../../cases/lib/process.ts";
+import { cancellable, psql, sleep, type Cancellable } from "../../cases/lib/process.ts";
 import {
   SELECTORS,
   encodeString,
@@ -184,8 +184,8 @@ export async function runOnce(
 
   let chain: ChainMock | null = null;
   let driver: Driver | null = null;
-  /** Set while the tool is being prepared, so teardown can wait for it. */
-  let preparing: Promise<void> | null = null;
+  /** Set once the tool is being prepared, so teardown can wait for it or abandon it. */
+  let preparation: Cancellable<void> | null = null;
   let restarts = 0;
   let launched = false;
   /**
@@ -217,12 +217,16 @@ export async function runOnce(
     const observe = observer(sql);
 
     log(`  preparing ${tool}...`);
-    preparing = activeDriver.prepare();
+    const preparing = cancellable(() => activeDriver.prepare());
+    preparation = preparing;
     await withTimeout(
-      preparing,
+      preparing.promise,
       PREPARE_TIMEOUT_MS,
       `preparing ${tool} did not finish within ${PREPARE_TIMEOUT_MS / 60_000} minutes`,
-      () => (abandoned = true)
+      () => {
+        abandoned = true;
+        preparing.cancel();
+      }
     );
 
     const ctx: Ctx = {
@@ -331,11 +335,14 @@ export async function runOnce(
         : `the run could not be set up: ${message}`
     );
   } finally {
-    const bounded = async (step: string, work: (() => Promise<void>) | undefined) => {
-      if (!work) return;
+    // Each step is cancellable work: one that runs past its bound has what
+    // it is running killed, and anything it tries to start after that
+    // refused, so it cannot carry on underneath the next step or the next run.
+    const bounded = async (step: string, job: Cancellable<unknown> | null) => {
+      if (!job) return;
       // A step that fails is ignored, as it always was; only one that hangs
       // is worth a line in the log.
-      const pending = work().catch(() => {});
+      const pending = job.promise.catch(() => {});
       try {
         await withTimeout(
           pending,
@@ -344,24 +351,19 @@ export async function runOnce(
           () => {}
         );
       } catch (err) {
-        // The step is abandoned, and so are the commands it was waiting on:
-        // left running, they would overlap the next step and the next run.
-        const killed = killRunningCommands();
+        const killed = job.cancel();
         log(
           `  ${tool}/${scenario}: ${(err as Error)?.message ?? err}` +
             (killed > 0 ? `; killed ${killed} command(s) it left running` : "")
         );
       }
     };
-    // A preparation that ran out of time is given the chance to finish first,
-    // and killed if it still does not, so whatever it started is then stopped
-    // with everything else rather than coming up after the teardown,
-    // underneath the next run.
-    const prepared = preparing;
-    await bounded("finishing preparation", prepared ? () => prepared : undefined);
-    await bounded("stopping the tool", driver ? () => driver!.stop() : undefined);
-    await bounded("cleaning up after the tool", driver ? () => driver!.cleanup() : undefined);
-    await bounded("closing the chain", chain ? () => chain!.close() : undefined);
+    // A preparation that ran out of time was cancelled when it did, so this
+    // is only the wait for it to notice.
+    await bounded("finishing preparation", preparation);
+    await bounded("stopping the tool", driver ? cancellable(() => driver!.stop()) : null);
+    await bounded("cleaning up after the tool", driver ? cancellable(() => driver!.cleanup()) : null);
+    await bounded("closing the chain", chain ? cancellable(() => chain!.close()) : null);
   }
 }
 
