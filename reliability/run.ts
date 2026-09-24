@@ -5,16 +5,18 @@
 //   node reliability/run.ts ponder --repeats=5     more runs per scenario
 //   node reliability/run.ts --scenarios=reorg-cases,db-restart
 //   node reliability/run.ts ponder --group=reorgs
+//   node reliability/run.ts --parallel=12          twelve runs at a time
 //
 // Arguments that name a tool select it; everything else is a flag. The default
-// is the whole suite. CI runs it a column at a time - one job per tool per
-// group - since the scenarios take a machine to themselves anyway: a tool
-// being starved of CPU by a neighbour would show up here as a tool that could
-// not keep up with the head. Run by hand, they are simply run in order.
+// is the whole suite, run in order in this process. `--parallel` runs every
+// run of every scenario as a job of its own, that many at once, each in a
+// worker with its own ports, containers and copy of the project - which is how
+// CI runs it, in one job (see reliability/lib/parallel.ts for what that costs).
 //
 // Nothing here needs an API token. The chain is generated and the tools are
 // pointed at it, which is the whole point.
 
+import { MAX_PARALLEL } from "./lib/parallel.ts";
 import { runReliability } from "./lib/runner.ts";
 import { GROUPS, SCENARIOS, scenariosIn } from "./lib/scenarios.ts";
 import { absenceReason, RELIABILITY_TOOLS, runsHere } from "./lib/tools.ts";
@@ -55,17 +57,22 @@ if (unknownScenarios.length > 0) {
   process.exit(1);
 }
 
-// A group is a column of the published table, and it is what CI shards on: the
-// scenarios are independent of each other and each one wants a machine to
-// itself, so running a column per runner costs the wall clock of the slowest
-// column rather than the sum of all of them. Naming a group here is the same
-// selection by another name, so a shard can be reproduced by hand.
+// A group is a column of the published table. Naming one here is the same
+// selection as naming its scenarios, so a column can be re-run by hand.
 const groups = (flags.get("group") ?? "").split(",").filter(Boolean);
 const unknownGroups = groups.filter((id) => !GROUPS.some((g) => g.id === id));
 if (unknownGroups.length > 0) {
   console.error(
     `unknown group(s) ${unknownGroups.join(", ")} - known groups are ` +
       GROUPS.map((g) => g.id).join(", ")
+  );
+  process.exit(1);
+}
+
+const parallel = Number(flags.get("parallel") ?? 1);
+if (!Number.isInteger(parallel) || parallel < 1 || parallel > MAX_PARALLEL) {
+  console.error(
+    `--parallel must be an integer from 1 to ${MAX_PARALLEL}, not "${flags.get("parallel")}"`
   );
   process.exit(1);
 }
@@ -77,9 +84,7 @@ if (!Number.isInteger(repeats) || repeats < 1) {
 }
 
 // Both selections narrow, so naming a group and a scenario outside it asks for
-// nothing rather than for both. A dispatch that names scenarios sends every
-// shard the same list, and the four shards it does not belong to are meant to
-// come out empty.
+// nothing rather than for both.
 const inGroups = groups.flatMap((id) => scenariosIn(id).map((s) => s.id));
 const selected = (scenarios.length > 0 ? scenarios : SCENARIOS.map((s) => s.id)).filter(
   (id) => groups.length === 0 || inGroups.includes(id)
@@ -96,6 +101,7 @@ await runReliability({
   tools: named.length > 0 ? named.filter(runsHere) : [...RELIABILITY_TOOLS],
   scenarios: selected,
   repeats,
+  parallel,
 });
 
 // A run that has published its results is finished.

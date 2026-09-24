@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import {
   measuresOf,
   mergeToolResults,
+  reached,
   scoreTool,
   type ToolReliability,
 } from "../reliability/lib/score.ts";
@@ -54,27 +55,28 @@ const README = resolve(ROOT, "README.md");
 const rows: ReliabilityRow[] = [];
 const fresh = new Set<string>();
 
-// One directory per job: a tool and the group of scenarios that job ran, since
-// CI shards the suite a column at a time. A tool therefore arrives in several
-// pieces, and they are put back together before anything is scored - a row is
-// a tool, not a runner.
+// One directory per uploaded result. CI runs the whole suite in one job, which
+// prints a line for every tool after each of its scenarios, so the last line
+// for a tool is the one that counts. A tool can still arrive in several pieces
+// - a run split by hand, or a re-run uploaded beside the first - and they are
+// put back together before anything is scored: a row is a tool, not a job.
 const collected: ToolReliability[] = [];
 const artifacts = existsSync(RESULTS_DIR) ? readdirSync(RESULTS_DIR).sort() : [];
 for (const dir of artifacts) {
   if (!dir.startsWith("reliability-")) continue;
   const file = join(RESULTS_DIR, dir, "reliability-output.txt");
   if (!existsSync(file)) continue;
-  const lines = readFileSync(file, "utf8")
-    .split("\n")
-    .filter((line) => line.startsWith("RELIABILITY_RESULT "));
-  if (lines.length === 0) continue;
-  try {
-    collected.push(
-      JSON.parse(lines[lines.length - 1].slice("RELIABILITY_RESULT ".length))
-    );
-  } catch (err) {
-    console.error(`Could not parse a reliability result from ${file}: ${err}`);
+  const latest = new Map<string, ToolReliability>();
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    if (!line.startsWith("RELIABILITY_RESULT ")) continue;
+    try {
+      const result: ToolReliability = JSON.parse(line.slice("RELIABILITY_RESULT ".length));
+      latest.set(`${result.name}|${result.source}`, result);
+    } catch (err) {
+      console.error(`Could not parse a reliability result from ${file}: ${err}`);
+    }
   }
+  collected.push(...latest.values());
 }
 
 const readme = existsSync(README) ? readFileSync(README, "utf8") : "";
@@ -84,9 +86,12 @@ for (const result of mergeToolResults(collected)) {
   const score = scoreTool(result);
   const row = toReliabilityRow(score, measuresOf(score));
   // The columns this run reported for the tool: a column is reported when
-  // any of its scenarios ran, whatever they could measure.
+  // any of its scenarios ran, whatever they could measure. A scenario the job
+  // never reached is not one that ran.
   const reported = new Set(
-    result.runs.map((run) => SCENARIOS.find((s) => s.id === run.scenario)?.group ?? "")
+    result.runs
+      .filter(reached)
+      .map((run) => SCENARIOS.find((s) => s.id === run.scenario)?.group ?? "")
   );
   const prior = published.find(
     (entry) => reliabilityRowKey(entry) === reliabilityRowKey(row) && entry.overall.asked > 0

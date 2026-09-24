@@ -7,11 +7,13 @@ import {
   BENCHMARK_PORT,
   blocksIndexed,
   createProgressReader,
+  instanceName,
+  port,
   type DriverFactory,
 } from "./common.ts";
 
-const PG_PORT = 19_881;
-const PG_CONTAINER = "subgraph-benchmark-pg";
+const PG_PORT = port(19_881);
+const PG_CONTAINER = instanceName("subgraph-benchmark-pg");
 export const SUBGRAPH_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/graphnode`;
 
 /**
@@ -35,9 +37,9 @@ const BIN_DIR = resolve(
   ".graph-node/bin"
 );
 
-const INDEX_NODE_PORT = 19_882;
-const ADMIN_PORT = 19_883;
-const METRICS_PORT = 19_884;
+const INDEX_NODE_PORT = port(19_882);
+const ADMIN_PORT = port(19_883);
+const METRICS_PORT = port(19_884);
 
 export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
   const dir = resolve(config.dir, "subgraph");

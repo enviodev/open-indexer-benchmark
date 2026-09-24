@@ -4,14 +4,18 @@ name: Reliability
 # they do not.
 #
 # The suite is expensive - every scenario, three runs each - so it runs at two
-# depths, and every job is one tool and one column of the table. Nothing is
-# shared between a tool and another tool, or between a column and another
-# column: each scenario generates its own chain and its own database, and each
-# wants a machine to itself anyway, because two of them measure how long a tool
-# takes to react and a neighbour competing for CPU reads as a tool that cannot
-# keep up with the head. So a depth costs the wall clock of its slowest single
-# column rather than the sum of every scenario across seven tools - about
-# forty minutes for a pull request rather than most of a day.
+# depths, and all of it runs in one job, many runs at a time. Nothing is shared
+# between one run and another: each scenario generates its own chain and its
+# own database, and the runner gives every run in flight its own ports,
+# containers and copy of the tool's project (reliability/lib/parallel.ts). So a
+# depth costs roughly its slowest few runs rather than the sum of every
+# scenario across seven tools, on one runner instead of thirty-five, with one
+# checkout and one install per tool rather than one per job.
+#
+# What that gives up is a machine per run. The head-latency measures time how
+# long a tool takes to react, and a neighbour competing for CPU can make that
+# slower; they are the median of the repeats and read as such. The checks are
+# pass or fail, with minutes of patience, and do not notice.
 #
 # A pull request that touches the suite gets every scenario once per tool,
 # which fills every column of the table and is enough to say what each tool
@@ -48,6 +52,11 @@ on:
         required: false
         default: '3'
         type: string
+      parallel:
+        description: 'Runs in flight at once, each with its own ports and containers.'
+        required: false
+        default: '12'
+        type: string
   pull_request:
     paths:
       - 'reliability/**'
@@ -76,10 +85,10 @@ on:
     - cron: '0 3 * * 1'
 
 # One run per branch. Pushing again while a run is going leaves the first one
-# measuring code nobody will merge, on thirty-five runners, and leaves two summary
-# jobs racing to write the same section of the same comment. A run on `main`
-# or the schedule is left alone to finish, because what it publishes is the
-# repository's own claim rather than a preview of somebody's branch.
+# measuring code nobody will merge, and leaves two summary jobs racing to write
+# the same section of the same comment. A run on `main` or the schedule is
+# left alone to finish, because what it publishes is the repository's own
+# claim rather than a preview of somebody's branch.
 concurrency:
   group: reliability-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -113,46 +122,20 @@ jobs:
             echo "depth=full" >> "$GITHUB_OUTPUT"
           fi
 
-  tools:
-    name: ${{ matrix.tool }} / ${{ matrix.group }}
+  run:
+    name: Run the suite
     needs: scope
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      # Every tool against every column, all at once: GitHub gives each matrix
-      # job its own runner VM, so the isolation each scenario needs is the
-      # runner's rather than the queue's, and nothing is gained by making a
-      # tool wait for its own previous scenario. A job that fails is a result
-      # rather than a reason to stop measuring anything else, and the summary
-      # puts a tool's columns back together into one row.
-      fail-fast: false
-      matrix:
-        # Kept in step with RELIABILITY_TOOLS in reliability/lib/tools.ts by
-        # scripts/test-reliability.ts, which the Checks workflow runs.
-        tool:
-          - envio-rpc
-          - envio-subgraph-rpc
-          - ponder
-          - rindexer
-          - sqd-rpc
-          - subgraph
-          - subquery
-        # The table's columns, kept in step with GROUPS in
-        # reliability/lib/scenarios.ts by the same test.
-        group:
-          - crash-recovery
-          - reorgs
-          - rpc-faults
-          - data-fidelity
-          - head-latency
-    # At most five scenarios in a job - the rpc-faults column - three runs
-    # each on the full suite, and every scenario has a 45-minute backstop of
-    # its own. A healthy tool is far inside this; it is here so one that hangs
-    # cannot hold a runner all day. The run step stops first, so the upload
-    # below still has time, and what it uploads says how far the job got: the
-    # runner prints a result after every scenario, with the rest unmeasured.
-    timeout-minutes: 240
+    # The pull request's single pass is done in about as long as its slowest
+    # few runs; the full suite is three times the work on the same pool. Every
+    # scenario has a 45-minute backstop of its own and every worker a 90-minute
+    # one, so this only stops a pool that is stuck as a whole. The run step
+    # stops first, so the upload below still has time, and what it uploads
+    # says how far the job got: the runner prints a result for a tool after
+    # every one of its scenarios, with the rest unmeasured.
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
         with:
@@ -168,47 +151,58 @@ jobs:
 
       - name: Run the reliability suite
         env:
-          TOOL: ${{ matrix.tool }}
-          GROUP: ${{ matrix.group }}
           SCENARIOS: ${{ needs.scope.outputs.scenarios }}
           REPEATS: ${{ needs.scope.outputs.repeats }}
+          PARALLEL: ${{ inputs.parallel || '12' }}
           SELECTED: ${{ inputs.tools }}
         run: |
-          # A dispatch that named tools narrows the matrix; a tool this job is
-          # not for is skipped rather than failing the run.
-          if [ -n "$SELECTED" ] && ! echo " $SELECTED " | grep -q " $TOOL "; then
-            echo "$TOOL was not selected by this run."
-            exit 0
-          fi
-          # An array, expanded quoted: `repeats` and `scenarios` are strings a
-          # dispatch supplies, and an unquoted expansion would let a space or a
-          # `*` in one of them add arguments of its own.
-          ARGS=("$TOOL" "--repeats=$REPEATS" "--group=$GROUP")
+          # An array, expanded quoted: every value here is a string a dispatch
+          # supplies, and an unquoted expansion would let a space or a `*` in
+          # one of them add arguments of its own. Tools are the exception,
+          # split on spaces on purpose - and no tool is named with anything
+          # else, so the runner refuses whatever a split turns up.
+          ARGS=("--repeats=$REPEATS" "--parallel=$PARALLEL")
+          # No tools named is every tool, and no scenarios named is every
+          # scenario - the case a pull request and the weekly run both take.
           # An `&&` list that comes out false is a failed command under
-          # `set -e`, and "no scenarios named" means every scenario - the case
-          # a pull request and the weekly run both take.
+          # `set -e`, hence the `if`s.
+          if [ -n "$SELECTED" ]; then
+            read -ra TOOLS <<< "$SELECTED"
+            ARGS=("${TOOLS[@]}" "${ARGS[@]}")
+          fi
           if [ -n "$SCENARIOS" ]; then
             ARGS+=("--scenarios=$SCENARIOS")
           fi
           node reliability/run.ts "${ARGS[@]}" 2>&1 | tee reliability-output.txt
-        timeout-minutes: 220
+        timeout-minutes: 280
 
       - name: Upload the result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reliability-${{ matrix.tool }}-${{ matrix.group }}
+          name: reliability-all
           path: reliability-output.txt
           retention-days: 30
 
+      # Every run's own log, uninterleaved: the step log above has a dozen runs
+      # talking at once, each line prefixed with the run it came from.
+      - name: Upload each run's log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-reliability
+          path: reliability-logs/
+          retention-days: 30
+          if-no-files-found: ignore
+
   summary:
     name: Summary
-    needs: [scope, tools]
-    # A tool whose job failed is a result in its own right: the table carries
+    needs: [scope, run]
+    # A tool that reported nothing is a result in its own right: the table carries
     # its last published row forward and marks it stale, which is the same
     # contract the throughput tables have.
     #
-    # Not `always()`: a run superseded by a newer push has its tool jobs
+    # Not `always()`: a run superseded by a newer push has its run job
     # cancelled, and an `always()` job still starts - inside it `cancelled()`
     # reads false, so the comment step's guard let a table of "not part of
     # this run" replace the last complete one. A cancelled run says nothing.
@@ -246,12 +240,14 @@ jobs:
           SECTION: reliability
           DEPTH: ${{ needs.scope.outputs.depth }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Kept in step with RELIABILITY_TOOLS in reliability/lib/tools.ts by
+          # scripts/test-reliability.ts, which the Checks workflow runs.
           TOOLS: envio-rpc envio-subgraph-rpc ponder rindexer sqd-rpc subgraph subquery
         run: |
           TABLE=/tmp/reliability-table.md
           [ -f "$TABLE" ] || echo "_No reliability results collected._" > "$TABLE"
 
-          # A tool that was asked and reported nothing is a failed job, and it
+          # A tool that was asked and reported nothing has failed, and it
           # must not read as a tool nobody measures: its row shows the last
           # published value, and this says so.
           # Counting non-empty lines, not newlines: the file has no trailing
@@ -285,8 +281,8 @@ jobs:
               echo
             fi
             if [ "$MISSING" -gt 0 ]; then
-              echo "> ⚠️ $MISSING tool job(s) reported no result at all. Those rows show the"
-              echo "> last published value; [check the failed job(s)]($RUN_URL)."
+              echo "> ⚠️ $MISSING tool(s) reported no result at all. Those rows show the"
+              echo "> last published value; [check the run's logs]($RUN_URL)."
               echo
             fi
             cat "$TABLE"

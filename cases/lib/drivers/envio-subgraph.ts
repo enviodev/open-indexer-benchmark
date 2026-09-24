@@ -3,10 +3,10 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec, kill, psql, start, signalGroup } from "../process.ts";
-import { type DriverFactory } from "./common.ts";
-import { createEnvioSnapshot, ENVIO_DB_URL } from "./envio.ts";
+import { port, type DriverFactory } from "./common.ts";
+import { createEnvioSnapshot, ENVIO_DB_URL, ENVIO_INDEXER_PORT } from "./envio.ts";
 
-const PG_PORT = 5433;
+const PG_PORT = port(5433);
 
 /**
  * The envio CLI, installed once and shared across cases the way the Graph Node
@@ -38,6 +38,7 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
     ENVIO_TUI: "false",
     ENVIO_HASURA: "false",
     ENVIO_PG_PORT: String(PG_PORT),
+    ENVIO_INDEXER_PORT: String(ENVIO_INDEXER_PORT),
     // A bare URL leaves HyperSync as the source and keeps RPC for contract
     // calls and the block-timestamp fallback; `for: sync` makes it the source.
     ENVIO_SUBGRAPH_RPC:

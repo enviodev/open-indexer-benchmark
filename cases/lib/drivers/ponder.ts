@@ -6,11 +6,13 @@ import {
   BENCHMARK_PORT,
   blocksIndexed,
   createProgressReader,
+  instanceName,
+  port,
   type DriverFactory,
 } from "./common.ts";
 
-const PG_PORT = 19_877;
-const PG_CONTAINER = "ponder-benchmark-pg";
+const PG_PORT = port(19_877);
+const PG_CONTAINER = instanceName("ponder-benchmark-pg");
 export const PONDER_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/ponder`;
 
 export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock, wsUrl }) => {

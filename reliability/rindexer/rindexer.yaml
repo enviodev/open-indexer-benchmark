@@ -68,4 +68,8 @@ contracts:
                     value: $value
 
 global:
-  health_port: 8082
+  # 8082 unless the driver says otherwise, which it does when the suite runs
+  # several copies of this project side by side. Like every variable in this
+  # file it must be set: rindexer refuses to start on one that is not, and it
+  # substitutes them in comments too, so none is spelled out in one.
+  health_port: ${RINDEXER_HEALTH_PORT}

@@ -179,9 +179,9 @@ export function toReliabilityRow(
  * A fresh row, with every column its run did not report filled from the row
  * the table last published.
  *
- * CI runs one job per tool per column, and a job can fail on its own. Left
- * alone, the tool's other columns would publish and the failed one would read
- * as a dash - an absence dressed as a result, replacing a real one. So the last
+ * A run can stop before it reaches a column - a job that ran out of time, a
+ * tool that was not selected. Left alone, the tool's other columns would
+ * publish and the missing one would read as a dash - an absence dressed as a result, replacing a real one. So the last
  * published cell stands in, marked, and its tally counts towards the overall
  * again. Only a column nothing reported is filled: one the run reached and
  * could not measure is a result of this run, dash and all.

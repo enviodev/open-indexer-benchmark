@@ -8,3 +8,8 @@
 # table, published by CI, never in a commit.
 reliability-output.txt
 /results/
+
+# Per-worker copies of the reliability projects and each run's log, left by
+# `node reliability/run.ts --parallel=N`.
+/.reliability-work/
+/reliability-logs/
