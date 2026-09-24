@@ -193,7 +193,10 @@ export async function waitPg(connStr: string, query: string, timeoutMs = 30_000)
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      await psql(connStr, query);
+      // Each attempt is bounded by what is left of the deadline, so a
+      // database that accepts the connection and never answers cannot hold
+      // this past it.
+      await psql(connStr, query, { timeoutMs: Math.max(1_000, deadline - Date.now()) });
       return;
     } catch {
       await sleep(1_000);
