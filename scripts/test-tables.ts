@@ -188,6 +188,34 @@ check(
   JSON.stringify(reparsed)
 );
 
+// A row whose runs still disagreed after the gate measured it again publishes
+// its median with a note saying how far apart they were. The note is about the
+// data, so it must survive into the README, and the row must still read back
+// as the same tool with the same rate on the next run.
+const unstableRow = { ...rows[2], unstable: "4 runs ranged 42.9–269.0 events/s against 269.0 last published; the median is shown" };
+const withUnstable = buildTable([rows[0], unstableRow]);
+check(
+  "an unstable row is flagged and explained under the table",
+  withUnstable.includes("[Envio Indexer](https://envio.dev) ⚠️ | [RPC]") &&
+    withUnstable.includes(`> ⚠️ Envio Indexer via RPC — ${unstableRow.unstable}.`),
+  withUnstable
+);
+const unstableBack = parsePublishedTable(
+  `<!-- BENCHMARK:demo:START -->\n${withUnstable}\n<!-- BENCHMARK:demo:END -->`,
+  "demo"
+);
+check(
+  "an unstable row reads back as its tool and rate",
+  unstableBack.length === 2 &&
+    unstableBack.some(
+      (row) =>
+        row.name === "Envio Indexer" &&
+        row.eventsPerSec === unstableRow.eventsPerSec &&
+        row.cells.tool === unstableRow.cells.tool
+    ),
+  JSON.stringify(unstableBack)
+);
+
 check("an empty table is handled", buildTable([]) === "_No results collected._");
 check(
   "a missing case yields no rows",

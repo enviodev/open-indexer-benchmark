@@ -43,6 +43,12 @@ export interface TableRow {
    * because it has no rate to compare.
    */
   unsupported?: string;
+  /**
+   * Set when this row's samples still disagreed after the gate measured it
+   * again: the median is published, and this says how far apart the runs were
+   * so the number is not read as a precise one.
+   */
+  unstable?: string;
 }
 
 /**
@@ -100,7 +106,7 @@ export function buildTable(rows: TableRow[]): string {
   const notes: string[] = [];
   for (const row of sorted) {
     const tool = row.cells.tool || row.name;
-    const name = row.carriedOver ? `${tool} ⚠️` : tool;
+    const name = row.carriedOver || row.unstable ? `${tool} ⚠️` : tool;
 
     if (row.unsupported) {
       // Every measured column is a dash — there is nothing to report — and the
@@ -149,6 +155,15 @@ export function buildTable(rows: TableRow[]): string {
       `> ⚠️ ${carried.join(
         ", "
       )} — carried forward from a previous run; the latest run produced no fresh result.`
+    );
+  }
+
+  // Unlike a carried row, an unstable one is a statement about the data, so it
+  // is kept in the README as well as in the run's own report.
+  for (const row of sorted.filter((r) => r.unstable && !r.carriedOver)) {
+    lines.push(
+      "",
+      `> ⚠️ ${row.name} via ${linkText(row.cells.source)} — ${row.unstable}.`
     );
   }
 

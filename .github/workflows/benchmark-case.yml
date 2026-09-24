@@ -21,10 +21,15 @@ on:
         description: 'Throughput window in seconds'
         required: true
         type: string
+      round:
+        description: 'Which sample this is — r1, r2, … or recheck. Part of the artifact name, so the rounds of one run do not overwrite each other.'
+        required: false
+        default: 'r1'
+        type: string
 
 jobs:
   benchmark:
-    name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
+    name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }} (${{ inputs.round }})"
     runs-on: ubuntu-latest
     # One job is one indexer on one scenario, and they all run concurrently, so
     # this bounds a single benchmark rather than the suite: phase A's five-minute
@@ -204,6 +209,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-${{ inputs.case }}--${{ matrix.indexer }}
+          # build-tables.ts reads the indexer and the round back out of this
+          # name (cases/lib/aggregate.ts), so its shape is load-bearing.
+          name: benchmark-${{ inputs.case }}--${{ matrix.indexer }}--${{ inputs.round }}
           path: /tmp/benchmark-output.txt
           if-no-files-found: ignore

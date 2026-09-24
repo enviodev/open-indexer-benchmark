@@ -2,11 +2,12 @@ name: Checks
 
 # The harness's own tests, for the parts that need no credentials and no real
 # indexer: the pull request scope filter, the result tables and their parser,
+# the median and gate that turn a run's rounds into published rows,
 # the mock chain the reliability scenarios serve, the reliability catalog and
 # scoring, and the reliability harness itself - which is driven against an
 # indexer with deliberate defects and has to catch each one.
 #
-# The first four run in a second or two. The last needs a PostgreSQL, which is
+# The first five run in a second or two. The last needs a PostgreSQL, which is
 # why this job has one, and takes a few minutes; its slower scenarios are left
 # out unless it is run with --full.
 #
@@ -46,6 +47,9 @@ jobs:
           node-version: 24
       - run: node scripts/test-scope.ts
       - run: node scripts/test-tables.ts
+      # How a run's rounds become one published row, and when the gate holds
+      # one back - which otherwise only ever executes on a push to main.
+      - run: node scripts/test-aggregate.ts
       - run: node scripts/test-chain-mock.ts
       # Also fails when reliability/README.md has fallen behind the
       # catalog, so a score can never link to an explanation of a check that
