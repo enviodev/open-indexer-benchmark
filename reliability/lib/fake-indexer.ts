@@ -74,8 +74,7 @@
 //                       around one event and configured for two really does -
 //                       silently, with nothing in any log
 //   no-token-table      writes no token row at all, standing in for a project
-//                       that cannot read contract state - a no-code rindexer
-//                       project is exactly this, and the checks that read a
+//                       that cannot read contract state - the checks that read a
 //                       token row have to come back unmeasured rather than
 //                       failed, and rather than breaking every other read
 //

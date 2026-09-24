@@ -1,6 +1,6 @@
 name: reliability
-description: The reliability case as a no-code rindexer project, over a generated chain
-project_type: no-code
+description: The reliability case as a rust rindexer project, over a generated chain
+project_type: rust
 timestamps: true
 
 networks:
@@ -9,11 +9,12 @@ networks:
     # chain id as a configuration error rather than as a chain.
     chain_id: 1
     rpc: ${ETHEREUM_RPC}
-    # Always false here. The reliability scenarios are only served over RPC,
-    # because the benchmark cannot make HyperSync reorg or fail on demand; the
-    # driver substitutes the value, which is how one file backs both rows in
-    # the throughput suite.
-    hypersync: ${RINDEXER_HYPERSYNC}
+    # The reliability scenarios are only served over RPC, because the
+    # benchmark cannot make HyperSync reorg or fail on demand. Written out
+    # rather than substituted from RINDEXER_HYPERSYNC as the throughput
+    # projects do: a rust project's data source is baked into its typings at
+    # codegen, which reads this file without substituting anything.
+    hypersync: false
 
 storage:
   postgres:
@@ -36,36 +37,14 @@ contracts:
     abi: ./abis/ERC20.abi.json
     include_events:
       - Transfer
-      # The second event. A no-code project gets a table per included event,
-      # so this is the whole implementation - and a tool that is configured
-      # for two events and stores one is exactly what this is here to catch.
+      # The second event. Its handler stores it in the table rindexer derives
+      # from the ABI - and a tool that is configured for two events and stores
+      # one is exactly what this is here to catch.
       - MetadataUpdated
-    tables:
-      # The running balance. The only thing here that can come out wrong
-      # without a row being missing, which is what makes a replayed batch or an
-      # unrolled-back reorg visible at all.
-      - name: accounts
-        columns:
-          - name: address
-          - name: balance
-            default: "0"
-        events:
-          - event: Transfer
-            operations:
-              - type: upsert
-                where:
-                  address: $to
-                set:
-                  - column: balance
-                    action: add
-                    value: $value
-              - type: upsert
-                where:
-                  address: $from
-                set:
-                  - column: balance
-                    action: subtract
-                    value: $value
+    # The running balance and the token row are written by the Transfer
+    # handler in src/rindexer_lib/indexers/reliability/erc_20.rs, not declared
+    # here: a rust project's handlers are registered without the `tables:`
+    # section, so a table declared in this file would never be written.
 
 global:
   health_port: 8082

@@ -424,8 +424,8 @@ const EXPECTATIONS: Expectation[] = [
 
   // ── A project that cannot implement an entity loses only its checks ──
   //
-  // No-code rindexer has no facility for reading contract state, so its
-  // project has no token row and never will. The two checks that read one have
+  // A framework with no facility for reading contract state gives its project
+  // no token row, and never will. The two checks that read one have
   // to come back unmeasured - and, more importantly, the other three have to
   // still be asked: a resolver that gave up on the whole schema over one
   // missing table would turn a project with a documented limit into an indexer

@@ -140,8 +140,8 @@ export function observer(sql: SqlRunner) {
    * The table backing one entity, or null when the tool has not written it.
    *
    * Resolved one entity at a time rather than all three together, because not
-   * every project has all three. No-code rindexer has no facility for reading
-   * contract state, so its schema has no token row and never will; a resolver
+   * every project has to have all three. A project written for a framework
+   * that cannot read contract state would have no token row, and a resolver
    * that failed the lot on one missing entity would turn that into an indexer
    * whose tables cannot be read at all, rather than two checks it cannot be
    * asked.

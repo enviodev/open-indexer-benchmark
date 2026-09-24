@@ -166,6 +166,36 @@ jobs:
         with:
           version: 10
 
+      # Rindexer's project is a rust crate that pulls in alloy and the rindexer
+      # crate, which is many minutes of compilation from cold. The driver
+      # builds it while preparing every scenario, under a deadline meant for
+      # installing a tool rather than compiling one, so it is built here once,
+      # from a cache, and each of those builds finds nothing left to do.
+      - name: Cache cargo build
+        if: matrix.tool == 'rindexer'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            reliability/rindexer/target
+          key: cargo-reliability-${{ hashFiles('reliability/rindexer/Cargo.lock') }}
+          restore-keys: cargo-reliability-
+
+      - name: Build the rindexer project
+        if: matrix.tool == 'rindexer'
+        env:
+          SELECTED: ${{ inputs.tools }}
+        run: |
+          # The same narrowing the run step does: a dispatch that did not name
+          # rindexer has no use for its binary.
+          if [ -n "$SELECTED" ] && ! echo " $SELECTED " | grep -q " rindexer "; then
+            exit 0
+          fi
+          rustup update stable
+          rustup default stable
+          cargo build --release --manifest-path reliability/rindexer/Cargo.toml
+
       - name: Run the reliability suite
         env:
           TOOL: ${{ matrix.tool }}
