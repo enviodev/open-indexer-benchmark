@@ -45,7 +45,7 @@ const { sleep } = await import("../cases/lib/process.ts");
  * defect. Passed explicitly rather than set in the environment: a published
  * run reads neither of these.
  */
-const PATIENCE = { syncMs: 30_000, reactMs: 15_000 };
+const PATIENCE = { syncMs: 30_000, reactMs: 15_000, stallMs: 15_000, settleMs: 8_000 };
 type Outcome = import("../reliability/lib/score.ts").Outcome;
 type Defect = import("../reliability/lib/fake-indexer.ts").Defect;
 

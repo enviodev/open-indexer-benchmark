@@ -122,11 +122,35 @@ export function signalGroup(
  * caller that wants them atomic should say BEGIN and COMMIT rather than rely
  * on which flag the helper happens to use.
  */
-export function psql(connStr: string, query: string): Promise<string> {
+export function psql(
+  connStr: string,
+  query: string,
+  { timeoutMs }: { timeoutMs?: number } = {}
+): Promise<string> {
   return new Promise((res, rej) => {
     const p = spawn("psql", [connStr, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-f", "-"], {
       stdio: ["pipe", "pipe", "pipe"],
+      // libpq waits for ever by default, on a connection and on a statement.
+      // A database that is frozen, or a table another session holds an
+      // exclusive lock on, then hangs whoever asked - so a caller that polls
+      // can bound each question, and gets an error back rather than no answer.
+      env: timeoutMs
+        ? {
+            ...process.env,
+            PGCONNECT_TIMEOUT: String(Math.max(2, Math.ceil(timeoutMs / 3_000))),
+            PGOPTIONS: `${process.env.PGOPTIONS ?? ""} -c statement_timeout=${timeoutMs}`.trim(),
+          }
+        : process.env,
     });
+    // The server-side timeout cannot help while psql is still waiting to get
+    // through, so the process itself is bounded too.
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          p.kill("SIGKILL");
+          rej(new Error(`psql did not answer within ${timeoutMs}ms`));
+        }, timeoutMs + 5_000)
+      : undefined;
+    p.on("close", () => clearTimeout(timer));
     let stdout = "";
     let stderr = "";
     p.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));

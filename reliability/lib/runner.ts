@@ -80,6 +80,27 @@ const POLL_MS = 500;
  */
 const SCENARIO_TIMEOUT_MS = 45 * 60_000;
 
+/**
+ * How long getting a tool ready may take: installing it, pulling its images,
+ * building its project. Several minutes on a cold runner, never twenty.
+ */
+const PREPARE_TIMEOUT_MS = 20 * 60_000;
+
+/**
+ * How long each step of tearing a run down may take. Nothing about stopping a
+ * tool is measured, and a `docker compose down` that hangs must not become
+ * the reason the next run, and every scenario after it, never happens.
+ */
+const TEARDOWN_TIMEOUT_MS = 3 * 60_000;
+
+/**
+ * How long one read of the tool's tables may take. Generous for a table of a
+ * few thousand rows; its purpose is that a frozen database or a lock the tool
+ * never releases makes the read fail, which every wait already treats as "not
+ * yet", rather than hang the scenario inside a poll that never returns.
+ */
+const QUERY_TIMEOUT_MS = 30_000;
+
 export interface RunOptions {
   tools: ReliabilityTool[];
   scenarios: string[];
@@ -189,11 +210,17 @@ export async function runOnce(
     });
     const activeDriver = driver;
     const activeChain = chain;
-    const sql = (query: string) => psql(activeDriver.dbUrl, query);
+    const sql = (query: string) =>
+      psql(activeDriver.dbUrl, query, { timeoutMs: QUERY_TIMEOUT_MS });
     const observe = observer(sql);
 
     log(`  preparing ${tool}...`);
-    await activeDriver.prepare();
+    await withTimeout(
+      activeDriver.prepare(),
+      PREPARE_TIMEOUT_MS,
+      `preparing ${tool} did not finish within ${PREPARE_TIMEOUT_MS / 60_000} minutes`,
+      () => (abandoned = true)
+    );
 
     const ctx: Ctx = {
       tool,
@@ -301,15 +328,24 @@ export async function runOnce(
         : `the run could not be set up: ${message}`
     );
   } finally {
-    try {
-      await driver?.stop();
-    } catch {}
-    try {
-      await driver?.cleanup();
-    } catch {}
-    try {
-      await chain?.close();
-    } catch {}
+    const bounded = async (step: string, work: (() => Promise<void>) | undefined) => {
+      if (!work) return;
+      const pending = work();
+      pending.catch(() => {});
+      try {
+        await withTimeout(
+          pending,
+          TEARDOWN_TIMEOUT_MS,
+          `${step} did not finish within ${TEARDOWN_TIMEOUT_MS / 60_000} minutes`,
+          () => {}
+        );
+      } catch (err) {
+        log(`  ${tool}/${scenario}: ${(err as Error)?.message ?? err}`);
+      }
+    };
+    await bounded("stopping the tool", driver ? () => driver!.stop() : undefined);
+    await bounded("cleaning up after the tool", driver ? () => driver!.cleanup() : undefined);
+    await bounded("closing the chain", chain ? () => chain!.close() : undefined);
   }
 }
 
