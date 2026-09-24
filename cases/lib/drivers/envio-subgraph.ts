@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec, kill, psql, start } from "../process.ts";
+import { exec, kill, psql, start, signalGroup } from "../process.ts";
 import { type DriverFactory } from "./common.ts";
 import { createEnvioSnapshot, ENVIO_DB_URL } from "./envio.ts";
 
@@ -29,6 +29,7 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
   config,
   rpcUrl,
   endBlock,
+  wsUrl,
 }) => {
   const dir = resolve(config.dir, "subgraph");
   const envio = resolve(CLI_DIR, "node_modules", ".bin", "envio");
@@ -40,10 +41,14 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
     // A bare URL leaves HyperSync as the source and keeps RPC for contract
     // calls and the block-timestamp fallback; `for: sync` makes it the source.
     ENVIO_SUBGRAPH_RPC:
-      mode === "rpc" ? JSON.stringify({ url: rpcUrl, for: "sync" }) : rpcUrl,
+      mode === "rpc"
+        ? JSON.stringify({ url: rpcUrl, for: "sync", ...(wsUrl ? { ws: wsUrl } : {}) })
+        : rpcUrl,
   };
   let proc: ChildProcess | null = null;
   let done = false;
+  /** Not launched yet, so the next launch starts from an empty database. */
+  let fresh = true;
 
   return {
     dbUrl: ENVIO_DB_URL,
@@ -75,8 +80,18 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
     async launch() {
       // Run from the subgraph directory: that is the project root, and the
       // mappings' relative paths and its own graph-cli resolve from there.
-      proc = start(envio, ["start", "-r"], dir, env);
-      proc.on("exit", () => (done = true));
+      // `-r` on the first launch only: a relaunch is a restart of the same
+      // run, and resetting the database there would erase what the tool is
+      // supposed to recover.
+      proc = start(envio, ["start", ...(fresh ? ["-r"] : [])], dir, env);
+      fresh = false;
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     snapshot: createEnvioSnapshot(config),
     async stop() {
@@ -86,6 +101,7 @@ export const envioSubgraphDriver = (mode: "hypersync" | "rpc"): DriverFactory =>
     // envio manages its own Postgres container and the next phase drops the
     // schema anyway, so there is nothing to tear down here.
     async cleanup() {},
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

@@ -1,0 +1,9 @@
+manifestVersion: subsquid.io/v0.1
+name: reliability
+version: 1
+description: 'The reliability case as a squid, over a generated chain'
+build:
+deploy:
+  addons:
+    postgres:
+    rpc:

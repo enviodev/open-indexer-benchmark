@@ -2,3 +2,9 @@
 
 # Graph Node binary, shared by every scenario's subgraph run.
 .graph-node/
+
+# What a reliability run leaves behind: its log, and the per-job artifacts
+# scripts/build-reliability-table.ts reads. Results belong in the README
+# table, published by CI, never in a commit.
+reliability-output.txt
+/results/

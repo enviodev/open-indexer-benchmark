@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec, kill, psql, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg, signalGroup } from "../process.ts";
 import {
   BENCHMARK_PORT,
   blocksIndexed,
@@ -155,7 +155,13 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
           GRAPH_STORE_WRITE_BATCH_DURATION: "5",
         }
       );
-      proc.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     async snapshot() {
       // `subgraphs.head` is Graph Node's own record of where each deployment
@@ -186,6 +192,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     // Reaching the manifest's endBlock stops the deployment but leaves the
     // process running, so completion is decided by the runner's progress
     // targets rather than here.
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

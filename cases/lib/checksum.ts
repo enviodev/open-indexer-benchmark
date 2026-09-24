@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 /** Number of md5 hex characters folded into each row hash (60 bits). */
 const HASH_HEX_CHARS = 15;
 
-export type FieldKind = "address" | "base58" | "amount" | "seconds";
+export type FieldKind = "address" | "base58" | "amount" | "seconds" | "text";
 
 export interface FieldSpec {
   /** Stable name used in messages and in the canonical field ordering. */
@@ -98,6 +98,18 @@ export function encodeAmount(value: bigint): string {
 
 export function encodeSeconds(value: number): string {
   return String(value);
+}
+
+/**
+ * A text column, as it is stored. Nothing is normalised: a token symbol that
+ * differs in case or in whitespace between two indexers is two different
+ * answers to the same question, and the point of a canonical encoding is to
+ * stop hiding that. A null encodes as the empty string, the same as it does on
+ * the SQL side, so a missing value and a blank one compare equal - which they
+ * are, as far as a row checksum can tell.
+ */
+export function encodeText(value: string | null): string {
+  return value ?? "";
 }
 
 /** Join already-encoded field values into the canonical row text. */

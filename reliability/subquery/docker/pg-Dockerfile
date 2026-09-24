@@ -1,0 +1,6 @@
+FROM postgres:16-alpine
+ENV POSTGRES_DB='postgres'
+ENV POSTGRES_USER='postgres'
+ENV POSTGRES_PASSWORD='postgres'
+COPY docker/load-extensions.sh /docker-entrypoint-initdb.d/
+RUN sed -i 's/\r$//' /docker-entrypoint-initdb.d/load-extensions.sh && chmod +x /docker-entrypoint-initdb.d/load-extensions.sh

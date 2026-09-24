@@ -1,0 +1,11 @@
+node_modules/
+generated/
+build/
+# Rendered from subgraph.template.yaml by the benchmark driver, which bakes in
+# the block range for the run.
+subgraph.yaml
+bin/
+
+# Written by envio when it runs this project on HyperIndex.
+.envio/
+envio-env.d.ts

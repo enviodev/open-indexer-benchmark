@@ -19,6 +19,40 @@ Contributions are welcome — we already have some from the [SQD](https://sqd.de
 
 ## Scenarios
 
+### Reliability
+
+What does an indexer do when something goes wrong? These scenarios restart its database mid-write, rewrite the chain underneath it, make the node it reads from fail, and hand it values that are legal but awkward, then check what ended up in the database. They also time how long a new block takes to become readable. Every check runs on a generated chain, so no credentials are needed.
+
+<!-- RELIABILITY:START -->
+| tool | [source](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | [crash recovery](./reliability/README.md#crash-recovery) | [reorgs](./reliability/README.md#reorgs) | [rpc faults](./reliability/README.md#rpc-faults) | [data fidelity](./reliability/README.md#data-fidelity) | [head latency](./reliability/README.md#head-latency) | overall |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| [Envio Indexer](https://envio.dev) | RPC | — | — | — | — | — | — |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.10.0-subgraph) | RPC | — | — | — | — | — | — |
+| [Ponder](https://ponder.sh) | RPC | — | — | — | — | — | — |
+| [Rindexer](https://rindexer.xyz) | RPC | — | — | — | — | — | — |
+| [Squid SDK](https://sqd.dev/sdk/) | RPC | — | — | — | — | — | — |
+| [Subgraph](https://thegraph.com) | RPC | — | — | — | — | — | — |
+| [SubQuery](https://subquery.network) | RPC | — | — | — | — | — | — |
+
+<details>
+<summary>What failed, and what it means for you - no results published yet</summary>
+
+- **Envio Indexer** - <i>not measured yet: no run has published a result</i>
+- **Envio Subgraph** - <i>not measured yet: no run has published a result</i>
+- **Ponder** - <i>not measured yet: no run has published a result</i>
+- **Rindexer** - <i>not measured yet: no run has published a result</i>
+- **Squid SDK** - <i>not measured yet: no run has published a result</i>
+- **Subgraph** - <i>not measured yet: no run has published a result</i>
+- **SubQuery** - <i>not measured yet: no run has published a result</i>
+
+</details>
+<!-- RELIABILITY:END -->
+
+Each cell is the checks a tool passed out of the checks it was asked. The number in brackets is a measurement beside the score, not part of it.
+
+[What every check means, and how to run it →](./reliability/README.md)
+
+
 ### State Aggregation
 
 How well does an indexer cope with data it has to read back? Every rETH transfer changes a balance, so for each one the indexer has to find the right row, update it, and save it again. The scenario follows the benchmark on the [Ponder landing page](https://ponder.sh).

@@ -1,0 +1,59 @@
+"""
+One row per Transfer log, carrying what a comparison against the chain needs:
+which block, which log index, and the value moved.
+
+Mutable, although an event is never meaningfully updated. The Graph's own
+advice is to declare event entities immutable, and for the throughput
+scenarios this project's sibling does. Here it would decide a check: one
+scenario serves every log twice in a single response, and saving an immutable
+entity twice is an error in Graph Node where saving a mutable one is a
+harmless overwrite. Whether an indexer writes a duplicated log twice is what
+that check is about, and it should not be answered by a storage annotation.
+
+`logIndex` is a BigInt rather than an Int on purpose. Some providers emit
+synthetic logs with indices near the top of an unsigned 32-bit integer, and one
+of the reliability scenarios serves exactly those; a 32-bit column overflows on
+them.
+"""
+type Transfer @entity(immutable: false) {
+  id: ID!
+  blockNumber: BigInt!
+  logIndex: BigInt!
+  from: String!
+  to: String!
+  amount: BigInt!
+}
+
+"""
+The running balance. The only entity here that can come out wrong without a
+row being missing, which is what makes a replayed batch or an unrolled-back
+reorg visible at all.
+"""
+type Account @entity(immutable: false) {
+  id: ID!
+  balance: BigInt!
+}
+
+"""
+Written from a contract read whose answers are deliberately awkward: a symbol()
+that returns no data, and a name carrying a byte Postgres will not store.
+"""
+type Token @entity(immutable: false) {
+  id: ID!
+  symbol: String
+  name: String
+}
+
+"""
+One row per MetadataUpdated log - the second event the chain emits.
+
+A tool configured for two events that indexes one of them passes every check
+that reads transfers, which is most of them.
+"""
+type MetadataUpdate @entity(immutable: false) {
+  id: ID!
+  blockNumber: BigInt!
+  logIndex: BigInt!
+  symbol: String
+  name: String
+}

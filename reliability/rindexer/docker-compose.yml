@@ -1,0 +1,18 @@
+name: rindexer-reliability
+
+volumes:
+  rindexer_reliability_pgdata:
+    driver: local
+
+services:
+  postgresql:
+    container_name: rindexer-reliability-postgres
+    image: postgres:18
+    shm_size: 1g
+    restart: always
+    volumes:
+      - rindexer_reliability_pgdata:/var/lib/postgresql
+    ports:
+      - 5440:5432
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rindexer}

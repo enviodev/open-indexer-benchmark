@@ -1,7 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { exec, kill, psql, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg, signalGroup } from "../process.ts";
 import {
   BENCHMARK_PORT,
   blocksIndexed,
@@ -13,11 +13,13 @@ const PG_PORT = 19_877;
 const PG_CONTAINER = "ponder-benchmark-pg";
 export const PONDER_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/ponder`;
 
-export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
+export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock, wsUrl }) => {
   const dir = resolve(config.dir, "ponder");
   const env = {
     ...process.env,
     PONDER_RPC_URL_1: rpcUrl,
+    // Read only by projects that configure a WebSocket; empty is "none".
+    PONDER_WS_URL_1: wsUrl ?? "",
     DATABASE_URL: PONDER_DB_URL,
     PONDER_END_BLOCK: String(endBlock),
   };
@@ -63,7 +65,13 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
         dir,
         env
       );
-      proc.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     async snapshot() {
       const [{ events }, checkpoint] = await Promise.all([
@@ -85,6 +93,7 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     async cleanup() {
       await exec("docker", ["rm", "-f", PG_CONTAINER], dir).catch(() => {});
     },
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

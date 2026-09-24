@@ -1,7 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { exec, kill, start, waitPg } from "../process.ts";
+import { exec, kill, start, waitPg, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -24,6 +24,7 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
   config,
   rpcUrl,
   endBlock,
+  wsUrl,
 }) => {
   const dir = resolve(config.dir, "sqd");
   const env: NodeJS.ProcessEnv = {
@@ -42,7 +43,9 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
   // short of the head never reaches the point where the processor would go to
   // RPC for it.
   if (source === "rpc" || config.ethCall) {
-    env.RPC_ENDPOINT = rpcUrl;
+    // Given a ws:// endpoint the processor subscribes to new heads, and sends
+    // every other request over the same socket.
+    env.RPC_ENDPOINT = source === "rpc" && wsUrl ? wsUrl : rpcUrl;
   } else {
     delete env.RPC_ENDPOINT;
   }
@@ -94,7 +97,13 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
         env
       );
       // The processor exits by itself once it reaches its end block.
-      processor.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = processor;
+      current.on("exit", () => {
+        if (processor === current || processor === null) done = true;
+      });
     },
     async snapshot() {
       const { events, block } = await readProgress();
@@ -107,6 +116,7 @@ export const sqdDriver = (source: "network" | "rpc"): DriverFactory => ({
     async cleanup() {
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
     },
+    signal: (signal) => signalGroup(processor, signal),
     exited: () => done,
   };
 };

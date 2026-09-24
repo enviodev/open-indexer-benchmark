@@ -2,7 +2,7 @@ import { type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CaseConfig } from "../case.ts";
-import { exec, kill, psql, start } from "../process.ts";
+import { exec, kill, psql, start, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -67,9 +67,10 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
   config,
   rpcUrl,
   endBlock,
+  wsUrl,
 }) => {
   const dir = resolve(config.dir, "envio");
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     ENVIO_TUI: "false",
     ENVIO_HASURA: "false",
@@ -78,8 +79,17 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
     ENVIO_END_BLOCK: String(endBlock),
   };
+  // A WebSocket for new-block notifications lives in a config of its own:
+  // `ws` has to be absent rather than empty when there is none, and the
+  // config's variable substitution cannot express "absent".
+  if (wsUrl) {
+    env.ENVIO_CONFIG = "config.ws.yaml";
+    env.ENVIO_RPC_WS = wsUrl;
+  }
   let proc: ChildProcess | null = null;
   let done = false;
+  /** Not launched yet, so the next launch starts from an empty database. */
+  let fresh = true;
 
   return {
     dbUrl: ENVIO_DB_URL,
@@ -103,9 +113,20 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
       await exec("pnpm", ["envio", "codegen"], dir, env);
     },
     async launch() {
-      // `-r` resets the database, so each phase starts from a clean state.
-      proc = start("pnpm", ["envio", "start", "-r"], dir, env);
-      proc.on("exit", () => (done = true));
+      // `-r` resets the database, so each phase starts from a clean state -
+      // on the first launch only. A relaunch is a restart of the same run,
+      // and resetting there would hand the reliability suite a tool that
+      // re-indexes from scratch after every crash and so never has anything
+      // to recover.
+      proc = start("pnpm", ["envio", "start", ...(fresh ? ["-r"] : [])], dir, env);
+      fresh = false;
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     snapshot: createEnvioSnapshot(config),
     async stop() {
@@ -117,6 +138,7 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
     // throwaway CI runner nothing and saves a container restart per phase; run
     // `envio stop` in the case directory to reclaim it locally.
     async cleanup() {},
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

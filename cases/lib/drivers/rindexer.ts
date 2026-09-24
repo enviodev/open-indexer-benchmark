@@ -2,7 +2,7 @@ import { execFile, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { exec, kill, psql, start, waitPg } from "../process.ts";
+import { exec, kill, psql, start, waitPg, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
@@ -158,7 +158,13 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
       proc = isRustProject
         ? start(rustBin, ["--indexer"], dir, env)
         : start(bin, ["start", "indexer"], dir, env);
-      proc.on("exit", () => (done = true));
+      // A relaunch starts alive, and only this process's exit counts: one
+      // killed just before it can report its exit after this one started.
+      done = false;
+      const current = proc;
+      current.on("exit", () => {
+        if (proc === current || proc === null) done = true;
+      });
     },
     async snapshot() {
       const { events, block } = await readProgress();
@@ -172,6 +178,7 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
     async cleanup() {
       await exec("docker", ["compose", "down", "-v"], dir, env).catch(() => {});
     },
+    signal: (signal) => signalGroup(proc, signal),
     exited: () => done,
   };
 };

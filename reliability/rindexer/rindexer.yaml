@@ -1,0 +1,71 @@
+name: reliability
+description: The reliability case as a no-code rindexer project, over a generated chain
+project_type: no-code
+timestamps: true
+
+networks:
+  - name: ethereum
+    # The generated chain answers as mainnet: several tools treat an unknown
+    # chain id as a configuration error rather than as a chain.
+    chain_id: 1
+    rpc: ${ETHEREUM_RPC}
+    # Always false here. The reliability scenarios are only served over RPC,
+    # because the benchmark cannot make HyperSync reorg or fail on demand; the
+    # driver substitutes the value, which is how one file backs both rows in
+    # the throughput suite.
+    hypersync: ${RINDEXER_HYPERSYNC}
+
+storage:
+  postgres:
+    enabled: true
+    # Each scenario run starts from an empty database: the harness prepares the
+    # tool before every repeat, and a run that inherited the last one's rows
+    # would compare the wrong thing against the chain.
+    drop_each_run: true
+
+contracts:
+  - name: ERC20
+    details:
+      - network: ethereum
+        address: "0x0000000000000000000000000000000000c0ffee"
+        start_block: "1000000"
+        # No end block. The suite is about what happens at the head, so this
+        # follows it - and rindexer refuses to start at all when the end block
+        # it is given is above the chain's current head, which the generated
+        # chain's is by a million blocks at the moment a run begins.
+    abi: ./abis/ERC20.abi.json
+    include_events:
+      - Transfer
+      # The second event. A no-code project gets a table per included event,
+      # so this is the whole implementation - and a tool that is configured
+      # for two events and stores one is exactly what this is here to catch.
+      - MetadataUpdated
+    tables:
+      # The running balance. The only thing here that can come out wrong
+      # without a row being missing, which is what makes a replayed batch or an
+      # unrolled-back reorg visible at all.
+      - name: accounts
+        columns:
+          - name: address
+          - name: balance
+            default: "0"
+        events:
+          - event: Transfer
+            operations:
+              - type: upsert
+                where:
+                  address: $to
+                set:
+                  - column: balance
+                    action: add
+                    value: $value
+              - type: upsert
+                where:
+                  address: $from
+                set:
+                  - column: balance
+                    action: subtract
+                    value: $value
+
+global:
+  health_port: 8082
