@@ -8,7 +8,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** Commands `exec` has started that have not exited yet. */
+/** Commands `exec` and `psql` have started that have not exited yet. */
 const running = new Set<ChildProcess>();
 
 /** Run a command to completion, inheriting stdio. */
@@ -31,7 +31,8 @@ export function exec(
 }
 
 /**
- * Kill every command `exec` started that is still running, and say how many.
+ * Kill every command `exec` or `psql` started that is still running, and say
+ * how many.
  *
  * For a caller that has stopped waiting on one: a promise cannot be
  * cancelled, but the process behind it can, and otherwise a `docker compose`
@@ -169,7 +170,13 @@ export function psql(
           rej(new Error(`psql did not answer within ${timeoutMs}ms`));
         }, timeoutMs + 5_000)
       : undefined;
-    p.on("close", () => clearTimeout(timer));
+    // Tracked like exec's commands, so a caller that gives up on a driver's
+    // query can kill it along with everything else the driver left running.
+    running.add(p);
+    p.on("close", () => {
+      clearTimeout(timer);
+      running.delete(p);
+    });
     let stdout = "";
     let stderr = "";
     p.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
