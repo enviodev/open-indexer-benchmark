@@ -60,6 +60,16 @@ services:
       # records nothing at all. This is SubQuery's own documented escape hatch
       # for projects that need more than the whitelist.
       - --unsafe
+      # No dictionary. The generated chain answers as chain id 1, and the node
+      # looks every chain id up in SubQuery's public dictionary registry, finds
+      # the mainnet dictionary, and asks it which blocks carry this contract's
+      # events. Mainnet has none at 0x...c0ffee, so the node skipped every
+      # block, reported "Fully synced", and indexed nothing in any scenario -
+      # a whole row of the table unmeasured, five minutes a run. The registry
+      # is consulted even with --network-dictionary=false, so it is replaced
+      # with an empty one instead: a registry naming no dictionary for any
+      # chain.
+      - '--dictionary-registry=data:application/json,{"ethereum":{}}'
     healthcheck:
       test:
         ["CMD", "wget", "--spider", "-q", "http://subquery-node:3000/ready"]

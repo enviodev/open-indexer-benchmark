@@ -58,6 +58,13 @@ export interface Patience {
   syncMs: number;
   /** Showing any sign of life after a shove. */
   reactMs: number;
+  /**
+   * How long a wait goes on once nothing is moving - not the chain, not the
+   * tool's rows, not its position - before it stops early. See untilStill.
+   */
+  stallMs: number;
+  /** The same, for a tool that has reached the head and has nothing left to fetch. */
+  settleMs: number;
 }
 
 /**
@@ -65,8 +72,21 @@ export interface Patience {
  * spends a minute on its own startup before the first block, and came back
  * unmeasured there while finishing comfortably on a laptop. Five is a deadline
  * for a tool that is not coming back, not a budget a working one should feel.
+ *
+ * The stall windows are what keep those deadlines from being the usual cost
+ * of a failure. Ponder is silent for the longest of any tool - about eighty
+ * seconds after launch, retrying an empty symbol() with backoff before it
+ * writes its first row - so a tool that is not at the head gets well over
+ * that. One that is at the head has fetched everything there is: the tools
+ * that undo a reorg do it within ten seconds here, so half a minute of
+ * nothing changing is a tool that has finished, right or wrong.
  */
-export const DEFAULT_PATIENCE: Patience = { syncMs: 300_000, reactMs: 120_000 };
+export const DEFAULT_PATIENCE: Patience = {
+  syncMs: 300_000,
+  reactMs: 120_000,
+  stallMs: 150_000,
+  settleMs: 30_000,
+};
 
 /**
  * How deep the deep reorg goes.
@@ -212,31 +232,154 @@ async function compare(ctx: Ctx, upTo?: number, from?: number): Promise<Comparis
   };
 }
 
+/** How a wait ended: what it waited for held, nothing was moving, or time ran out. */
+type WaitEnd = "held" | "stalled" | "timeout";
+
+/** What the tool and the chain look like right now, for telling whether either moved. */
+interface Still {
+  /** Changes whenever the chain, the tool's rows or its position does. */
+  key: string;
+  /** The tool has written the head block, so it has nothing left to fetch. */
+  atHead: boolean;
+}
+
+/**
+ * Where the tool says it is, which moves where its rows cannot: a tool walking
+ * through blocks that carry no logs writes nothing, and is still working. For
+ * the drivers that read their position from their rows it adds nothing, and
+ * takes nothing away.
+ */
+async function position(ctx: Ctx): Promise<number> {
+  return (await ctx.progress())?.blocks ?? -1;
+}
+
+/** The chain's head and the tool's row count, highest block and position. */
+async function storedState(ctx: Ctx): Promise<Still> {
+  const [count, highest, at] = await Promise.all([
+    ctx.observe.count().catch(() => -1),
+    ctx.observe.highestBlock().catch(() => -1),
+    position(ctx),
+  ]);
+  const head = ctx.chain.head();
+  return { key: `${head}:${count}:${highest}:${at}`, atHead: highest >= head };
+}
+
+/**
+ * A comparison, as a state: everything it found wrong, so a tool rewriting
+ * rows in place is moving even when its row count is not.
+ */
+async function comparisonState(ctx: Ctx, result: Comparison | null): Promise<Still> {
+  const [highest, at] = await Promise.all([
+    ctx.observe.highestBlock().catch(() => -1),
+    position(ctx),
+  ]);
+  const head = ctx.chain.head();
+  const found = result
+    ? [result.missing, result.wrong, result.extra, result.duplicates, result.balances]
+    : "unreadable";
+  return { key: JSON.stringify([head, highest, at, found]), atHead: highest >= head };
+}
+
+/**
+ * Poll until the condition holds, or until nothing is moving any more.
+ *
+ * Every wait here has a deadline for a tool that is not coming back, and a
+ * tool that is wrong and done - one that does not undo reorgs, sitting at the
+ * head with the old rows - used to meet it every time. That was five minutes
+ * of catching up and two of settling for every case such a tool failed, and
+ * the reorg column alone asks seven: a job for one tool ran past two hours
+ * without finishing, spending almost all of it waiting on a database that had
+ * stopped changing in the first minute.
+ *
+ * So a wait also ends once neither the chain nor the tool has changed for the
+ * stall window - the short one when the tool is at the head, since there is
+ * nothing left for it to fetch. That is not a cheaper verdict: it is the one
+ * the deadline would have reached, since a tool whose data is not changing
+ * does not become right, and anything still moving - a backfill, a rollback,
+ * a head the heartbeat keeps advancing - keeps it waiting to the deadline.
+ */
+async function untilStill(
+  ctx: Ctx,
+  label: string,
+  holds: () => Promise<boolean>,
+  timeoutMs: number,
+  state: () => Promise<Still> = () => storedState(ctx)
+): Promise<WaitEnd> {
+  let last: string | null = null;
+  let since = performance.now();
+  let stalled = false;
+  const held = await ctx.waitFor(
+    label,
+    async () => {
+      let ok = false;
+      try {
+        ok = await holds();
+      } catch {
+        // Unreadable is an answer of "not yet", and a state like any other:
+        // a tool that never creates its tables has stopped moving too.
+      }
+      if (ok) return true;
+      const now = performance.now();
+      const { key, atHead } = await state();
+      if (key !== last) {
+        last = key;
+        since = now;
+        return false;
+      }
+      const window = atHead ? ctx.patience.settleMs : ctx.patience.stallMs;
+      if (now - since < window) return false;
+      stalled = true;
+      ctx.log(
+        `  stopped waiting: ${label} - nothing changed for ${Math.round(window / 1_000)}s` +
+          (atHead ? " with the tool at the head" : "")
+      );
+      return true;
+    },
+    timeoutMs
+  );
+  return stalled ? "stalled" : held ? "held" : "timeout";
+}
+
 /**
  * Wait until the tool holds every row the chain holds.
  *
  * The chain keeps producing while it waits, unless the caller is producing its
  * own blocks and needs the head left alone. See startHeartbeat.
  */
-async function synced(
+async function follow(
   ctx: Ctx,
   timeoutMs = ctx.patience.syncMs,
   {
     heartbeat = true,
     judge = () => compare(ctx),
   }: { heartbeat?: boolean | "live"; judge?: () => Promise<Comparison> } = {}
-): Promise<boolean> {
+): Promise<WaitEnd> {
   const beat =
     heartbeat === "live" ? startLiveChain(ctx) : heartbeat ? startHeartbeat(ctx) : null;
+  let latest: Comparison | null = null;
   try {
-    return await ctx.waitFor(
+    return await untilStill(
+      ctx,
       "catching up with the chain",
-      async () => (await judge()).clean,
-      timeoutMs
+      async () => {
+        latest = null;
+        latest = await judge();
+        return latest.clean;
+      },
+      timeoutMs,
+      () => comparisonState(ctx, latest)
     );
   } finally {
     beat?.stop();
   }
+}
+
+async function synced(
+  ctx: Ctx,
+  timeoutMs = ctx.patience.syncMs,
+  options: { heartbeat?: boolean | "live"; judge?: () => Promise<Comparison> } = {}
+): Promise<boolean> {
+  return (await follow(ctx, timeoutMs, options)) === "held";
 }
 
 /**
@@ -262,9 +405,23 @@ async function settled(
 ): Promise<Comparison> {
   let result = await judge();
   const deadline = performance.now() + timeoutMs;
+  // Given up on early, like every other wait, once neither side is moving:
+  // see untilStill.
+  let last = (await comparisonState(ctx, result)).key;
+  let since = performance.now();
   while (!result.clean && performance.now() < deadline) {
     await sleep(RECONCILE_POLL_MS);
     result = await judge();
+    const { key, atHead } = await comparisonState(ctx, result);
+    if (key !== last) {
+      last = key;
+      since = performance.now();
+    } else if (
+      performance.now() - since >=
+      (atHead ? ctx.patience.settleMs : ctx.patience.stallMs)
+    ) {
+      break;
+    }
   }
   return result;
 }
@@ -281,7 +438,7 @@ async function settled(
  * transfers twice. One stall, three findings.
  */
 async function finalState(ctx: Ctx): Promise<{ caughtUp: boolean; result: Comparison }> {
-  const caughtUp = await synced(ctx);
+  const caughtUp = (await follow(ctx)) === "held";
   if (caughtUp) return { caughtUp, result: await settled(ctx) };
   const horizon = await ctx.observe.highestBlock().catch(() => 0);
   const result = await compare(ctx, horizon);
@@ -327,10 +484,13 @@ async function rowsNow(ctx: Ctx): Promise<number> {
 
 /** Wait for the tool to hold at least this many transfers. */
 async function reaches(ctx: Ctx, transfers: number, timeoutMs = ctx.patience.syncMs) {
-  return ctx.waitFor(
-    `indexing ${transfers} transfers`,
-    async () => (await ctx.observe.count().catch(() => 0)) >= transfers,
-    timeoutMs
+  return (
+    (await untilStill(
+      ctx,
+      `indexing ${transfers} transfers`,
+      async () => (await ctx.observe.count().catch(() => 0)) >= transfers,
+      timeoutMs
+    )) === "held"
   );
 }
 
@@ -618,6 +778,12 @@ export async function processKill(ctx: Ctx): Promise<ScenarioResult> {
     if (attempt === 0) torn = await compare(ctx);
 
     const atKill = await ctx.observe.count().catch(() => 0);
+    // A tool fast enough to have finished the whole range before it was
+    // killed has nothing left to write, and "writing again" below could never
+    // come true: rindexer did exactly that, and spent the full wait on every
+    // run proving it. Something to do is added instead, which also lets the
+    // later kills happen rather than giving up after the first.
+    if (atKill >= ctx.chain.rows().length) ctx.chain.advance(20);
     await ctx.manualRestart(`killed by the scenario (${transfers} transfers in)`);
     // Watched until it holds more than it did when it was killed, which is
     // the first moment it has provably written anything. The rows survive the
@@ -760,7 +926,7 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     const windowed = alreadyWrong;
     const judge = windowed ? () => compare(ctx, undefined, from) : () => compare(ctx);
     const startedAt = performance.now();
-    await synced(ctx, ctx.patience.syncMs, { judge });
+    const caught = await follow(ctx, ctx.patience.syncMs, { judge });
 
     // Agreeing about position is not agreeing about rows. A tool can report
     // the head while the rewrites it is making underneath are still being
@@ -770,8 +936,11 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     //
     // So the comparison is given the same patience the rest of the scenario
     // has, and the first clean reading wins. A tool that never agrees still
-    // fails, which is the thing being asked.
-    const result = await settled(ctx, ctx.patience.reactMs, judge);
+    // fails, which is the thing being asked. One that the wait above already
+    // watched sit still is read once: it has had its chance to agree, and
+    // settling would only watch it sit still again.
+    const result =
+      caught === "stalled" ? await judge() : await settled(ctx, ctx.patience.reactMs, judge);
 
     // Timed to when the data agreed, not to when the position did, because
     // that is what "recovered from the reorg" means.
@@ -1480,14 +1649,16 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
     return { checks, measures: {} };
   }
 
-  const indexed = await ctx.waitFor(
-    "indexing the blocks with log indices near the 32-bit ceiling",
-    async () =>
-      (await ctx.observe.rows().catch(() => [])).some(
-        (row) => row.block === hugeIndex.block && row.logIndex === hugeIndex.logIndex
-      ),
-    ctx.patience.syncMs
-  );
+  const indexed =
+    (await untilStill(
+      ctx,
+      "indexing the blocks with log indices near the 32-bit ceiling",
+      async () =>
+        (await ctx.observe.rows().catch(() => [])).some(
+          (row) => row.block === hugeIndex.block && row.logIndex === hugeIndex.logIndex
+        ),
+      ctx.patience.syncMs
+    )) === "held";
   checks["huge-log-index"] = verdict(
     indexed,
     ctx.alive()

@@ -28,7 +28,7 @@ import {
   type Driver,
   type DriverFactory,
 } from "../../cases/lib/drivers/index.ts";
-import { psql, sleep } from "../../cases/lib/process.ts";
+import { cancellable, psql, sleep, type Cancellable } from "../../cases/lib/process.ts";
 import {
   SELECTORS,
   encodeString,
@@ -79,6 +79,27 @@ const POLL_MS = 500;
  * answered. A backstop that a working tool can hit is measuring the backstop.
  */
 const SCENARIO_TIMEOUT_MS = 45 * 60_000;
+
+/**
+ * How long getting a tool ready may take: installing it, pulling its images,
+ * building its project. Several minutes on a cold runner, never twenty.
+ */
+const PREPARE_TIMEOUT_MS = 20 * 60_000;
+
+/**
+ * How long each step of tearing a run down may take. Nothing about stopping a
+ * tool is measured, and a `docker compose down` that hangs must not become
+ * the reason the next run, and every scenario after it, never happens.
+ */
+const TEARDOWN_TIMEOUT_MS = 3 * 60_000;
+
+/**
+ * How long one read of the tool's tables may take. Generous for a table of a
+ * few thousand rows; its purpose is that a frozen database or a lock the tool
+ * never releases makes the read fail, which every wait already treats as "not
+ * yet", rather than hang the scenario inside a poll that never returns.
+ */
+const QUERY_TIMEOUT_MS = 30_000;
 
 export interface RunOptions {
   tools: ReliabilityTool[];
@@ -163,6 +184,8 @@ export async function runOnce(
 
   let chain: ChainMock | null = null;
   let driver: Driver | null = null;
+  /** Set once the tool is being prepared, so teardown can wait for it or abandon it. */
+  let preparation: Cancellable<void> | null = null;
   let restarts = 0;
   let launched = false;
   /**
@@ -189,11 +212,22 @@ export async function runOnce(
     });
     const activeDriver = driver;
     const activeChain = chain;
-    const sql = (query: string) => psql(activeDriver.dbUrl, query);
+    const sql = (query: string) =>
+      psql(activeDriver.dbUrl, query, { timeoutMs: QUERY_TIMEOUT_MS });
     const observe = observer(sql);
 
     log(`  preparing ${tool}...`);
-    await activeDriver.prepare();
+    const preparing = cancellable(() => activeDriver.prepare());
+    preparation = preparing;
+    await withTimeout(
+      preparing.promise,
+      PREPARE_TIMEOUT_MS,
+      `preparing ${tool} did not finish within ${PREPARE_TIMEOUT_MS / 60_000} minutes`,
+      () => {
+        abandoned = true;
+        preparing.cancel();
+      }
+    );
 
     const ctx: Ctx = {
       tool,
@@ -301,15 +335,35 @@ export async function runOnce(
         : `the run could not be set up: ${message}`
     );
   } finally {
-    try {
-      await driver?.stop();
-    } catch {}
-    try {
-      await driver?.cleanup();
-    } catch {}
-    try {
-      await chain?.close();
-    } catch {}
+    // Each step is cancellable work: one that runs past its bound has what
+    // it is running killed, and anything it tries to start after that
+    // refused, so it cannot carry on underneath the next step or the next run.
+    const bounded = async (step: string, job: Cancellable<unknown> | null) => {
+      if (!job) return;
+      // A step that fails is ignored, as it always was; only one that hangs
+      // is worth a line in the log.
+      const pending = job.promise.catch(() => {});
+      try {
+        await withTimeout(
+          pending,
+          TEARDOWN_TIMEOUT_MS,
+          `${step} did not finish within ${TEARDOWN_TIMEOUT_MS / 60_000} minutes`,
+          () => {}
+        );
+      } catch (err) {
+        const killed = job.cancel();
+        log(
+          `  ${tool}/${scenario}: ${(err as Error)?.message ?? err}` +
+            (killed > 0 ? `; killed ${killed} command(s) it left running` : "")
+        );
+      }
+    };
+    // A preparation that ran out of time was cancelled when it did, so this
+    // is only the wait for it to notice.
+    await bounded("finishing preparation", preparation);
+    await bounded("stopping the tool", driver ? cancellable(() => driver!.stop()) : null);
+    await bounded("cleaning up after the tool", driver ? cancellable(() => driver!.cleanup()) : null);
+    await bounded("closing the chain", chain ? cancellable(() => chain!.close()) : null);
   }
 }
 

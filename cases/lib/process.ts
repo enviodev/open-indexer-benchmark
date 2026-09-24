@@ -4,9 +4,68 @@
 // without importing every driver, and so a driver file is only ever about the
 // indexer it drives.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { spawn, type ChildProcess } from "node:child_process";
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// ── Work that can be abandoned ─────────────────────────────────────────
+
+/** The processes one piece of cancellable work has started, and whether it was cancelled. */
+interface Scope {
+  cancelled: boolean;
+  processes: Set<ChildProcess>;
+}
+
+const scopes = new AsyncLocalStorage<Scope>();
+
+/** Work started by `cancellable`, and the means to abandon it. */
+export interface Cancellable<T> {
+  promise: Promise<T>;
+  /** Kill what it is running, refuse what it starts next, and say how many were killed. */
+  cancel(): number;
+}
+
+/**
+ * Run work that a caller may stop waiting for.
+ *
+ * A promise cannot be cancelled, and killing the process it is waiting on is
+ * not enough either: a driver that catches the failure goes on to its next
+ * step, starting new commands after the caller has moved on - a `docker
+ * compose` nobody is waiting for, underneath whatever runs next. So every
+ * command `exec`, `psql` or `start` launches inside the work belongs to it,
+ * and once it is cancelled those are killed and any it tries to launch after
+ * that are refused. Commands outside it, such as the teardown that follows,
+ * are not affected.
+ */
+export function cancellable<T>(work: () => Promise<T>): Cancellable<T> {
+  const scope: Scope = { cancelled: false, processes: new Set() };
+  return {
+    promise: scopes.run(scope, async () => work()),
+    cancel() {
+      scope.cancelled = true;
+      const count = scope.processes.size;
+      for (const p of scope.processes) p.kill("SIGKILL");
+      scope.processes.clear();
+      return count;
+    },
+  };
+}
+
+/** Why a command may not start: the work it belongs to was cancelled. */
+function refusal(cmd: string): Error | null {
+  return scopes.getStore()?.cancelled
+    ? new Error(`"${cmd}" was not started: the work it belongs to was abandoned`)
+    : null;
+}
+
+/** Count a process against the cancellable work that started it, if any. */
+function adopt(p: ChildProcess) {
+  const scope = scopes.getStore();
+  if (!scope) return;
+  scope.processes.add(p);
+  p.on("close", () => scope.processes.delete(p));
+}
 
 /** Run a command to completion, inheriting stdio. */
 export function exec(
@@ -16,11 +75,14 @@ export function exec(
   env?: NodeJS.ProcessEnv
 ): Promise<void> {
   return new Promise((res, rej) => {
+    const refused = refusal(cmd);
+    if (refused) return rej(refused);
     const p = spawn(cmd, args, { cwd, stdio: "inherit", env });
-    p.on("exit", (code) =>
+    adopt(p);
+    p.on("exit", (code, signal) =>
       code === 0
         ? res()
-        : rej(new Error(`"${cmd} ${args.join(" ")}" exited with code ${code}`))
+        : rej(new Error(`"${cmd} ${args.join(" ")}" exited with code ${code ?? signal}`))
     );
   });
 }
@@ -32,7 +94,10 @@ export function start(
   cwd: string,
   env?: NodeJS.ProcessEnv
 ): ChildProcess {
+  const refused = refusal(cmd);
+  if (refused) throw refused;
   const p = spawn(cmd, args, { cwd, stdio: "pipe", detached: true, env });
+  adopt(p);
   // A binary that is not there raises an `error` event and no `exit`, and an
   // unhandled `error` takes the whole harness down with it - one tool whose
   // CLI failed to install would end the run for every other. Reporting it as
@@ -122,11 +187,38 @@ export function signalGroup(
  * caller that wants them atomic should say BEGIN and COMMIT rather than rely
  * on which flag the helper happens to use.
  */
-export function psql(connStr: string, query: string): Promise<string> {
+export function psql(
+  connStr: string,
+  query: string,
+  { timeoutMs }: { timeoutMs?: number } = {}
+): Promise<string> {
   return new Promise((res, rej) => {
+    const refused = refusal("psql");
+    if (refused) return rej(refused);
     const p = spawn("psql", [connStr, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-f", "-"], {
       stdio: ["pipe", "pipe", "pipe"],
+      // libpq waits for ever by default, on a connection and on a statement.
+      // A database that is frozen, or a table another session holds an
+      // exclusive lock on, then hangs whoever asked - so a caller that polls
+      // can bound each question, and gets an error back rather than no answer.
+      env: timeoutMs
+        ? {
+            ...process.env,
+            PGCONNECT_TIMEOUT: String(Math.max(2, Math.ceil(timeoutMs / 3_000))),
+            PGOPTIONS: `${process.env.PGOPTIONS ?? ""} -c statement_timeout=${timeoutMs}`.trim(),
+          }
+        : process.env,
     });
+    adopt(p);
+    // The server-side timeout cannot help while psql is still waiting to get
+    // through, so the process itself is bounded too.
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          p.kill("SIGKILL");
+          rej(new Error(`psql did not answer within ${timeoutMs}ms`));
+        }, timeoutMs + 5_000)
+      : undefined;
+    p.on("close", () => clearTimeout(timer));
     let stdout = "";
     let stderr = "";
     p.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
@@ -150,7 +242,10 @@ export async function waitPg(connStr: string, query: string, timeoutMs = 30_000)
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      await psql(connStr, query);
+      // Each attempt is bounded by what is left of the deadline, so a
+      // database that accepts the connection and never answers cannot hold
+      // this past it.
+      await psql(connStr, query, { timeoutMs: Math.max(1_000, deadline - Date.now()) });
       return;
     } catch {
       await sleep(1_000);
