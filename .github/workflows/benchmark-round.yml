@@ -1,0 +1,119 @@
+name: Benchmark round
+
+# One pass over every scenario, called once per round by benchmarks.yml. A main
+# run takes three rounds, one after another, so each tool is sampled three
+# times about half an hour apart: the rows that swing are the ones reading a
+# remote endpoint, and samples that far apart do not share its slow minutes.
+# The summary publishes the median of them.
+#
+# It lives in its own file so the caller can chain whole rounds with `needs`
+# the same way this file chains scenarios.
+
+on:
+  workflow_call:
+    inputs:
+      round:
+        description: 'Round number; keeps each round''s artifacts apart'
+        required: true
+        type: string
+      duration:
+        description: 'Throughput window in seconds'
+        required: true
+        type: string
+      case1:
+        type: string
+        default: ''
+      case2:
+        type: string
+        default: ''
+      case3:
+        type: string
+        default: ''
+      case4:
+        type: string
+        default: ''
+      case5:
+        type: string
+        default: ''
+      indexers1:
+        type: string
+        default: '[]'
+      indexers2:
+        type: string
+        default: '[]'
+      indexers3:
+        type: string
+        default: '[]'
+      indexers4:
+        type: string
+        default: '[]'
+      indexers5:
+        type: string
+        default: '[]'
+
+jobs:
+  # One scenario at a time: every indexer of scenario 1 runs in parallel, and
+  # scenario 2 only starts once they have all finished. Keeping the scenarios
+  # apart halves how many indexers hit the shared data endpoints at once, so a
+  # scenario's numbers are not shaped by what the other scenario was doing.
+  scenario-1:
+    name: ${{ inputs.case1 }}
+    if: inputs.case1 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ inputs.case1 }}
+      indexers: ${{ inputs.indexers1 }}
+      duration: ${{ inputs.duration }}
+      round: r${{ inputs.round }}
+    secrets: inherit
+
+  scenario-2:
+    name: ${{ inputs.case2 }}
+    needs: [scenario-1]
+    # `always()` so a failing indexer in scenario 1 — which is a result in its
+    # own right, not a reason to skip the rest of the run — still lets scenario
+    # 2 start once scenario 1 is done.
+    if: always() && inputs.case2 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ inputs.case2 }}
+      indexers: ${{ inputs.indexers2 }}
+      duration: ${{ inputs.duration }}
+      round: r${{ inputs.round }}
+    secrets: inherit
+
+  scenario-3:
+    name: ${{ inputs.case3 }}
+    needs: [scenario-1, scenario-2]
+    if: always() && inputs.case3 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ inputs.case3 }}
+      indexers: ${{ inputs.indexers3 }}
+      duration: ${{ inputs.duration }}
+      round: r${{ inputs.round }}
+    secrets: inherit
+
+  scenario-4:
+    name: ${{ inputs.case4 }}
+    needs: [scenario-1, scenario-2, scenario-3]
+    if: always() && inputs.case4 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ inputs.case4 }}
+      indexers: ${{ inputs.indexers4 }}
+      duration: ${{ inputs.duration }}
+      round: r${{ inputs.round }}
+    secrets: inherit
+
+  scenario-5:
+    name: ${{ inputs.case5 }}
+    needs: [scenario-1, scenario-2, scenario-3, scenario-4]
+    if: always() && inputs.case5 != ''
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ inputs.case5 }}
+      indexers: ${{ inputs.indexers5 }}
+      duration: ${{ inputs.duration }}
+      round: r${{ inputs.round }}
+    secrets: inherit

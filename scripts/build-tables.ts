@@ -5,12 +5,32 @@
 // Reads the BENCHMARK_RESULT lines emitted by each benchmark job, renders them
 // with the same module the local runner uses, and writes one Markdown table per
 // case for the PR comment and the README update to pick up.
+//
+// A run can measure each tool more than once — one artifact per round, named
+// `benchmark-<case>--<indexer>--r<N>`, plus `--recheck` for a row the gate
+// sent back — and the row published is the median of those samples (see
+// cases/lib/aggregate.ts). GATE decides what happens to a row that moved a
+// long way from its published value:
+//
+//   off      publish the median regardless (pull requests, manual runs)
+//   recheck  list the rows to measure again in benchmark-recheck.json
+//   final    the recheck has run; publish, and note a row still disagreeing
+//
+// TOUCHED_INDEXERS, a {case: [indexer]} map, names the rows whose code the
+// push changed; those are expected to move and are never held back.
 
 import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildTable, parsePublishedTable, rowKey, type TableRow } from "../cases/lib/table.ts";
+import {
+  buildTable,
+  formatRate,
+  parsePublishedTable,
+  rowKey,
+  type TableRow,
+} from "../cases/lib/table.ts";
 import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
+import { judge, parseArtifactIndexer, pickMedian } from "../cases/lib/aggregate.ts";
 import { TOOLS } from "../cases/lib/drivers/index.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -31,6 +51,23 @@ if (cases.length === 0) {
 const selected: Record<string, string[]> | null = process.env.SELECTED_INDEXERS
   ? JSON.parse(process.env.SELECTED_INDEXERS)
   : null;
+
+const gate = process.env.GATE ?? "off";
+if (!["off", "recheck", "final"].includes(gate)) {
+  console.error(`Error: GATE must be off, recheck or final, not "${gate}".`);
+  process.exit(1);
+}
+const touched: Record<string, string[]> = process.env.TOUCHED_INDEXERS
+  ? JSON.parse(process.env.TOUCHED_INDEXERS)
+  : {};
+/**
+ * The recheck pass only decides what to measure again; the publish pass that
+ * follows it repeats every warning, so this one keeps quiet rather than
+ * annotating the run twice.
+ */
+const annotate = gate !== "recheck";
+/** Rows to measure again, by case — written out in recheck mode. */
+const recheck: Record<string, string[]> = {};
 
 /**
  * Scenario names live in each case's config so the README, the job summary and
@@ -67,7 +104,8 @@ async function caseTitle(name: string): Promise<string> {
     .join(" ");
 }
 
-const readmePath = resolve(ROOT, "README.md");
+// Overridable so scripts/test-aggregate.ts can gate against a README of its own.
+const readmePath = process.env.README_PATH ?? resolve(ROOT, "README.md");
 const readme = existsSync(readmePath) ? readFileSync(readmePath, "utf8") : "";
 
 const artifactDirs = existsSync(RESULTS_DIR) ? readdirSync(RESULTS_DIR).sort() : [];
@@ -76,11 +114,15 @@ for (const benchCase of cases) {
   const title = await caseTitle(benchCase);
   const prefix = `benchmark-${benchCase}--`;
   const rows: TableRow[] = [];
+  const published = new Map(
+    parsePublishedTable(readme, benchCase).map((row) => [rowKey(row), row] as const)
+  );
 
   // Which indexers reported this run, by id. The artifact directory is named
   // after the job that wrote it, so this is the one place a row can be tied
   // back to the indexer the workflow selected.
   const reported = new Set<string>();
+  const samples = new Map<string, BenchmarkResult[]>();
 
   for (const dir of artifactDirs) {
     if (!dir.startsWith(prefix)) continue;
@@ -98,10 +140,50 @@ for (const benchCase of cases) {
       const result: BenchmarkResult = JSON.parse(
         lines[lines.length - 1].slice("BENCHMARK_RESULT ".length)
       );
-      rows.push(toTableRow(result));
-      reported.add(dir.slice(prefix.length));
+      const { indexer } = parseArtifactIndexer(dir.slice(prefix.length));
+      samples.set(indexer, [...(samples.get(indexer) ?? []), result]);
+      reported.add(indexer);
     } catch (err) {
       console.error(`Could not parse a result from ${file}: ${err}`);
+    }
+  }
+
+  const spread: string[] = [];
+  for (const [indexer, results] of samples) {
+    const row = toTableRow(pickMedian(results));
+    const rates = results.map((r) => r.eventsPerSec);
+    const prior = published.get(rowKey(row));
+    const verdict = judge({
+      samples: rates,
+      published: prior && !prior.unsupported ? prior.eventsPerSec : null,
+      touched: (touched[benchCase] ?? []).includes(indexer),
+      final: gate !== "recheck",
+    });
+    const label = `${row.name} via ${results[0].source}`;
+
+    if (gate !== "off" && verdict.kind === "shift") {
+      console.log(
+        `::notice::${title}: ${label} moved from ${formatRate(verdict.from)} to ` +
+          `${formatRate(verdict.to)} events/s, and all ${rates.length} runs agree — publishing.`
+      );
+    } else if (gate !== "off" && verdict.kind === "recheck") {
+      console.log(
+        `${title}: ${label} moved from ${formatRate(verdict.from)} to ` +
+          `${formatRate(verdict.to)} events/s and its runs disagree — measuring it again.`
+      );
+      (recheck[benchCase] ??= []).push(indexer);
+    } else if (gate !== "off" && verdict.kind === "unstable") {
+      console.log(`::warning::${title}: ${label} — ${verdict.note}.`);
+      row.unstable = verdict.note;
+    }
+    rows.push(row);
+
+    if (rates.length > 1) {
+      const sorted = [...rates].sort((a, b) => a - b);
+      spread.push(
+        `| ${label} | ${rates.length} | ${formatRate(sorted[0])} | ` +
+          `${formatRate(row.eventsPerSec)} | ${formatRate(sorted[sorted.length - 1])} |`
+      );
     }
   }
 
@@ -111,7 +193,7 @@ for (const benchCase of cases) {
   const fresh = new Set(rows.map(rowKey));
   const localOnly = await localOnlyRowKeys(benchCase);
   const carried: string[] = [];
-  for (const prior of parsePublishedTable(readme, benchCase)) {
+  for (const prior of published.values()) {
     if (fresh.has(rowKey(prior))) continue;
     // A local-only row is carried by design — it has no job that could have
     // failed — so it is marked stale in the table rather than warned about.
@@ -130,7 +212,7 @@ for (const benchCase of cases) {
   if (failed !== null && failed.length > 0) {
     writeFileSync(join(OUT_DIR, `benchmark-failed-${benchCase}.txt`), failed.join("\n"));
   }
-  if (carried.length > 0) {
+  if (carried.length > 0 && annotate) {
     const message =
       `${title}: no fresh result for ${carried.join(", ")} this run — ` +
       `carried forward the last published value(s).`;
@@ -140,7 +222,7 @@ for (const benchCase of cases) {
     } else {
       console.log(`${message} Not selected to run by this run's scope.`);
     }
-  } else if (failed !== null && failed.length > 0) {
+  } else if (failed !== null && failed.length > 0 && annotate) {
     // No published row to carry either: the indexer vanishes from the table
     // entirely, which is even easier to miss than a stale row.
     console.log(
@@ -165,11 +247,30 @@ for (const benchCase of cases) {
   // module, so the resolved name is handed over as a file.
   writeFileSync(join(OUT_DIR, `benchmark-title-${benchCase}.txt`), title);
 
-  if (process.env.GITHUB_STEP_SUMMARY) {
+  if (process.env.GITHUB_STEP_SUMMARY && process.env.WRITE_SUMMARY !== "0") {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
       `## ${title}\n\n${table}\n\n`
     );
+    // The spread behind each median, which the table itself does not show.
+    if (spread.length > 0) {
+      appendFileSync(
+        process.env.GITHUB_STEP_SUMMARY,
+        `<details><summary>Samples per row (events/s)</summary>\n\n` +
+          `| row | runs | min | median | max |\n| --- | --- | --- | --- | --- |\n` +
+          `${spread.join("\n")}\n\n</details>\n\n`
+      );
+    }
   }
   console.log(`\n## ${title}\n\n${table}`);
+}
+
+if (gate === "recheck") {
+  writeFileSync(join(OUT_DIR, "benchmark-recheck.json"), JSON.stringify(recheck));
+  const count = Object.values(recheck).flat().length;
+  console.log(
+    count === 0
+      ? "\nNo row needs measuring again."
+      : `\n${count} row(s) to measure again: ${JSON.stringify(recheck)}`
+  );
 }

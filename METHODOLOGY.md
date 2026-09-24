@@ -4,7 +4,7 @@ Each scenario runs twice. Once over a fixed block range, to check the indexer's 
 
 What the result table columns mean:
 
-**events/s, blocks/s** — measured over a 100-second window that stops short of the chain head, so it is backfill speed rather than head tracking. The window runs twice and the better rate is reported. A tool too slow to get through the fixed range in that time reports the rate it managed there instead.
+**events/s, blocks/s** — measured over a 100-second window that stops short of the chain head, so it is backfill speed rather than head tracking. The window runs twice and the better rate is reported. A published run repeats all of that three times, in rounds half an hour apart, and publishes the median of the three: the rows that swing are the ones reading a remote endpoint, and samples that far apart do not share its slow minutes. A row that moved more than 2x from its last published value, whose runs disagree on where it moved to, is measured a fourth time before it is published; if it still disagrees, it is published with a ⚠️ note giving the range, and a push that changed the tool itself is exempt, since it is expected to move. A tool too slow to get through the fixed range in that time reports the rate it managed there instead.
 
 **data** — ✅ every row matches ground truth, ❌ it does not, ❓ only part of the range got indexed, or the check could not run. Ground truth is built by replaying each scenario's documented logic over [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) logs. Anything but ✅ carries a numbered note under the table.
 
