@@ -8,6 +8,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Commands `exec` has started that have not exited yet. */
+const running = new Set<ChildProcess>();
+
 /** Run a command to completion, inheriting stdio. */
 export function exec(
   cmd: string,
@@ -17,12 +20,28 @@ export function exec(
 ): Promise<void> {
   return new Promise((res, rej) => {
     const p = spawn(cmd, args, { cwd, stdio: "inherit", env });
-    p.on("exit", (code) =>
+    running.add(p);
+    p.on("exit", (code, signal) => {
+      running.delete(p);
       code === 0
         ? res()
-        : rej(new Error(`"${cmd} ${args.join(" ")}" exited with code ${code}`))
-    );
+        : rej(new Error(`"${cmd} ${args.join(" ")}" exited with code ${code ?? signal}`));
+    });
   });
+}
+
+/**
+ * Kill every command `exec` started that is still running, and say how many.
+ *
+ * For a caller that has stopped waiting on one: a promise cannot be
+ * cancelled, but the process behind it can, and otherwise a `docker compose`
+ * nobody is waiting for carries on underneath whatever runs next.
+ */
+export function killRunningCommands(): number {
+  const count = running.size;
+  for (const p of running) p.kill("SIGKILL");
+  running.clear();
+  return count;
 }
 
 /** Spawn a long-running process, forwarding output with an indent. */

@@ -28,7 +28,7 @@ import {
   type Driver,
   type DriverFactory,
 } from "../../cases/lib/drivers/index.ts";
-import { psql, sleep } from "../../cases/lib/process.ts";
+import { killRunningCommands, psql, sleep } from "../../cases/lib/process.ts";
 import {
   SELECTORS,
   encodeString,
@@ -344,13 +344,19 @@ export async function runOnce(
           () => {}
         );
       } catch (err) {
-        log(`  ${tool}/${scenario}: ${(err as Error)?.message ?? err}`);
+        // The step is abandoned, and so are the commands it was waiting on:
+        // left running, they would overlap the next step and the next run.
+        const killed = killRunningCommands();
+        log(
+          `  ${tool}/${scenario}: ${(err as Error)?.message ?? err}` +
+            (killed > 0 ? `; killed ${killed} command(s) it left running` : "")
+        );
       }
     };
-    // None of these can be cancelled, only waited on - so a preparation that
-    // ran out of time is given the chance to finish first, and whatever it
-    // started is then stopped with everything else rather than coming up
-    // after the teardown, underneath the next run.
+    // A preparation that ran out of time is given the chance to finish first,
+    // and killed if it still does not, so whatever it started is then stopped
+    // with everything else rather than coming up after the teardown,
+    // underneath the next run.
     const prepared = preparing;
     await bounded("finishing preparation", prepared ? () => prepared : undefined);
     await bounded("stopping the tool", driver ? () => driver!.stop() : undefined);
