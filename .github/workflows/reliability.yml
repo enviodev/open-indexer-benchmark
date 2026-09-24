@@ -224,12 +224,10 @@ jobs:
           path: results
           pattern: reliability-*
 
-      # Always writes /tmp/reliability-table.md; only rewrites README.md when
-      # told to, so a pull request publishes a comment and main publishes the
-      # repository's own claim.
+      # Writes /tmp/reliability-table.md, which the comment is assembled from.
+      # The README is rewritten by its own step below, on the branch as it is
+      # by then.
       - name: Build the reliability table
-        env:
-          UPDATE_README: ${{ github.event_name == 'pull_request' && '0' || '1' }}
         run: node scripts/build-reliability-table.ts | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Comment the results on the pull request
@@ -298,6 +296,8 @@ jobs:
 
       - name: Update README
         if: github.event_name != 'pull_request'
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
           # Same as the comment above: a run that measured nothing must not
           # publish that as the repository's claim. The table builder carries
@@ -308,14 +308,32 @@ jobs:
             echo "No tool reported a result, so the README is left as it is."
             exit 0
           fi
-          # `&& exit 0` would take the step down with it under `set -e` when
-          # there is a diff, which is the case this step exists for.
-          if git diff --quiet README.md; then
-            echo "The table did not change."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "Update reliability results in README"
-          git push
+
+          # Written onto the branch as it is now, not as it was when the run
+          # checked it out. The suite takes the better part of an hour, and the
+          # benchmarks workflow publishes into the same README meanwhile: a
+          # plain push was rejected for that, and a whole run's results never
+          # reached the table. The builder reads the README it writes into, so
+          # a row carried forward is carried from the latest one too. The
+          # results it reads are untracked, so the reset leaves them alone.
+          for ATTEMPT in 1 2 3 4 5; do
+            git fetch --quiet origin "$BRANCH"
+            git reset --quiet --hard "origin/$BRANCH"
+            UPDATE_README=1 node scripts/build-reliability-table.ts > /dev/null
+            # `&& exit 0` would take the step down with it under `set -e` when
+            # there is a diff, which is the case this step exists for.
+            if git diff --quiet README.md; then
+              echo "The table did not change."
+              exit 0
+            fi
+            git add README.md
+            git commit --quiet -m "Update reliability results in README"
+            if git push origin "HEAD:$BRANCH"; then
+              exit 0
+            fi
+            echo "The push was rejected (attempt $ATTEMPT of 5); rebuilding on the latest $BRANCH."
+            sleep $((ATTEMPT * 5))
+          done
+          exit 1

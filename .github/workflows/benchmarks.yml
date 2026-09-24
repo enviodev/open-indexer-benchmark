@@ -364,28 +364,48 @@ jobs:
         if: github.event_name == 'push'
         env:
           CASES: ${{ needs.setup.outputs.cases }}
+          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          CHANGED=0
-          for CASE in $(echo "$CASES" | jq -r '.[]'); do
-            # The README variant, without this run's carried-forward marks.
-            TABLE="/tmp/benchmark-readme-${CASE}.md"
-            [ -f "$TABLE" ] || continue
-
-            # Replace content between this case's markers with the new table
-            awk -v start="<!-- BENCHMARK:${CASE}:START -->" \
-                -v end="<!-- BENCHMARK:${CASE}:END -->" \
-                -v tablefile="$TABLE" '
-              $0 ~ start { print; while ((getline line < tablefile) > 0) print line; skip=1; next }
-              $0 ~ end { skip=0 }
-              !skip { print }
-            ' README.md > README.tmp && mv README.tmp README.md
-            CHANGED=1
-          done
-
-          [ "$CHANGED" = "1" ] || exit 0
-          git diff --quiet README.md && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "Update benchmark results in README"
-          git push
+
+          # Written onto the branch as it is now, not as it was when the run
+          # checked it out: the reliability workflow publishes into the same
+          # README, and a plain push that lost the race dropped a whole run's
+          # results. The tables are rebuilt each time because what they carry
+          # forward is read from the README. The results they read are
+          # untracked, so the reset leaves them alone.
+          for ATTEMPT in 1 2 3 4 5; do
+            git fetch --quiet origin "$BRANCH"
+            git reset --quiet --hard "origin/$BRANCH"
+            node scripts/build-tables.ts > /dev/null
+
+            CHANGED=0
+            for CASE in $(echo "$CASES" | jq -r '.[]'); do
+              # The README variant, without this run's carried-forward marks.
+              TABLE="/tmp/benchmark-readme-${CASE}.md"
+              [ -f "$TABLE" ] || continue
+
+              # Replace content between this case's markers with the new table
+              awk -v start="<!-- BENCHMARK:${CASE}:START -->" \
+                  -v end="<!-- BENCHMARK:${CASE}:END -->" \
+                  -v tablefile="$TABLE" '
+                $0 ~ start { print; while ((getline line < tablefile) > 0) print line; skip=1; next }
+                $0 ~ end { skip=0 }
+                !skip { print }
+              ' README.md > README.tmp && mv README.tmp README.md
+              CHANGED=1
+            done
+
+            [ "$CHANGED" = "1" ] || exit 0
+            git diff --quiet README.md && exit 0
+            git add README.md
+            git commit --quiet -m "Update benchmark results in README"
+            if git push origin "HEAD:$BRANCH"; then
+              exit 0
+            fi
+            echo "The push was rejected (attempt $ATTEMPT of 5); rebuilding on the latest $BRANCH."
+            sleep $((ATTEMPT * 5))
+          done
+          exit 1

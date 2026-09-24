@@ -53,7 +53,7 @@ export async function ensureEnvioDb(log: (message: string) => void): Promise<voi
   log(`Starting Postgres on port ${PORT} for Envio...`);
   // A stopped container from an earlier run would make `docker run` fail on
   // the name alone, which is not a reason to lose the suite.
-  await run("docker", ["rm", "-f", CONTAINER]).catch(() => {});
+  await run("docker", ["rm", "-fv", CONTAINER]).catch(() => {});
   const url = new URL(ENVIO_DB_URL);
   await run("docker", [
     "run",
@@ -81,5 +81,5 @@ export async function ensureEnvioDb(log: (message: string) => void): Promise<voi
  * worker behind for the rest of the run.
  */
 export async function removeEnvioDb(): Promise<void> {
-  await run("docker", ["rm", "-f", CONTAINER]).catch(() => {});
+  await run("docker", ["rm", "-fv", CONTAINER]).catch(() => {});
 }

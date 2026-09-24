@@ -67,6 +67,29 @@ function adopt(p: ChildProcess) {
   p.on("close", () => scope.processes.delete(p));
 }
 
+/**
+ * Every process `start` launched that has not exited, whoever launched it.
+ * They run in process groups of their own, so nothing reaches them when the
+ * harness itself is interrupted unless it goes looking - see `killStarted`.
+ */
+const started = new Set<ChildProcess>();
+
+/**
+ * Kill everything `start` launched and is still running, group and all.
+ * For a harness that is being interrupted and will not get to stop its
+ * indexers the orderly way.
+ */
+export function killStarted(): number {
+  const count = started.size;
+  for (const p of started) {
+    try {
+      process.kill(-p.pid!, "SIGKILL");
+    } catch {}
+  }
+  started.clear();
+  return count;
+}
+
 /** Run a command to completion, inheriting stdio. */
 export function exec(
   cmd: string,
@@ -98,6 +121,8 @@ export function start(
   if (refused) throw refused;
   const p = spawn(cmd, args, { cwd, stdio: "pipe", detached: true, env });
   adopt(p);
+  started.add(p);
+  p.on("close", () => started.delete(p));
   // A binary that is not there raises an `error` event and no `exit`, and an
   // unhandled `error` takes the whole harness down with it - one tool whose
   // CLI failed to install would end the run for every other. Reporting it as

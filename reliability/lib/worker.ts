@@ -18,10 +18,12 @@
 // The result is printed as one `RELIABILITY_RUN <json>` line on stdout; the
 // pool reads it and echoes everything else with the run's name in front.
 
+import { execFile } from "node:child_process";
 import { cpSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { promisify } from "node:util";
 import { DRIVERS } from "../../cases/lib/drivers/index.ts";
-import { cancellable } from "../../cases/lib/process.ts";
+import { cancellable, killStarted } from "../../cases/lib/process.ts";
 import { NO_END_BLOCK, RELIABILITY_CASE, RELIABILITY_DIR, baseChainSpec } from "./case.ts";
 import { CHAIN_PORT, startChainMock } from "./chain-mock.ts";
 import { port, INSTANCE } from "../../cases/lib/drivers/common.ts";
@@ -61,6 +63,31 @@ const config = { ...RELIABILITY_CASE, dir: workdir };
 // Compose names a project after its directory, which every copy shares, and
 // two workers in one compose project would take each other's database down.
 process.env.COMPOSE_PROJECT_NAME = `${projectDir}-${INSTANCE}`;
+
+// Interrupted, the run never reaches its own teardown, so this does the part
+// that would otherwise outlive it: the indexer, which runs in a process group
+// of its own, and whatever the slot has in Docker - every container this
+// worker names carries the slot's name, and compose's under its project.
+const docker = promisify(execFile);
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, async () => {
+    console.log(`${signal}: tearing ${tool} down`);
+    killStarted();
+    await docker("docker", ["compose", "-p", process.env.COMPOSE_PROJECT_NAME!, "down", "-v"], {
+      timeout: 60_000,
+    }).catch(() => {});
+    const { stdout } = await docker(
+      "docker",
+      ["ps", "-aq", "--filter", `name=-${INSTANCE}(-|$)`],
+      { timeout: 30_000 }
+    ).catch(() => ({ stdout: "" }));
+    const ids = stdout.split("\n").filter(Boolean);
+    if (ids.length > 0) {
+      await docker("docker", ["rm", "-fv", ...ids], { timeout: 60_000 }).catch(() => {});
+    }
+    process.exit(130);
+  });
+}
 
 try {
   if (needsEnvioDb(tool)) await ensureEnvioDb(log);

@@ -108,7 +108,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       await exec("pnpm", ["exec", "graph", "build"], dir);
 
       console.log("Starting PostgreSQL for Graph Node...");
-      await exec("docker", ["rm", "-f", PG_CONTAINER], dir).catch(() => {});
+      await exec("docker", ["rm", "-fv", PG_CONTAINER], dir).catch(() => {});
       await exec(
         "docker",
         [
@@ -189,7 +189,7 @@ export const subgraphDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
       proc = null;
     },
     async cleanup() {
-      await exec("docker", ["rm", "-f", PG_CONTAINER], dir).catch(() => {});
+      await exec("docker", ["rm", "-fv", PG_CONTAINER], dir).catch(() => {});
     },
     // Reaching the manifest's endBlock stops the deployment but leaves the
     // process running, so completion is decided by the runner's progress

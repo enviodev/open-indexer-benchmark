@@ -40,7 +40,7 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock, wsUrl })
       await exec("pnpm", ["install", "--frozen-lockfile"], dir);
 
       console.log("Starting PostgreSQL for Ponder...");
-      await exec("docker", ["rm", "-f", PG_CONTAINER], dir).catch(() => {});
+      await exec("docker", ["rm", "-fv", PG_CONTAINER], dir).catch(() => {});
       await exec(
         "docker",
         [
@@ -93,7 +93,7 @@ export const ponderDriver: DriverFactory = ({ config, rpcUrl, endBlock, wsUrl })
       proc = null;
     },
     async cleanup() {
-      await exec("docker", ["rm", "-f", PG_CONTAINER], dir).catch(() => {});
+      await exec("docker", ["rm", "-fv", PG_CONTAINER], dir).catch(() => {});
     },
     signal: (signal) => signalGroup(proc, signal),
     exited: () => done,

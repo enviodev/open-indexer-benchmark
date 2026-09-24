@@ -27,6 +27,7 @@ import { createWriteStream, mkdirSync, type WriteStream } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { sleep } from "../../cases/lib/process.ts";
 import { RELIABILITY_DIR } from "./case.ts";
 import type { ScenarioResult } from "./play.ts";
 import {
@@ -79,6 +80,14 @@ interface Slot {
   name: string;
 }
 
+/**
+ * Every worker still running, by process group. Workers are detached so a hung
+ * one can be killed with everything it started - which also means a Ctrl-C
+ * or a cancelled CI step no longer reaches them on its own, so the pool
+ * passes it on.
+ */
+const live = new Set<number>();
+
 interface WorkerOutcome {
   /** The `RELIABILITY_RUN` payload, when the worker got as far as printing one. */
   result: ScenarioResult | null;
@@ -103,6 +112,7 @@ function runWorker(slot: Slot, label: string, args: string[], logFile: string): 
     detached: true,
   });
 
+  if (child.pid) live.add(child.pid);
   let result: ScenarioResult | null = null;
   const relay = (stream: NodeJS.ReadableStream) =>
     new Promise<void>((done) => {
@@ -123,16 +133,26 @@ function runWorker(slot: Slot, label: string, args: string[], logFile: string): 
     });
   const relayed = Promise.all([relay(child.stdout!), relay(child.stderr!)]);
 
+  // Asked first, so the worker tears its run down (worker.ts); killed a
+  // minute later if even that hangs.
+  let killer: ReturnType<typeof setTimeout> | undefined;
   const timer = setTimeout(() => {
-    console.log(`[${label}] still running after ${WORKER_TIMEOUT_MS / 60_000} minutes; killing it`);
+    console.log(`[${label}] still running after ${WORKER_TIMEOUT_MS / 60_000} minutes; stopping it`);
     try {
-      process.kill(-child.pid!, "SIGKILL");
+      process.kill(child.pid!, "SIGTERM");
     } catch {}
+    killer = setTimeout(() => {
+      try {
+        process.kill(-child.pid!, "SIGKILL");
+      } catch {}
+    }, 60_000);
   }, WORKER_TIMEOUT_MS);
 
   return new Promise((done) => {
     child.on("close", async (code) => {
       clearTimeout(timer);
+      clearTimeout(killer);
+      if (child.pid) live.delete(child.pid);
       await relayed;
       file.end();
       done({ result, code });
@@ -150,6 +170,29 @@ export async function runParallel(
   options: RunOptions & { parallel: number }
 ): Promise<ToolReliability[]> {
   const size = Math.min(options.parallel, MAX_PARALLEL);
+  // Each worker tears its own run down when told to stop (worker.ts), so the
+  // pool passes the signal on, starts nothing more, and waits for them - a
+  // bounded wait, since a teardown that hangs is not coming back.
+  let stopping = false;
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, async () => {
+      stopping = true;
+      console.log(`\n${signal}: stopping ${live.size} worker(s).`);
+      for (const pid of live) {
+        try {
+          process.kill(pid, signal);
+        } catch {}
+      }
+      const deadline = Date.now() + 60_000;
+      while (live.size > 0 && Date.now() < deadline) await sleep(500);
+      for (const pid of live) {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {}
+      }
+      process.exit(130);
+    });
+  }
   if (options.patience) {
     // A test hook for the in-process runner, which workers have no way to
     // be handed - and nothing that runs them needs one.
@@ -222,7 +265,7 @@ export async function runParallel(
 
   const pending = [...jobs];
   while (pending.length > 0 || running.size > 0) {
-    while (free.length > 0) {
+    while (free.length > 0 && !stopping) {
       // A tool nobody has prepared yet is prepared first, on a slot of its own.
       const cold = options.tools.find(
         (tool) =>
@@ -260,6 +303,8 @@ export async function runParallel(
           [job.tool, job.scenario, String(job.attempt)],
           resolve(LOG_DIR, job.tool, `${job.scenario}-${job.attempt}.log`)
         );
+        // A run cut short by the interrupt is no result at all.
+        if (stopping) return;
         console.log(
           `[${label}] finished in ${((performance.now() - began) / 1_000).toFixed(0)}s`
         );
@@ -275,6 +320,9 @@ export async function runParallel(
     }
     if (running.size === 0) break;
     await Promise.race(running);
+    // The signal handler exits once the workers have torn down; returning
+    // first would let the caller exit as though the run had finished.
+    if (stopping) await new Promise(() => {});
   }
 
   console.log(`\nAll runs finished in ${elapsed()}.`);
