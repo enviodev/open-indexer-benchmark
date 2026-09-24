@@ -18,6 +18,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AWAITING_PROJECT,
+  PROJECT_DIRS,
   RELIABILITY_TOOLS,
   unaccountedDrivers,
 } from "../reliability/lib/tools.ts";
@@ -31,6 +32,8 @@ import {
 import {
   measuresOf,
   mergeToolResults,
+  NOT_REACHED,
+  reached,
   scoreTool,
   tallyRank,
   type ScenarioRun,
@@ -49,16 +52,9 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/**
- * Drivers whose project directory is not named after them, the same handful
- * the throughput suite has: both Envio rows share one directory, and the Envio
- * Subgraph row runs the Subgraph tool's project unchanged.
- */
-const PROJECT_DIRS: Record<string, string> = {
-  "envio-rpc": "envio",
-  "sqd-rpc": "sqd",
-  "envio-subgraph-rpc": "subgraph",
-};
+/** The directory a tool's project is in: its own name unless it is measured. */
+const projectDir = (tool: string): string =>
+  (PROJECT_DIRS as Record<string, string>)[tool] ?? tool;
 
 let failures = 0;
 
@@ -170,15 +166,32 @@ const hasProject = (directory: string) =>
   );
 
 for (const tool of RELIABILITY_TOOLS) {
-  const directory = PROJECT_DIRS[tool] ?? tool;
+  const directory = projectDir(tool);
   check(
     `${tool} has a reliability project to run`,
     hasProject(directory),
     `reliability/${directory} holds none of ${PROJECT_MARKERS.join(", ")}`
   );
+  // A parallel run copies this directory for each worker and points the
+  // driver at the copy, so a driver reading any other directory would build
+  // into the one every worker shares.
+  const driverFile = resolve(
+    ROOT,
+    "cases",
+    "lib",
+    "drivers",
+    `${tool.replace(/-rpc$/, "")}.ts`
+  );
+  const source = existsSync(driverFile) ? readFileSync(driverFile, "utf8") : "";
+  check(
+    `${tool}'s driver runs the directory a parallel run copies for it`,
+    source.includes(`resolve(config.dir, "${directory}")`),
+    `${driverFile} does not resolve config.dir/${directory} - update PROJECT_DIRS in ` +
+      `reliability/lib/tools.ts`
+  );
 }
 for (const [tool, reason] of Object.entries(AWAITING_PROJECT)) {
-  const directory = PROJECT_DIRS[tool] ?? tool;
+  const directory = projectDir(tool);
   check(
     `${tool} is still waiting on its project`,
     !hasProject(directory),
@@ -224,44 +237,29 @@ const IMPACTS = new Set([
   );
 }
 
-// ── The CI matrix ──────────────────────────────────────────────────────
+// ── The CI workflow ────────────────────────────────────────────────────
 //
-// CI runs one job per tool per column, so the matrix is the suite's coverage
-// written out a second time, in a file nothing else reads. A tool or a group
-// missing from it does not fail anything - it publishes a table with a column
-// or a row quietly absent, which is the failure this suite exists to catch in
-// other people's software.
+// CI runs every tool in one job, and nothing there lists them - except the
+// comment step, which counts how many tools reported against how many were
+// asked. A tool missing from that list would make a run where it failed read
+// as complete; one listed that the suite does not run would make every run
+// claim a failure.
 
 const WORKFLOW = readFileSync(
   resolve(ROOT, ".github", "workflows", "reliability.yml"),
   "utf8"
 );
 
-/** The items of a `key:` block of `- value` lines, in order. */
-function matrixList(key: string): string[] {
-  const block = WORKFLOW.split(`\n        ${key}:\n`)[1];
-  if (!block) return [];
-  const items: string[] = [];
-  for (const line of block.split("\n")) {
-    const item = /^ {10}- (\S+)$/.exec(line);
-    if (!item) break;
-    items.push(item[1]);
-  }
-  return items;
-}
-
+const workflowTools = (/^ {10}TOOLS: (.+)$/m.exec(WORKFLOW)?.[1] ?? "")
+  .trim()
+  .split(/\s+/)
+  .filter(Boolean)
+  .sort();
 check(
-  "every tool the suite measures has a job",
-  matrixList("tool").join(",") === [...RELIABILITY_TOOLS].sort().join(","),
-  `reliability.yml runs ${matrixList("tool").join(", ") || "nothing"}, ` +
+  "the workflow counts every tool the suite measures",
+  workflowTools.join(",") === [...RELIABILITY_TOOLS].sort().join(","),
+  `reliability.yml lists ${workflowTools.join(", ") || "nothing"}, ` +
     `RELIABILITY_TOOLS is ${[...RELIABILITY_TOOLS].sort().join(", ")}`
-);
-
-check(
-  "every column of the table has a job",
-  matrixList("group").join(",") === GROUPS.map((group) => group.id).join(","),
-  `reliability.yml runs ${matrixList("group").join(", ") || "nothing"}, ` +
-    `GROUPS is ${GROUPS.map((group) => group.id).join(", ")}`
 );
 
 // ── Scoring ────────────────────────────────────────────────────────────
@@ -286,11 +284,12 @@ function perfect(name: string): ToolReliability {
 const ALL_CHECKS = SCENARIOS.reduce((n, s) => n + checkCount(s), 0);
 const CRASH_CHECKS = scenariosIn("crash-recovery").reduce((n, s) => n + checkCount(s), 0);
 
-// ── Putting a tool's shards back together ──────────────────────────────
+// ── Putting a tool's pieces back together ──────────────────────────────
 //
-// A tool arrives from CI in five pieces, one per column. Scoring them as they
-// come would publish five rows for one tool, each with a fifth of the checks
-// asked - a table that reads as five different tools all doing badly.
+// A tool can arrive in pieces - a suite split by column by hand, or a re-run
+// uploaded beside the first. Scoring them as they come would publish a row per
+// piece for one tool, each with a fraction of the checks asked - a table that
+// reads as several different tools all doing badly.
 
 const shards = GROUPS.map((group) => ({
   ...perfect("Sharded"),
@@ -320,6 +319,29 @@ check(
   doubled.length === 1 && scoreTool(doubled[0]).asked === ALL_CHECKS,
   `${doubled[0] ? scoreTool(doubled[0]).asked : 0} of ${ALL_CHECKS} checks asked`
 );
+// A job cut short prints what it did not reach as placeholders, so a partial
+// result is not a flattering one. They are not results: a real one from a
+// re-run wins over them, and a column holding only them was not reported.
+const cutShort: ToolReliability = {
+  ...perfect("Sharded"),
+  runs: perfect("Sharded").runs.map((run) => ({
+    scenario: run.scenario,
+    checks: Object.fromEntries(
+      Object.keys(run.checks).map((id) => [id, { status: "na" as const, detail: NOT_REACHED }])
+    ),
+  })),
+};
+check(
+  "a scenario the job never reached is not a run",
+  !cutShort.runs.some(reached) && perfect("Sharded").runs.every(reached)
+);
+const rerunAfterCutShort = mergeToolResults([cutShort, perfect("Sharded")]);
+check(
+  "a scenario that ran wins over a placeholder for it",
+  rerunAfterCutShort.length === 1 && scoreTool(rerunAfterCutShort[0]).asked === ALL_CHECKS,
+  `${rerunAfterCutShort[0] ? scoreTool(rerunAfterCutShort[0]).asked : 0} of ${ALL_CHECKS} checks asked`
+);
+
 const flawless = scoreTool(perfect("Perfect"));
 check(
   "a tool that passes everything passes every check",

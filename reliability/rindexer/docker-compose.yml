@@ -6,13 +6,14 @@ volumes:
 
 services:
   postgresql:
-    container_name: rindexer-reliability-postgres
     image: postgres:18
     shm_size: 1g
     restart: always
     volumes:
       - rindexer_reliability_pgdata:/var/lib/postgresql
     ports:
-      - 5440:5432
+      # The driver shifts the port, and the project name, for each copy of
+      # this project the suite runs side by side; alone, both are as written.
+      - ${RINDEXER_PG_PORT:-5440}:5432
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rindexer}

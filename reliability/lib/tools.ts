@@ -107,6 +107,22 @@ export function absenceReason(driver: string): string | null {
   return NOT_RUN[driver] ?? AWAITING_PROJECT[driver] ?? null;
 }
 
+/**
+ * The directory under reliability/ each tool's driver runs, which is what a
+ * worker copies when scenarios run side by side: two copies of a tool must not
+ * build into, or clean, the same directory at once. Pinned against the drivers
+ * by scripts/test-reliability.ts.
+ */
+export const PROJECT_DIRS: Record<ReliabilityTool, string> = {
+  "envio-rpc": "envio",
+  "envio-subgraph-rpc": "subgraph",
+  ponder: "ponder",
+  rindexer: "rindexer",
+  "sqd-rpc": "sqd",
+  subgraph: "subgraph",
+  subquery: "subquery",
+};
+
 /** How a row is labelled, borrowed wholesale from the throughput tables. */
 export function presentation(driver: ReliabilityTool) {
   return TOOLS[driver];

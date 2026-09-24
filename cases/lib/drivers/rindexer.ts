@@ -6,10 +6,18 @@ import { exec, kill, psql, start, waitPg, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
+  port,
   type DriverFactory,
 } from "./common.ts";
 
-const PG_PORT = 5440;
+const PG_PORT = port(5440);
+
+/**
+ * The health and metrics server rindexer starts beside the indexer. Only the
+ * reliability project reads this (its rindexer.yaml sets `health_port` from
+ * it), so that copies of it running side by side do not collide.
+ */
+const HEALTH_PORT = port(8082);
 export const RINDEXER_DB_URL = `postgresql://postgres:rindexer@localhost:${PG_PORT}/postgres`;
 
 // The first release with `networks[].hypersync` support. An older CLI ignores
@@ -41,6 +49,9 @@ export const rindexerDriver = (mode: "rpc" | "hypersync"): DriverFactory => ({
     ETHEREUM_RPC: rpcUrl,
     DATABASE_URL: RINDEXER_DB_URL,
     POSTGRES_PASSWORD: "rindexer",
+    // Published by the compose file, which defaults to the same port.
+    RINDEXER_PG_PORT: String(PG_PORT),
+    RINDEXER_HEALTH_PORT: String(HEALTH_PORT),
     RINDEXER_END_BLOCK: String(endBlock),
     // One project directory serves both rows: rindexer.yaml substitutes these,
     // so the yaml stays the single place the configuration is written down.
