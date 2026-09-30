@@ -16,11 +16,15 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { waitPg } from "../../cases/lib/process.ts";
 import { ENVIO_DB_URL } from "../../cases/lib/drivers/envio.ts";
+import { instanceName } from "../../cases/lib/drivers/common.ts";
 
 const run = promisify(execFile);
 
-/** The container this module starts, so a second call does not start another. */
-const CONTAINER = "reliability-envio-postgres";
+/**
+ * The container this module starts, so a second call does not start another.
+ * Suffixed per worker when scenarios run side by side, like the port.
+ */
+const CONTAINER = instanceName("reliability-envio-postgres");
 
 const PORT = new URL(ENVIO_DB_URL).port;
 
@@ -49,7 +53,7 @@ export async function ensureEnvioDb(log: (message: string) => void): Promise<voi
   log(`Starting Postgres on port ${PORT} for Envio...`);
   // A stopped container from an earlier run would make `docker run` fail on
   // the name alone, which is not a reason to lose the suite.
-  await run("docker", ["rm", "-f", CONTAINER]).catch(() => {});
+  await run("docker", ["rm", "-fv", CONTAINER]).catch(() => {});
   const url = new URL(ENVIO_DB_URL);
   await run("docker", [
     "run",
@@ -67,4 +71,15 @@ export async function ensureEnvioDb(log: (message: string) => void): Promise<voi
     "postgres:16",
   ]);
   await waitPg(ENVIO_DB_URL, "SELECT 1");
+}
+
+/**
+ * Remove the container `ensureEnvioDb` started, if it did.
+ *
+ * Only a worker running scenarios side by side calls this: its port and name
+ * are its own, and a pool of them would otherwise leave one idle Postgres per
+ * worker behind for the rest of the run.
+ */
+export async function removeEnvioDb(): Promise<void> {
+  await run("docker", ["rm", "-fv", CONTAINER]).catch(() => {});
 }

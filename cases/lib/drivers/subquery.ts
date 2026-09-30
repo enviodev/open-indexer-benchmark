@@ -6,10 +6,11 @@ import { containerUrl } from "../container.ts";
 import {
   blocksIndexed,
   createProgressReader,
+  port,
   type DriverFactory,
 } from "./common.ts";
 
-const PG_PORT = 5432;
+const PG_PORT = port(5432);
 export const SUBQUERY_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/postgres`;
 
 /** Matches `--db-schema` in each case's docker-compose.yml. */
@@ -26,6 +27,8 @@ export const subqueryDriver: DriverFactory = ({ config, rpcUrl, endBlock }) => {
     // its own contract calls from the host has to be addressed as the host.
     ETHEREUM_RPC_URL: containerUrl(rpcUrl),
     SUBQUERY_END_BLOCK: String(endBlock),
+    // Published by the compose file, which defaults to the same port.
+    SUBQUERY_PG_PORT: String(PG_PORT),
   };
   let proc: ChildProcess | null = null;
   let done = false;

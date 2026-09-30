@@ -45,7 +45,14 @@ const { sleep } = await import("../cases/lib/process.ts");
  * defect. Passed explicitly rather than set in the environment: a published
  * run reads neither of these.
  */
-const PATIENCE = { syncMs: 30_000, reactMs: 15_000, stallMs: 15_000, settleMs: 8_000 };
+const PATIENCE = {
+  syncMs: 30_000,
+  reactMs: 15_000,
+  stallMs: 15_000,
+  settleMs: 8_000,
+  writesLandMs: 1_000,
+  resumeMs: 8_000,
+};
 type Outcome = import("../reliability/lib/score.ts").Outcome;
 type Defect = import("../reliability/lib/fake-indexer.ts").Defect;
 
@@ -424,8 +431,8 @@ const EXPECTATIONS: Expectation[] = [
 
   // ── A project that cannot implement an entity loses only its checks ──
   //
-  // No-code rindexer has no facility for reading contract state, so its
-  // project has no token row and never will. The two checks that read one have
+  // A framework with no facility for reading contract state gives its project
+  // no token row, and never will. The two checks that read one have
   // to come back unmeasured - and, more importantly, the other three have to
   // still be asked: a resolver that gave up on the whole schema over one
   // missing table would turn a project with a documented limit into an indexer

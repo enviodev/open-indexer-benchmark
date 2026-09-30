@@ -203,12 +203,8 @@ lines.push(
   "",
   "A project that cannot implement one of the three entities loses the checks",
   "that read it, and nothing else: they come back unmeasured, so that column's",
-  "denominator is smaller rather than its numerator being lower. One row is in",
-  "that position today. A no-code rindexer project is its yaml, which describes",
-  "events and the tables they write and has no facility for reading contract",
-  "state, so it writes no token row and the two metadata checks cannot be put to",
-  "it. Writing those two would mean a rust rindexer project instead, which is",
-  "what the External Contract Calls scenario uses for the same reason.",
+  "denominator is smaller rather than its numerator being lower. No row is in",
+  "that position today: every project writes all three.",
   ""
 );
 

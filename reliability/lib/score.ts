@@ -129,14 +129,33 @@ const sum = (tallies: Tally[]): Tally => ({
 });
 
 /**
- * One result per tool, from however many jobs measured it.
+ * What a scenario the run never got to says for every check.
  *
- * CI shards the suite by group - a column of the table per runner - so a tool
- * arrives as five partial results that each hold the scenarios their shard
- * ran. Scoring them separately would publish five rows for one tool; scoring
- * the concatenation publishes the row the suite means. A scenario measured
- * twice keeps the first result rather than counting twice, which is what a
- * re-run shard would otherwise do to a denominator.
+ * The runner prints a tool's result after each scenario, with the ones still
+ * to come listed as unmeasured for this reason, so a run cut short publishes
+ * what it finished. Those placeholders are not results: a column holding
+ * nothing else was not reported, and a real result for the same scenario from
+ * elsewhere wins over one.
+ */
+export const NOT_REACHED = "the job ran out of time before this scenario";
+
+/** Whether a scenario actually ran, rather than being a placeholder for one. */
+export function reached(run: ScenarioRun): boolean {
+  return Object.values(run.checks).some(
+    (outcome) => outcome.status !== "na" || outcome.detail !== NOT_REACHED
+  );
+}
+
+/**
+ * One result per tool, from however many pieces measured it.
+ *
+ * CI measures every tool in one job, but a tool can still arrive in pieces - a
+ * suite split up by hand, or a re-run uploaded beside the first. Scoring them
+ * separately would publish a row per piece for one tool; scoring the
+ * concatenation publishes the row the suite means. A scenario measured twice
+ * keeps the first result rather than counting twice, which is what a re-run
+ * would otherwise do to a denominator - unless the first is only a placeholder
+ * for a scenario its run never reached.
  */
 export function mergeToolResults(results: ToolReliability[]): ToolReliability[] {
   const merged = new Map<string, ToolReliability>();
@@ -148,8 +167,9 @@ export function mergeToolResults(results: ToolReliability[]): ToolReliability[] 
       continue;
     }
     for (const run of result.runs) {
-      if (seen.runs.some((had) => had.scenario === run.scenario)) continue;
-      seen.runs.push(run);
+      const had = seen.runs.findIndex((prior) => prior.scenario === run.scenario);
+      if (had === -1) seen.runs.push(run);
+      else if (!reached(seen.runs[had]) && reached(run)) seen.runs[had] = run;
     }
   }
   return [...merged.values()];

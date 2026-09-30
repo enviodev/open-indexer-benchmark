@@ -529,13 +529,38 @@ jobs:
         if: github.event_name == 'push'
         env:
           CASES: ${{ needs.setup.outputs.cases }}
+          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
+          # The rebuild has to decide each row the way the step above did, or
+          # an unstable row would lose its note on the way into the README.
+          GATE: ${{ needs.setup.outputs.gate == 'off' && 'off' || 'final' }}
+          TOUCHED_INDEXERS: ${{ needs.setup.outputs.touched }}
+          # Rebuilt once per attempt; the step above already wrote the summary.
+          WRITE_SUMMARY: '0'
+          BRANCH: ${{ github.ref_name }}
         run: |
-          # Replace each case's block in README.md with this run's table.
-          apply_tables() {
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Written onto the branch as it is now, not as it was when the run
+          # checked it out: the reliability workflow publishes into the same
+          # README, and a plain push that lost the race dropped a whole run's
+          # results. The tables are rebuilt each time because what they carry
+          # forward is read from the README. The results they read are
+          # untracked, so the reset leaves them alone. The trailer records
+          # which commit was measured, so the next run can tell which tools
+          # changed since.
+          for ATTEMPT in 1 2 3 4 5; do
+            git fetch --quiet origin "$BRANCH"
+            git reset --quiet --hard "origin/$BRANCH"
+            node scripts/build-tables.ts > /dev/null
+
+            CHANGED=0
             for CASE in $(echo "$CASES" | jq -r '.[]'); do
               # The README variant, without this run's carried-forward marks.
               TABLE="/tmp/benchmark-readme-${CASE}.md"
               [ -f "$TABLE" ] || continue
+
+              # Replace content between this case's markers with the new table
               awk -v start="<!-- BENCHMARK:${CASE}:START -->" \
                   -v end="<!-- BENCHMARK:${CASE}:END -->" \
                   -v tablefile="$TABLE" '
@@ -543,30 +568,18 @@ jobs:
                 $0 ~ end { skip=0 }
                 !skip { print }
               ' README.md > README.tmp && mv README.tmp README.md
+              CHANGED=1
             done
-          }
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # A main run takes well over an hour, so the branch has usually moved
-          # on by the time it finishes. Rather than rebasing a commit made on
-          # the pushed commit — which conflicts with every table the run ahead
-          # of it published — each attempt starts from the branch as it is now
-          # and writes the tables onto it. The trailer records which commit was
-          # measured, so the next run can tell which tools changed since.
-          for i in 1 2 3; do
-            git fetch origin "$GITHUB_REF_NAME"
-            git reset -q --hard FETCH_HEAD
-            apply_tables
-            if git diff --quiet README.md; then
-              echo "README already holds these results."
+            [ "$CHANGED" = "1" ] || exit 0
+            git diff --quiet README.md && exit 0
+            git add README.md
+            git commit --quiet -m "Update benchmark results in README" \
+              -m "Benchmarked-Commit: $GITHUB_SHA"
+            if git push origin "HEAD:$BRANCH"; then
               exit 0
             fi
-            git commit -q README.md -m "Update benchmark results in README" \
-              -m "Benchmarked-Commit: $GITHUB_SHA"
-            git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
-            echo "Push attempt $i failed; retrying..." >&2
-            sleep $((i * 10))
+            echo "The push was rejected (attempt $ATTEMPT of 5); rebuilding on the latest $BRANCH."
+            sleep $((ATTEMPT * 5))
           done
           exit 1
