@@ -5,10 +5,11 @@ import { exec, kill, start, waitPg, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
+  port,
   type DriverFactory,
 } from "./common.ts";
 
-const PG_PORT = 23_798;
+const PG_PORT = port(23_798);
 export const SQD_DB_URL = `postgresql://postgres:postgres@localhost:${PG_PORT}/squid`;
 
 /**

@@ -1,5 +1,6 @@
-// Running the reliability suite: one tool at a time, every scenario, more than
-// once each.
+// Running the reliability suite: every tool, every scenario, more than once
+// each - in order in this process, or side by side in workers (parallel.ts),
+// where each run is still exactly the runOnce below.
 //
 // The repeat is the part worth explaining. Every other number this repository
 // publishes is a measurement, and a measurement is allowed to be noisy - the
@@ -28,8 +29,11 @@ import {
   type Driver,
   type DriverFactory,
 } from "../../cases/lib/drivers/index.ts";
+import { port } from "../../cases/lib/drivers/common.ts";
+import type { CaseConfig } from "../../cases/lib/case.ts";
 import { cancellable, psql, sleep, type Cancellable } from "../../cases/lib/process.ts";
 import {
+  CHAIN_PORT,
   SELECTORS,
   encodeString,
   startChainMock,
@@ -57,7 +61,7 @@ import {
   type ScenarioResult,
 } from "./play.ts";
 import { SCENARIOS } from "./scenarios.ts";
-import type { Outcome, ScenarioRun, ToolReliability } from "./score.ts";
+import { NOT_REACHED, type Outcome, type ScenarioRun, type ToolReliability } from "./score.ts";
 import { presentation, runsHere, unaccountedDrivers, type ReliabilityTool } from "./tools.ts";
 
 /** Poll interval for every wait the harness does. */
@@ -109,6 +113,12 @@ export interface RunOptions {
   patience?: Patience;
   /** Where each completed tool's result line is written. */
   emit?: (tool: ToolReliability) => void;
+  /**
+   * How many runs may be in flight at once. One, the default, runs everything
+   * in order in this process; more hands each run of each scenario to a worker
+   * process of its own (reliability/lib/parallel.ts).
+   */
+  parallel?: number;
 }
 
 // ── The chain each scenario reads ──────────────────────────────────────
@@ -149,7 +159,7 @@ function chainSpecFor(scenario: string): ChainSpec {
 // ── One run of one scenario ────────────────────────────────────────────
 
 /** Every check of a scenario, unmeasured, with one reason. */
-function allUnmeasured(scenario: string, reason: string): ScenarioResult {
+export function allUnmeasured(scenario: string, reason: string): ScenarioResult {
   const spec = SCENARIOS.find((s) => s.id === scenario);
   return {
     checks: Object.fromEntries(
@@ -177,7 +187,8 @@ export async function runOnce(
   log: (message: string) => void,
   restartDb: typeof restartDatabase = restartDatabase,
   patience: Patience = DEFAULT_PATIENCE,
-  pauseDb: typeof pauseDatabase = pauseDatabase
+  pauseDb: typeof pauseDatabase = pauseDatabase,
+  config: CaseConfig = RELIABILITY_CASE
 ): Promise<ScenarioResult> {
   const play = PLAYS[scenario];
   if (!play) return allUnmeasured(scenario, `no implementation for scenario "${scenario}"`);
@@ -201,9 +212,11 @@ export async function runOnce(
   };
 
   try {
-    chain = await startChainMock(chainSpecFor(scenario));
+    // On the worker's own port when scenarios run side by side, like
+    // everything the driver starts; on CHAIN_PORT itself otherwise.
+    chain = await startChainMock({ ...chainSpecFor(scenario), port: port(CHAIN_PORT) });
     driver = factory({
-      config: RELIABILITY_CASE,
+      config,
       rpcUrl: chain.url,
       endBlock: NO_END_BLOCK,
       wsUrl: SCENARIOS.find((entry) => entry.id === scenario)?.websocket
@@ -496,7 +509,8 @@ export function mergeRuns(scenario: string, results: ScenarioResult[]): Scenario
 
 // ── The suite ──────────────────────────────────────────────────────────
 
-export async function runReliability(options: RunOptions): Promise<ToolReliability[]> {
+/** Throws unless every registered driver is either run or explained. */
+function assertAccounted(tools: readonly string[]): void {
   const unaccounted = unaccountedDrivers();
   if (unaccounted.length > 0) {
     // A driver that is neither run nor explained would be absent from the
@@ -507,12 +521,75 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
         `NOT_RUN in reliability/lib/tools.ts`
     );
   }
-
-  const results: ToolReliability[] = [];
-  for (const tool of options.tools) {
+  for (const tool of tools) {
     if (!runsHere(tool)) {
       throw new Error(`${tool} does not read plain RPC, so the mock chain cannot drive it`);
     }
+  }
+}
+
+/**
+ * Merge a scenario's repeats into the tool's runs, say how it went, and print
+ * the tool's result line.
+ *
+ * `runs` is the tool's scenarios finished so far and is added to in place, in
+ * the order `scenarios` lists them whatever order they finished in. The line
+ * is printed after every scenario rather than once per tool, with the
+ * scenarios still to come as unmeasured: a job that runs out of time then
+ * publishes what it finished instead of nothing, and cannot publish a
+ * flattering partial score, because what it did not reach is counted as not
+ * tested. The summary job reads the last line printed for each tool.
+ */
+export function reportScenario(
+  tool: ReliabilityTool,
+  scenarios: string[],
+  runs: ScenarioRun[],
+  scenario: string,
+  attempts: ScenarioResult[],
+  heading?: string
+): ScenarioRun {
+  const merged = mergeRuns(scenario, attempts);
+  const passed = Object.values(merged.checks).filter((c) => c.status === "pass").length;
+  const asked = Object.values(merged.checks).filter((c) => c.status !== "na").length;
+  if (heading) console.log(heading);
+  console.log(`  ${scenario}: ${passed} of ${asked} checks`);
+  for (const [id, outcome] of Object.entries(merged.checks)) {
+    if (outcome.status === "fail") console.log(`    ✗ ${id} - ${outcome.detail}`);
+    if (outcome.status === "na") console.log(`    ? ${id} - ${outcome.detail}`);
+  }
+  // The spread across repeats is printed rather than published: the table
+  // carries the median, and a reader chasing an odd one wants the runs.
+  for (const measure of Object.keys(merged.measures ?? {})) {
+    const values = attempts
+      .map((a) => a.measures[measure])
+      .filter((v): v is number => typeof v === "number");
+    if (values.length > 1) console.log(`    ${measure}: ${values.join(", ")}`);
+  }
+  runs.push(merged);
+  runs.sort((a, b) => scenarios.indexOf(a.scenario) - scenarios.indexOf(b.scenario));
+  const pending = scenarios
+    .filter((id) => !runs.some((run) => run.scenario === id))
+    .map((id) => ({
+      scenario: id,
+      ...allUnmeasured(id, NOT_REACHED),
+    }));
+  console.log(
+    `RELIABILITY_RESULT ${JSON.stringify({ ...presentation(tool), runs: [...runs, ...pending] })}`
+  );
+  return merged;
+}
+
+export async function runReliability(options: RunOptions): Promise<ToolReliability[]> {
+  assertAccounted(options.tools);
+  // Side by side, each run in a worker of its own. Imported here rather than
+  // at the top because the pool imports this module for the reporting.
+  if ((options.parallel ?? 1) > 1) {
+    const { runParallel } = await import("./parallel.ts");
+    return runParallel({ ...options, parallel: options.parallel ?? 1 });
+  }
+
+  const results: ToolReliability[] = [];
+  for (const tool of options.tools) {
     const log = (message: string) => console.log(message);
     console.log(`\n=== ${presentation(tool).name} (${presentation(tool).source}) ===`);
 
@@ -542,37 +619,7 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
           `  run ${attempt} finished in ${((performance.now() - startedAt) / 1_000).toFixed(0)}s`
         );
       }
-      const merged = mergeRuns(scenario, attempts);
-      const passed = Object.values(merged.checks).filter((c) => c.status === "pass").length;
-      const asked = Object.values(merged.checks).filter((c) => c.status !== "na").length;
-      console.log(`  ${scenario}: ${passed} of ${asked} checks`);
-      for (const [id, outcome] of Object.entries(merged.checks)) {
-        if (outcome.status === "fail") console.log(`    ✗ ${id} - ${outcome.detail}`);
-        if (outcome.status === "na") console.log(`    ? ${id} - ${outcome.detail}`);
-      }
-      // The spread across repeats is printed rather than published: the table
-      // carries the median, and a reader chasing an odd one wants the runs.
-      for (const measure of Object.keys(merged.measures ?? {})) {
-        const values = attempts
-          .map((a) => a.measures[measure])
-          .filter((v): v is number => typeof v === "number");
-        if (values.length > 1) console.log(`    ${measure}: ${values.join(", ")}`);
-      }
-      runs.push(merged);
-      // Printed after every scenario rather than once per tool, with the
-      // scenarios still to come as unmeasured: a job that runs out of time
-      // then publishes what it finished instead of nothing, and cannot
-      // publish a flattering partial score, because what it did not reach is
-      // counted as not tested. The summary job reads the last line.
-      const pending = options.scenarios
-        .slice(runs.length)
-        .map((id) => ({
-          scenario: id,
-          ...allUnmeasured(id, "the job ran out of time before this scenario"),
-        }));
-      console.log(
-        `RELIABILITY_RESULT ${JSON.stringify({ ...presentation(tool), runs: [...runs, ...pending] })}`
-      );
+      reportScenario(tool, options.scenarios, runs, scenario, attempts);
     }
 
     const result: ToolReliability = { ...presentation(tool), runs };
@@ -581,4 +628,3 @@ export async function runReliability(options: RunOptions): Promise<ToolReliabili
   }
   return results;
 }
-
