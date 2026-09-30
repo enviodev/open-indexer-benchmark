@@ -24,36 +24,10 @@ on:
         description: 'Throughput windows per indexer in each round'
         required: true
         type: string
-      case1:
+      slots:
+        description: 'JSON array of five {case, indexers} scenario slots, in run order; an unused slot has case ""'
+        required: true
         type: string
-        default: ''
-      case2:
-        type: string
-        default: ''
-      case3:
-        type: string
-        default: ''
-      case4:
-        type: string
-        default: ''
-      case5:
-        type: string
-        default: ''
-      indexers1:
-        type: string
-        default: '[]'
-      indexers2:
-        type: string
-        default: '[]'
-      indexers3:
-        type: string
-        default: '[]'
-      indexers4:
-        type: string
-        default: '[]'
-      indexers5:
-        type: string
-        default: '[]'
 
 jobs:
   # One scenario at a time: every indexer of scenario 1 runs in parallel, and
@@ -61,68 +35,68 @@ jobs:
   # apart halves how many indexers hit the shared data endpoints at once, so a
   # scenario's numbers are not shaped by what the other scenario was doing.
   scenario-1:
-    name: ${{ inputs.case1 }}
-    if: inputs.case1 != ''
+    name: ${{ fromJSON(inputs.slots)[0].case }}
+    if: fromJSON(inputs.slots)[0].case != ''
     uses: ./.github/workflows/benchmark-case.yml
     with:
-      case: ${{ inputs.case1 }}
-      indexers: ${{ inputs.indexers1 }}
+      case: ${{ fromJSON(inputs.slots)[0].case }}
+      indexers: ${{ toJSON(fromJSON(inputs.slots)[0].indexers) }}
       duration: ${{ inputs.duration }}
       windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
   scenario-2:
-    name: ${{ inputs.case2 }}
+    name: ${{ fromJSON(inputs.slots)[1].case }}
     needs: [scenario-1]
     # `!cancelled()` so a failing indexer in scenario 1 — which is a result in
     # its own right, not a reason to skip the rest of the run — still lets
     # scenario 2 start once scenario 1 is done, while cancelling the run still
     # stops it. `always()` would carry on through a cancel.
-    if: ${{ !cancelled() && inputs.case2 != '' }}
+    if: ${{ !cancelled() && fromJSON(inputs.slots)[1].case != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
-      case: ${{ inputs.case2 }}
-      indexers: ${{ inputs.indexers2 }}
+      case: ${{ fromJSON(inputs.slots)[1].case }}
+      indexers: ${{ toJSON(fromJSON(inputs.slots)[1].indexers) }}
       duration: ${{ inputs.duration }}
       windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
   scenario-3:
-    name: ${{ inputs.case3 }}
+    name: ${{ fromJSON(inputs.slots)[2].case }}
     needs: [scenario-1, scenario-2]
-    if: ${{ !cancelled() && inputs.case3 != '' }}
+    if: ${{ !cancelled() && fromJSON(inputs.slots)[2].case != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
-      case: ${{ inputs.case3 }}
-      indexers: ${{ inputs.indexers3 }}
+      case: ${{ fromJSON(inputs.slots)[2].case }}
+      indexers: ${{ toJSON(fromJSON(inputs.slots)[2].indexers) }}
       duration: ${{ inputs.duration }}
       windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
   scenario-4:
-    name: ${{ inputs.case4 }}
+    name: ${{ fromJSON(inputs.slots)[3].case }}
     needs: [scenario-1, scenario-2, scenario-3]
-    if: ${{ !cancelled() && inputs.case4 != '' }}
+    if: ${{ !cancelled() && fromJSON(inputs.slots)[3].case != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
-      case: ${{ inputs.case4 }}
-      indexers: ${{ inputs.indexers4 }}
+      case: ${{ fromJSON(inputs.slots)[3].case }}
+      indexers: ${{ toJSON(fromJSON(inputs.slots)[3].indexers) }}
       duration: ${{ inputs.duration }}
       windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
   scenario-5:
-    name: ${{ inputs.case5 }}
+    name: ${{ fromJSON(inputs.slots)[4].case }}
     needs: [scenario-1, scenario-2, scenario-3, scenario-4]
-    if: ${{ !cancelled() && inputs.case5 != '' }}
+    if: ${{ !cancelled() && fromJSON(inputs.slots)[4].case != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
-      case: ${{ inputs.case5 }}
-      indexers: ${{ inputs.indexers5 }}
+      case: ${{ fromJSON(inputs.slots)[4].case }}
+      indexers: ${{ toJSON(fromJSON(inputs.slots)[4].indexers) }}
       duration: ${{ inputs.duration }}
       windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}

@@ -36,14 +36,12 @@ export const AGREE_RATIO = 1.5;
 const ROUND_SUFFIX = /--(r\d+|recheck)$/;
 
 /**
- * Split an artifact's indexer part into the indexer and the round that
- * produced it: "envio-rpc--r2" → { indexer: "envio-rpc", round: "r2" }. A name
- * without a suffix is a single-round sample.
+ * The indexer an artifact's indexer part names, without the round that
+ * produced it: "envio-rpc--r2" → "envio-rpc". A name without a suffix passes
+ * through unchanged.
  */
-export function parseArtifactIndexer(part: string): { indexer: string; round: string } {
-  const match = part.match(ROUND_SUFFIX);
-  if (!match) return { indexer: part, round: "r1" };
-  return { indexer: part.slice(0, match.index), round: match[1] };
+export function artifactIndexer(part: string): string {
+  return part.replace(ROUND_SUFFIX, "");
 }
 
 /**

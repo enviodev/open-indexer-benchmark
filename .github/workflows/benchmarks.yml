@@ -53,15 +53,7 @@ jobs:
     outputs:
       cases: ${{ steps.set-matrix.outputs.cases }}
       case1: ${{ steps.set-matrix.outputs.case1 }}
-      case2: ${{ steps.set-matrix.outputs.case2 }}
-      case3: ${{ steps.set-matrix.outputs.case3 }}
-      case4: ${{ steps.set-matrix.outputs.case4 }}
-      case5: ${{ steps.set-matrix.outputs.case5 }}
-      indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
-      indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
-      indexers3: ${{ steps.set-matrix.outputs.indexers3 }}
-      indexers4: ${{ steps.set-matrix.outputs.indexers4 }}
-      indexers5: ${{ steps.set-matrix.outputs.indexers5 }}
+      slots: ${{ steps.set-matrix.outputs.slots }}
       partial: ${{ steps.set-matrix.outputs.partial }}
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
@@ -206,9 +198,11 @@ jobs:
           echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
           echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
 
-          # One scenario slot per `scenario-N` job in benchmark-round.yml. A
-          # slot with no case is skipped by that job's `if`, so the loop covers
-          # a run with fewer scenarios than slots without special-casing it.
+          # One slot per `scenario-N` job in benchmark-round.yml, always five,
+          # so a round can index them without bounds checks. A slot with no
+          # case is skipped by that job's `if`, so the loop covers a run with
+          # fewer scenarios than slots without special-casing it.
+          SLOTS='[]'
           for N in 1 2 3 4 5; do
             CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
             if [ -n "$SCOPE" ]; then
@@ -220,9 +214,13 @@ jobs:
             INDEXERS_N=$(jq -cn --argjson want "$INDEXERS_N" \
               --argjson have "$(echo "$AVAILABLE" | jq -c --arg c "$CASE_N" '.[$c] // []')" \
               '$want - ($want - $have)')
-            echo "case$N=$CASE_N" >> "$GITHUB_OUTPUT"
-            echo "indexers$N=$INDEXERS_N" >> "$GITHUB_OUTPUT"
+            SLOTS=$(jq -cn --argjson s "$SLOTS" --arg c "$CASE_N" --argjson i "$INDEXERS_N" \
+              '$s + [{case: $c, indexers: $i}]')
           done
+          echo "Scenario slots: $SLOTS"
+          echo "slots=$SLOTS" >> "$GITHUB_OUTPUT"
+          # Whether there is anything to run at all.
+          echo "case1=$(echo "$SLOTS" | jq -r '.[0].case')" >> "$GITHUB_OUTPUT"
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
@@ -308,16 +306,7 @@ jobs:
       round: '1'
       duration: ${{ needs.setup.outputs.duration }}
       windows: ${{ needs.setup.outputs.windows }}
-      case1: ${{ needs.setup.outputs.case1 }}
-      case2: ${{ needs.setup.outputs.case2 }}
-      case3: ${{ needs.setup.outputs.case3 }}
-      case4: ${{ needs.setup.outputs.case4 }}
-      case5: ${{ needs.setup.outputs.case5 }}
-      indexers1: ${{ needs.setup.outputs.indexers1 }}
-      indexers2: ${{ needs.setup.outputs.indexers2 }}
-      indexers3: ${{ needs.setup.outputs.indexers3 }}
-      indexers4: ${{ needs.setup.outputs.indexers4 }}
-      indexers5: ${{ needs.setup.outputs.indexers5 }}
+      slots: ${{ needs.setup.outputs.slots }}
     secrets: inherit
 
   round-2:
@@ -331,16 +320,7 @@ jobs:
       round: '2'
       duration: ${{ needs.setup.outputs.duration }}
       windows: ${{ needs.setup.outputs.windows }}
-      case1: ${{ needs.setup.outputs.case1 }}
-      case2: ${{ needs.setup.outputs.case2 }}
-      case3: ${{ needs.setup.outputs.case3 }}
-      case4: ${{ needs.setup.outputs.case4 }}
-      case5: ${{ needs.setup.outputs.case5 }}
-      indexers1: ${{ needs.setup.outputs.indexers1 }}
-      indexers2: ${{ needs.setup.outputs.indexers2 }}
-      indexers3: ${{ needs.setup.outputs.indexers3 }}
-      indexers4: ${{ needs.setup.outputs.indexers4 }}
-      indexers5: ${{ needs.setup.outputs.indexers5 }}
+      slots: ${{ needs.setup.outputs.slots }}
     secrets: inherit
 
   round-3:
@@ -352,16 +332,7 @@ jobs:
       round: '3'
       duration: ${{ needs.setup.outputs.duration }}
       windows: ${{ needs.setup.outputs.windows }}
-      case1: ${{ needs.setup.outputs.case1 }}
-      case2: ${{ needs.setup.outputs.case2 }}
-      case3: ${{ needs.setup.outputs.case3 }}
-      case4: ${{ needs.setup.outputs.case4 }}
-      case5: ${{ needs.setup.outputs.case5 }}
-      indexers1: ${{ needs.setup.outputs.indexers1 }}
-      indexers2: ${{ needs.setup.outputs.indexers2 }}
-      indexers3: ${{ needs.setup.outputs.indexers3 }}
-      indexers4: ${{ needs.setup.outputs.indexers4 }}
-      indexers5: ${{ needs.setup.outputs.indexers5 }}
+      slots: ${{ needs.setup.outputs.slots }}
     secrets: inherit
 
   # Takes the median of every round and holds back the rows that moved a long
@@ -375,8 +346,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      recheck_cases: ${{ steps.gate.outputs.cases }}
-      recheck_indexers: ${{ steps.gate.outputs.indexers }}
+      recheck: ${{ steps.gate.outputs.recheck }}
     steps:
       # Credentials are kept for the fetch below; the token is read-only here.
       - uses: actions/checkout@v4
@@ -411,31 +381,28 @@ jobs:
           WRITE_SUMMARY: '0'
         run: |
           node scripts/build-tables.ts
-          RECHECK=$(cat /tmp/benchmark-recheck.json 2>/dev/null || echo '{}')
-          # Kept in the order the scenarios ran in, so the recheck does too.
-          CASES_TO_RECHECK=$(jq -cn --argjson all "$CASES" --argjson r "$RECHECK" \
-            '[$all[] | select(($r[.] // []) | length > 0)]')
-          echo "cases=$CASES_TO_RECHECK" >> "$GITHUB_OUTPUT"
-          echo "indexers=$RECHECK" >> "$GITHUB_OUTPUT"
+          # [{case, indexers}] in the order the scenarios ran; absent when the
+          # gate is off.
+          echo "recheck=$(cat /tmp/benchmark-recheck.json 2>/dev/null || echo '[]')" >> "$GITHUB_OUTPUT"
 
   # A fourth sample of each row the gate held back, one scenario at a time like
   # every other round. Skipped entirely on the usual run, where nothing moved.
   recheck:
-    name: Recheck ${{ matrix.case }}
+    name: Recheck ${{ matrix.slot.case }}
     needs: [setup, aggregate]
     # Without a status function GitHub adds `success()`, which looks at every
     # job upstream — so one failed indexer in any round would skip the recheck
     # and publish every held-back row as unstable.
-    if: ${{ !cancelled() && needs.aggregate.result == 'success' && needs.aggregate.outputs.recheck_cases != '' && needs.aggregate.outputs.recheck_cases != '[]' }}
+    if: ${{ !cancelled() && needs.aggregate.result == 'success' && needs.aggregate.outputs.recheck != '' && needs.aggregate.outputs.recheck != '[]' }}
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        case: ${{ fromJSON(needs.aggregate.outputs.recheck_cases) }}
+        slot: ${{ fromJSON(needs.aggregate.outputs.recheck) }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
-      case: ${{ matrix.case }}
-      indexers: ${{ toJSON(fromJSON(needs.aggregate.outputs.recheck_indexers)[matrix.case]) }}
+      case: ${{ matrix.slot.case }}
+      indexers: ${{ toJSON(matrix.slot.indexers) }}
       duration: ${{ needs.setup.outputs.duration }}
       windows: ${{ needs.setup.outputs.windows }}
       round: recheck
@@ -451,6 +418,14 @@ jobs:
     # A cancelled run publishes nothing.
     if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && needs.aggregate.result == 'success' }}
     runs-on: ubuntu-latest
+    # Shared by every build-tables.ts call below, so the README rebuild decides
+    # each row exactly as the first build did. The recheck has had its turn, so
+    # a row that still disagrees is published with a note rather than held back.
+    env:
+      CASES: ${{ needs.setup.outputs.cases }}
+      SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
+      GATE: ${{ needs.setup.outputs.gate == 'off' && 'off' || 'final' }}
+      TOUCHED_INDEXERS: ${{ needs.setup.outputs.touched }}
     steps:
       - uses: actions/checkout@v4
 
@@ -474,13 +449,6 @@ jobs:
           git show FETCH_HEAD:README.md > README.md
 
       - name: Build comparison tables
-        env:
-          CASES: ${{ needs.setup.outputs.cases }}
-          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
-          # The recheck has had its turn, so a row that still disagrees is
-          # published with a note rather than held back again.
-          GATE: ${{ needs.setup.outputs.gate == 'off' && 'off' || 'final' }}
-          TOUCHED_INDEXERS: ${{ needs.setup.outputs.touched }}
         run: node scripts/build-tables.ts
 
       - name: Comment results on PR
@@ -489,7 +457,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           SECTION: benchmarks
-          CASES: ${{ needs.setup.outputs.cases }}
           PARTIAL_RUN: ${{ needs.setup.outputs.partial }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -545,12 +512,6 @@ jobs:
       - name: Update README
         if: github.event_name == 'push'
         env:
-          CASES: ${{ needs.setup.outputs.cases }}
-          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
-          # The rebuild has to decide each row the way the step above did, or
-          # an unstable row would lose its note on the way into the README.
-          GATE: ${{ needs.setup.outputs.gate == 'off' && 'off' || 'final' }}
-          TOUCHED_INDEXERS: ${{ needs.setup.outputs.touched }}
           # Rebuilt once per attempt; the step above already wrote the summary.
           WRITE_SUMMARY: '0'
           BRANCH: ${{ github.ref_name }}

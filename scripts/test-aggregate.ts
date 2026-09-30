@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { judge, parseArtifactIndexer, pickMedian } from "../cases/lib/aggregate.ts";
+import { artifactIndexer, judge, pickMedian } from "../cases/lib/aggregate.ts";
 import type { BenchmarkResult } from "../cases/lib/result.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,19 +47,14 @@ function result(eventsPerSec: number, over: Partial<BenchmarkResult> = {}): Benc
 
 console.log("Artifact names:");
 {
-  const a = parseArtifactIndexer("envio-rpc--r2");
-  check("a round suffix is split off", a.indexer === "envio-rpc" && a.round === "r2", JSON.stringify(a));
-  const b = parseArtifactIndexer("envio-subgraph-rpc--recheck");
+  check("a round suffix is split off", artifactIndexer("envio-rpc--r2") === "envio-rpc");
   check(
     "a recheck suffix is split off",
-    b.indexer === "envio-subgraph-rpc" && b.round === "recheck",
-    JSON.stringify(b)
+    artifactIndexer("envio-subgraph-rpc--recheck") === "envio-subgraph-rpc"
   );
-  const c = parseArtifactIndexer("rindexer-hypersync");
   check(
-    "a name without a suffix is a single round",
-    c.indexer === "rindexer-hypersync" && c.round === "r1",
-    JSON.stringify(c)
+    "a name without a suffix passes through",
+    artifactIndexer("rindexer-hypersync") === "rindexer-hypersync"
   );
 }
 
@@ -198,7 +193,7 @@ console.log("\nbuild-tables.ts end to end:");
     const recheck = JSON.parse(readFileSync(join(dir, "benchmark-recheck.json"), "utf8"));
     check(
       "only the row whose samples disagree is sent back",
-      JSON.stringify(recheck) === JSON.stringify({ [benchCase]: ["envio-rpc"] }),
+      JSON.stringify(recheck) === JSON.stringify([{ case: benchCase, indexers: ["envio-rpc"] }]),
       JSON.stringify(recheck)
     );
     const preview = readFileSync(join(dir, `benchmark-table-${benchCase}.md`), "utf8");

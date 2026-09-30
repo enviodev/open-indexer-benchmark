@@ -13,7 +13,8 @@
 // long way from its published value:
 //
 //   off      publish the median regardless (pull requests, manual runs)
-//   recheck  list the rows to measure again in benchmark-recheck.json
+//   recheck  list the rows to measure again in benchmark-recheck.json, as
+//            [{case, indexers}] in the order the scenarios ran
 //   final    the recheck has run; publish, and note a row still disagreeing
 //
 // TOUCHED_INDEXERS, a {case: [indexer]} map, names the rows whose code the
@@ -30,7 +31,7 @@ import {
   type TableRow,
 } from "../cases/lib/table.ts";
 import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
-import { judge, parseArtifactIndexer, pickMedian } from "../cases/lib/aggregate.ts";
+import { artifactIndexer, judge, pickMedian, type Verdict } from "../cases/lib/aggregate.ts";
 import { TOOLS } from "../cases/lib/drivers/index.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,8 +67,8 @@ const touched: Record<string, string[]> = process.env.TOUCHED_INDEXERS
  * than annotating the run twice.
  */
 const annotate = gate !== "recheck";
-/** Rows to measure again, by case — written out in recheck mode. */
-const recheck: Record<string, string[]> = {};
+/** Rows to measure again — written out in recheck mode. */
+const recheck: { case: string; indexers: string[] }[] = [];
 
 /**
  * Scenario names live in each case's config so the README, the job summary and
@@ -140,7 +141,7 @@ for (const benchCase of cases) {
       const result: BenchmarkResult = JSON.parse(
         lines[lines.length - 1].slice("BENCHMARK_RESULT ".length)
       );
-      const { indexer } = parseArtifactIndexer(dir.slice(prefix.length));
+      const indexer = artifactIndexer(dir.slice(prefix.length));
       samples.set(indexer, [...(samples.get(indexer) ?? []), result]);
       reported.add(indexer);
     } catch (err) {
@@ -149,30 +150,34 @@ for (const benchCase of cases) {
   }
 
   const spread: string[] = [];
+  const toRecheck: string[] = [];
   for (const [indexer, results] of samples) {
     const row = toTableRow(pickMedian(results));
     const rates = results.map((r) => r.eventsPerSec);
     const prior = published.get(rowKey(row));
-    const verdict = judge({
-      samples: rates,
-      published: prior && !prior.unsupported ? prior.eventsPerSec : null,
-      touched: (touched[benchCase] ?? []).includes(indexer),
-      final: gate !== "recheck",
-    });
+    const verdict: Verdict | null =
+      gate === "off"
+        ? null
+        : judge({
+            samples: rates,
+            published: prior && !prior.unsupported ? prior.eventsPerSec : null,
+            touched: (touched[benchCase] ?? []).includes(indexer),
+            final: gate === "final",
+          });
     const label = `${row.name} via ${results[0].source}`;
 
-    if (gate !== "off" && annotate && verdict.kind === "shift") {
+    if (verdict?.kind === "shift" && annotate) {
       console.log(
         `::notice::${title}: ${label} moved from ${formatRate(verdict.from)} to ` +
           `${formatRate(verdict.to)} events/s, and all ${rates.length} runs agree — publishing.`
       );
-    } else if (gate !== "off" && verdict.kind === "recheck") {
+    } else if (verdict?.kind === "recheck") {
       console.log(
         `${title}: ${label} moved from ${formatRate(verdict.from)} to ` +
           `${formatRate(verdict.to)} events/s and its runs disagree — measuring it again.`
       );
-      (recheck[benchCase] ??= []).push(indexer);
-    } else if (gate !== "off" && verdict.kind === "unstable") {
+      toRecheck.push(indexer);
+    } else if (verdict?.kind === "unstable") {
       console.log(`::warning::${title}: ${label} — ${verdict.note}.`);
       row.unstable = verdict.note;
     }
@@ -186,6 +191,8 @@ for (const benchCase of cases) {
       );
     }
   }
+
+  if (toRecheck.length > 0) recheck.push({ case: benchCase, indexers: toRecheck });
 
   // Re-publish any indexer that produced no fresh result this run. Rebuilding
   // from successful jobs alone would silently drop its row, which reads as
@@ -267,10 +274,9 @@ for (const benchCase of cases) {
 
 if (gate === "recheck") {
   writeFileSync(join(OUT_DIR, "benchmark-recheck.json"), JSON.stringify(recheck));
-  const count = Object.values(recheck).flat().length;
   console.log(
-    count === 0
+    recheck.length === 0
       ? "\nNo row needs measuring again."
-      : `\n${count} row(s) to measure again: ${JSON.stringify(recheck)}`
+      : `\nTo measure again: ${JSON.stringify(recheck)}`
   );
 }
