@@ -6,6 +6,7 @@
 //   node reliability/run.ts --scenarios=reorg-cases,db-restart
 //   node reliability/run.ts ponder --group=reorgs
 //   node reliability/run.ts --parallel=12          twelve runs at a time
+//   node reliability/run.ts --except-group=head-latency
 //
 // Arguments that name a tool select it; everything else is a flag. The default
 // is the whole suite, run in order in this process. `--parallel` runs every
@@ -60,7 +61,13 @@ if (unknownScenarios.length > 0) {
 // A group is a column of the published table. Naming one here is the same
 // selection as naming its scenarios, so a column can be re-run by hand.
 const groups = (flags.get("group") ?? "").split(",").filter(Boolean);
-const unknownGroups = groups.filter((id) => !GROUPS.some((g) => g.id === id));
+// The other way round: every column but these. CI runs head latency on
+// runners of its own and everything else together, and a list of the rest
+// written out in the workflow would be one more thing to keep in step.
+const exceptGroups = (flags.get("except-group") ?? "").split(",").filter(Boolean);
+const unknownGroups = [...groups, ...exceptGroups].filter(
+  (id) => !GROUPS.some((g) => g.id === id)
+);
 if (unknownGroups.length > 0) {
   console.error(
     `unknown group(s) ${unknownGroups.join(", ")} - known groups are ` +
@@ -86,14 +93,13 @@ if (!Number.isInteger(repeats) || repeats < 1) {
 // Both selections narrow, so naming a group and a scenario outside it asks for
 // nothing rather than for both.
 const inGroups = groups.flatMap((id) => scenariosIn(id).map((s) => s.id));
+const excepted = exceptGroups.flatMap((id) => scenariosIn(id).map((s) => s.id));
 const selected = (scenarios.length > 0 ? scenarios : SCENARIOS.map((s) => s.id)).filter(
-  (id) => groups.length === 0 || inGroups.includes(id)
+  (id) => (groups.length === 0 || inGroups.includes(id)) && !excepted.includes(id)
 );
 
 if (selected.length === 0) {
-  console.log(
-    `Nothing to run: ${groups.join(", ")} holds none of ${scenarios.join(", ")}.`
-  );
+  console.log("Nothing to run: the groups and scenarios named have none in common.");
   process.exit(0);
 }
 

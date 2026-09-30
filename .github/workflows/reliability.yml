@@ -4,7 +4,7 @@ name: Reliability
 # they do not.
 #
 # The suite is expensive - every scenario, three runs each - so it runs at two
-# depths, and all of it runs in one job, many runs at a time. Nothing is shared
+# depths, and almost all of it runs in one job, many runs at a time. Nothing is shared
 # between one run and another: each scenario generates its own chain and its
 # own database, and the runner gives every run in flight its own ports,
 # containers and copy of the tool's project (reliability/lib/parallel.ts). So a
@@ -12,10 +12,12 @@ name: Reliability
 # scenario across seven tools, on one runner instead of thirty-five, with one
 # checkout and one install per tool rather than one per job.
 #
-# What that gives up is a machine per run. The head-latency measures time how
-# long a tool takes to react, and a neighbour competing for CPU can make that
-# slower; they are the median of the repeats and read as such. The checks are
-# pass or fail, with minutes of patience, and do not notice.
+# What that gives up is a machine per run, and one column cannot afford it:
+# head latency times how quickly a tool writes a new block, and a neighbour
+# competing for the CPU reads as a tool that is slow to. Sharing moved Envio's
+# median from 7ms to 29ms. So that column runs on runners of its own, one per
+# tool - a few minutes each, alongside the main job rather than after it. The
+# rest are pass or fail with minutes of patience, and do not notice.
 #
 # A pull request that touches the suite gets every scenario once per tool,
 # which fills every column of the table and is enough to say what each tool
@@ -161,7 +163,8 @@ jobs:
           # one of them add arguments of its own. Tools are the exception,
           # split on spaces on purpose - and no tool is named with anything
           # else, so the runner refuses whatever a split turns up.
-          ARGS=("--repeats=$REPEATS" "--parallel=$PARALLEL")
+          # Head latency is measured by the job below, on machines of its own.
+          ARGS=("--repeats=$REPEATS" "--parallel=$PARALLEL" "--except-group=head-latency")
           # No tools named is every tool, and no scenarios named is every
           # scenario - the case a pull request and the weekly run both take.
           # An `&&` list that comes out false is a failed command under
@@ -195,9 +198,78 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+  latency:
+    name: head latency / ${{ matrix.tool }}
+    needs: scope
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      # A runner per tool, because this column is a measurement of time and a
+      # neighbour's work would be in it. The runs within a job go one after
+      # another for the same reason. A job that fails is that tool's result,
+      # not a reason to stop measuring the others.
+      fail-fast: false
+      matrix:
+        # Kept in step with RELIABILITY_TOOLS in reliability/lib/tools.ts by
+        # scripts/test-reliability.ts, which the Checks workflow runs.
+        tool:
+          - envio-rpc
+          - envio-subgraph-rpc
+          - ponder
+          - rindexer
+          - sqd-rpc
+          - subgraph
+          - subquery
+    # A run is about four minutes; three of them, with room to spare.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Measure head latency
+        env:
+          TOOL: ${{ matrix.tool }}
+          SCENARIOS: ${{ needs.scope.outputs.scenarios }}
+          REPEATS: ${{ needs.scope.outputs.repeats }}
+          SELECTED: ${{ inputs.tools }}
+        run: |
+          # A dispatch that named tools narrows the matrix; a tool this job is
+          # not for is skipped rather than failing the run.
+          if [ -n "$SELECTED" ] && ! echo " $SELECTED " | grep -q " $TOOL "; then
+            echo "$TOOL was not selected by this run."
+            exit 0
+          fi
+          # Quoted for the same reason as the main job. A dispatch that names
+          # scenarios outside this column leaves it nothing to do, which the
+          # runner says and exits cleanly on.
+          ARGS=("$TOOL" "--repeats=$REPEATS" "--group=head-latency")
+          if [ -n "$SCENARIOS" ]; then
+            ARGS+=("--scenarios=$SCENARIOS")
+          fi
+          node reliability/run.ts "${ARGS[@]}" 2>&1 | tee reliability-output.txt
+        timeout-minutes: 55
+
+      - name: Upload the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reliability-latency-${{ matrix.tool }}
+          path: reliability-output.txt
+          retention-days: 30
+
   summary:
     name: Summary
-    needs: [scope, run]
+    needs: [scope, run, latency]
     # A tool that reported nothing is a result in its own right: the table carries
     # its last published row forward and marks it stale, which is the same
     # contract the throughput tables have.

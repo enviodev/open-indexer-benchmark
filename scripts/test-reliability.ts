@@ -239,9 +239,9 @@ const IMPACTS = new Set([
 
 // ── The CI workflow ────────────────────────────────────────────────────
 //
-// CI runs every tool in one job, and nothing there lists them - except the
-// comment step, which counts how many tools reported against how many were
-// asked. A tool missing from that list would make a run where it failed read
+// CI runs every tool in one job, apart from head latency (below), and lists
+// them in two places: the head-latency matrix, and the comment step, which
+// counts how many tools reported against how many were asked. A tool missing from that list would make a run where it failed read
 // as complete; one listed that the suite does not run would make every run
 // claim a failure.
 
@@ -255,6 +255,35 @@ const workflowTools = (/^ {10}TOOLS: (.+)$/m.exec(WORKFLOW)?.[1] ?? "")
   .split(/\s+/)
   .filter(Boolean)
   .sort();
+/** The items of a matrix's `key:` block of `- value` lines, in order. */
+function matrixList(key: string): string[] {
+  const block = WORKFLOW.split(`\n        ${key}:\n`)[1];
+  if (!block) return [];
+  const items: string[] = [];
+  for (const line of block.split("\n")) {
+    const item = /^ {10}- (\S+)$/.exec(line);
+    if (!item) break;
+    items.push(item[1]);
+  }
+  return items;
+}
+
+// Head latency is measured on a runner per tool, apart from everything else,
+// because it is a measurement of time. A tool missing from that matrix has an
+// empty head-latency cell; the column left in the main job would be measured
+// on a shared machine; and the column missing from both is never measured.
+check(
+  "every tool the suite measures has a head-latency runner",
+  matrixList("tool").join(",") === [...RELIABILITY_TOOLS].sort().join(","),
+  `reliability.yml's latency matrix has ${matrixList("tool").join(", ") || "nothing"}, ` +
+    `RELIABILITY_TOOLS is ${[...RELIABILITY_TOOLS].sort().join(", ")}`
+);
+check(
+  "head latency is measured apart from the rest, and only there",
+  WORKFLOW.includes('"--except-group=head-latency"') &&
+    WORKFLOW.includes('"--group=head-latency"')
+);
+
 check(
   "the workflow counts every tool the suite measures",
   workflowTools.join(",") === [...RELIABILITY_TOOLS].sort().join(","),

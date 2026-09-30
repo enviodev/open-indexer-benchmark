@@ -65,6 +65,13 @@ export interface Patience {
   stallMs: number;
   /** The same, for a tool that has reached the head and has nothing left to fetch. */
   settleMs: number;
+  /**
+   * After a database outage, how long the writes a tool had in flight are
+   * given to land before "is it indexing again" is asked. See resumes().
+   */
+  writesLandMs: number;
+  /** And then how long it has to index something new. See resumes(). */
+  resumeMs: number;
 }
 
 /**
@@ -86,6 +93,8 @@ export const DEFAULT_PATIENCE: Patience = {
   reactMs: 120_000,
   stallMs: 150_000,
   settleMs: 30_000,
+  writesLandMs: 10_000,
+  resumeMs: 45_000,
 };
 
 /**
@@ -101,6 +110,15 @@ const DEEP_REORG = 80;
 const RECONCILE_POLL_MS = 500;
 /** How long the database stays down when it is taken away. */
 const DB_DOWN_MS = 10_000;
+
+/**
+ * Blocks added right before the mid-backfill outage, so the tool is still
+ * working through them when the database goes. Two thousand is close to a
+ * minute of work for Graph Node, the slowest to backfill here - far more than
+ * the moment it takes a tool to notice them and start.
+ */
+const BACKFILL_EXTENSION = 2_000;
+
 /**
  * How long the database is frozen rather than stopped.
  *
@@ -568,6 +586,68 @@ async function reviveIfNeeded(ctx: Ctx, reason: string): Promise<boolean> {
   return true;
 }
 
+/** The whole of resumes()'s wait, in seconds, for the verdicts that quote it. */
+const outageWindowS = (ctx: Ctx) =>
+  Math.round((ctx.patience.writesLandMs + ctx.patience.resumeMs) / 1_000);
+
+/**
+ * Whether a tool is indexing again after its database came back, and how long
+ * that took.
+ *
+ * Called the moment the database is accepting connections again, and asks
+ * for new work, not merely for rows. A batch the tool had queued when the
+ * database went away is retried and committed a moment after it comes back,
+ * whether or not the tool is otherwise alive: Graph Node's writer flushes the
+ * batch it was holding while its subgraph, failed by the outage, does nothing
+ * more for a hundred seconds or so. Read straight away, that flush was "indexing again",
+ * and whether it landed before or after the baseline was read decided the
+ * verdict. So the writes in flight are let land first (writesLandMs - Graph
+ * Node's writer retries for about seven seconds), and only then is the
+ * baseline read and the tool given new blocks.
+ *
+ * It then has resumeMs to write something: about a minute from the database
+ * coming back, all told. A ten-second blip that costs a minute of indexing is
+ * an outage of its own, and the tools that recover do so in seconds -
+ * Rindexer in about eleven, SubQuery's node straight away. The one that does
+ * not is Graph Node, which retries a failed subgraph after a jittered backoff -
+ * 98 to 125 seconds in the runs that were looked at - and longer each time
+ * after that. The 120 seconds this used to allow sat inside that spread, and
+ * published a pass or a fail by the roll of its jitter. A minute is clear of
+ * it on both sides.
+ *
+ * The seconds are to the first rows written after the database came back when
+ * the tool did recover, and the whole wait when it did not. Throws when the
+ * tool's tables cannot be read at all, as rowsNow does.
+ */
+async function resumes(
+  ctx: Ctx,
+  label: string
+): Promise<{ moved: boolean; seconds: number; baseline: number }> {
+  const back = performance.now();
+  const atBack = await rowsNow(ctx);
+  let firstMove: number | null = null;
+  const count = async () => {
+    const rows = await ctx.observe.count().catch(() => 0);
+    if (firstMove === null && rows > atBack) firstMove = performance.now();
+    return rows;
+  };
+  while (performance.now() - back < ctx.patience.writesLandMs) {
+    await count();
+    await sleep(RECONCILE_POLL_MS);
+  }
+  const baseline = await rowsNow(ctx);
+  // Something new to index, so a tool that finished everything it had while
+  // the writes settled is not failed for being done.
+  ctx.chain.advance(20);
+  const moved = await ctx.waitFor(
+    label,
+    async () => (await count()) > baseline,
+    ctx.patience.resumeMs
+  );
+  const until = moved && firstMove !== null ? firstMove : performance.now();
+  return { moved, seconds: Math.round((until - back) / 1_000), baseline };
+}
+
 // ── Crash recovery ─────────────────────────────────────────────────────
 
 export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
@@ -589,6 +669,25 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
 
   // ── Mid-backfill, with the chain still moving ──
   //
+  // The outage has to find the tool working, and nine hundred blocks do not
+  // promise that: a tool that commits in large batches can report its first
+  // four hundred transfers in the same write that finishes the range, and is
+  // then sitting idle at the head when the database goes. Graph Node did, two
+  // runs in three, and sat the outage out - and the third, which the outage
+  // caught mid-batch, failed its subgraph and stopped for two minutes. A check
+  // whose answer depends on which of those a run happened to be is not a
+  // check. So the chain is extended by far more than
+  // any tool finishes in a moment, and the database is taken away only once
+  // the tool has written something from the extension: it is then, by
+  // construction, partway through a backfill it has been handed.
+  const extensionFrom = await rowsNow(ctx).catch(() => 400);
+  ctx.chain.advance(BACKFILL_EXTENSION);
+  await ctx.waitFor(
+    "indexing into the extended range",
+    async () => (await ctx.observe.count().catch(() => 0)) > extensionFrom,
+    ctx.patience.reactMs
+  );
+
   // The chain keeps producing across the outage rather than standing still,
   // because an indexer only meets a failed query if it is issuing queries. A
   // tool that had caught up would sit the outage out and pass a check it was
@@ -601,28 +700,19 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     await producingThrough;
     return { checks: { "recovers-backfill": na(String((err as Error).message)) }, measures };
   }
-  await producingThrough;
-  // Counted once the database is back, never before it went away: a batch
-  // the tool commits in the moment before the stop would otherwise read as
-  // the tool indexing again, and pass one that died with the database.
-  let before: number;
+  // Counted once the database is back, never before it went away, and after
+  // the writes it was holding have landed: see resumes().
+  let backfill: Awaited<ReturnType<typeof resumes>>;
   try {
-    before = await rowsNow(ctx);
+    backfill = await resumes(ctx, "indexing again after the database came back");
   } catch (err) {
+    await producingThrough;
     return { checks: { "recovers-backfill": na((err as Error).message) }, measures };
   }
-  // There has to be work left for "it started indexing again" to mean
-  // anything. A tool fast enough to have finished the four hundred blocks
-  // before the database went away would otherwise be failed for having
-  // nothing to do, which is the opposite of the finding.
-  ctx.chain.advance(50);
-  const backAt = performance.now();
-  const movedOn = await ctx.waitFor(
-    "indexing again after the database came back",
-    async () => (await ctx.observe.count().catch(() => 0)) > before,
-    ctx.patience.reactMs
-  );
-  measures["resume-seconds"] = Math.round((performance.now() - backAt) / 1_000);
+  await producingThrough;
+  const before = backfill.baseline;
+  const movedOn = backfill.moved;
+  measures["resume-seconds"] = backfill.seconds;
   // A tool that exited is started again and asked the same question. Exiting
   // is a real cost and it is published - as "restarts needed", in the cell
   // beside this score - but it is not a second finding on top of whatever the
@@ -642,8 +732,8 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     indexingAgain,
     revived
       ? "exited when the database went away and indexed nothing after a restart"
-      : `indexed nothing for ${Math.round(ctx.patience.reactMs / 1_000)}s after the ` +
-        `database came back`
+      : `indexed nothing new for ${outageWindowS(ctx)}s ` +
+        `after the database came back`
   );
 
   // ── At the head ──
@@ -663,11 +753,9 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     const producing = produce(ctx, 20, 2_000);
     try {
       await ctx.restartDb(DB_DOWN_MS);
-      const headBefore = await rowsNow(ctx);
-      const followedOn = await ctx.waitFor(
-        "indexing again at the head",
-        async () => (await ctx.observe.count().catch(() => 0)) > headBefore,
-        ctx.patience.reactMs
+      const { moved: followedOn, baseline: headBefore } = await resumes(
+        ctx,
+        "indexing again at the head"
       );
       // Same rule as the backfill above: restarted by hand if it has to be, and
       // asked again.
@@ -687,7 +775,8 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
         following,
         restarted
           ? "exited at the head and stopped following the chain even after a restart"
-          : "stopped following the head after the database came back"
+          : `indexed nothing new at the head for ` +
+            `${outageWindowS(ctx)}s after the database came back`
       );
     } catch (err) {
       checks["recovers-head"] = na(String((err as Error).message));
@@ -712,16 +801,10 @@ export async function dbRestart(ctx: Ctx): Promise<ScenarioResult> {
     const producingFrozen = produce(ctx, 20, 500);
     try {
       await ctx.pauseDb(PAUSE_MS);
-      // The blocks produced during the freeze are all out by now, so the tool is
-      // given more to do once it is unfrozen.
-      const frozenBefore = await rowsNow(ctx);
-      ctx.chain.advance(20);
+      // The blocks produced during the freeze are all out by now; resumes()
+      // gives the tool more to do once it is unfrozen.
       checks["recovers-pause"] = verdict(
-        await ctx.waitFor(
-          "indexing again after the database was unfrozen",
-          async () => (await ctx.observe.count().catch(() => 0)) > frozenBefore,
-          ctx.patience.reactMs
-        ),
+        (await resumes(ctx, "indexing again after the database was unfrozen")).moved,
         ctx.alive()
           ? "waits for ever on a frozen database: no error, no exit, and no rows"
           : "exited while its database was frozen"

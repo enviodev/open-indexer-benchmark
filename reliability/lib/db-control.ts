@@ -13,6 +13,7 @@
 // and it keeps the knowledge in the scenario that needs it.
 
 import { execFile } from "node:child_process";
+import { createServer, type Server, type Socket } from "node:net";
 import { promisify } from "node:util";
 import { psql, sleep, waitPg } from "../../cases/lib/process.ts";
 
@@ -58,6 +59,61 @@ async function containerFor(dbUrl: string): Promise<string> {
   return matches[0].split(" ")[0];
 }
 
+/**
+ * Answer the database's port, while it is down, the way a proxy in front of a
+ * restarting Postgres does: accept every connection and close it at once.
+ *
+ * A stopped container leaves its port refusing connections, and that is the
+ * kindest version of an outage - a client finds out before it has started
+ * anything. Most deployments never see it. PgBouncer, a cloud provider's SQL
+ * proxy, a Kubernetes service mesh, and Docker's own port proxy while a
+ * container starts all stay up while the database behind them does not, and a
+ * client meeting one gets its connection accepted and then ended in the middle
+ * of the handshake. Docker's proxy did exactly that for the moment each
+ * restart took, and it was the difference between a Ponder run that recovered
+ * and one whose indexing waited for ever on a connection that had already
+ * gone - one run in several, on timing nobody chose. Holding the moment open
+ * for the whole outage asks every tool that question every time.
+ *
+ * Returns null when the port cannot be taken - Docker still releasing it, or a
+ * tool whose database is not published on the host - and the outage is then
+ * the plain refused one, which is still an outage.
+ */
+async function acceptAndClose(port: string): Promise<{ close(): Promise<void> } | null> {
+  const sockets = new Set<Socket>();
+  const server: Server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    socket.on("error", () => {});
+    socket.end();
+  });
+  const listen = (host: string) =>
+    new Promise<boolean>((resolve) => {
+      const failed = () => resolve(false);
+      server.once("error", failed);
+      server.listen(Number(port), host, () => {
+        server.off("error", failed);
+        resolve(true);
+      });
+    });
+  for (let attempt = 0; attempt < 20; attempt++) {
+    // Both families where the host has IPv6, since `localhost` may resolve to
+    // either; IPv4 alone where it does not.
+    const listening = (await listen("::")) || (await listen("0.0.0.0"));
+    if (listening) {
+      return {
+        close: () =>
+          new Promise<void>((resolve) => {
+            for (const socket of sockets) socket.destroy();
+            server.close(() => resolve());
+          }),
+      };
+    }
+    await sleep(100);
+  }
+  return null;
+}
+
 export interface RestartOutcome {
   /** Milliseconds the database was unreachable, as the harness saw it. */
   downMs: number;
@@ -72,6 +128,8 @@ export interface RestartOutcome {
  * kinder version of this failure and the one worth testing first: a tool that
  * cannot survive a graceful restart has no chance at a crash. The connections
  * it held are closed under it either way, which is the part that matters.
+ * While it is down, the port accepts connections and closes them, as a proxy
+ * in front of it would - see acceptAndClose.
  */
 export async function restartDatabase(
   dbUrl: string,
@@ -80,7 +138,13 @@ export async function restartDatabase(
   const container = await containerFor(dbUrl);
   const startedAt = performance.now();
   await run("docker", ["stop", container]);
-  await sleep(downMs);
+  const proxy = await acceptAndClose(portOf(dbUrl));
+  try {
+    await sleep(downMs);
+  } finally {
+    // Released before the container asks for the port back.
+    await proxy?.close();
+  }
   await run("docker", ["start", container]);
   // Postgres accepting connections is not the same as docker reporting the
   // container started, and the scenario times a tool's recovery from the

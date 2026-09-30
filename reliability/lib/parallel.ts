@@ -12,9 +12,12 @@
 //   project     a copy of the tool's directory under .reliability-work/
 //
 // and the price is the one that kept this serial to begin with: runs share a
-// machine, so a tool that is slow to react can be slow because a neighbour is
-// busy. That reads in the head-latency measures, which are published as the
-// median of the repeats and are noisier here than on a machine of their own.
+// machine. The checks do not notice - they are pass or fail with minutes of
+// patience - but a measurement of how quickly a tool reacts does: a
+// neighbour's build reads as a tool that is slow to write the head. So the
+// head-latency runs are not shared: they go last, one at a time, with nothing
+// else running (see ALONE). CI goes further and gives them runners of their
+// own, so the pool there never has them.
 //
 // A slot runs one job at a time and is reused, so a pool of N never has more
 // than N copies of anything. Before a tool's first run, the tool is prepared
@@ -67,7 +70,15 @@ const WORKER_TIMEOUT_MS = 90 * 60_000;
  * Which columns go first. The pool finishes when its longest job does, so the
  * slowest columns are started first and the quick ones fill in around them.
  */
-const GROUP_ORDER = ["rpc-faults", "reorgs", "crash-recovery", "head-latency", "data-fidelity"];
+const GROUP_ORDER = ["rpc-faults", "reorgs", "crash-recovery", "data-fidelity", "head-latency"];
+
+/**
+ * Columns whose runs measure time, and so get the machine to themselves: one
+ * at a time, started only once everything else has finished. They sort last
+ * in GROUP_ORDER, so waiting for the machine to empty costs nothing but the
+ * tail of the pool.
+ */
+const ALONE = new Set(["head-latency"]);
 
 interface Job {
   tool: ReliabilityTool;
@@ -201,6 +212,8 @@ export async function runParallel(
 
   const groupOf = (scenario: string) =>
     GROUP_ORDER.indexOf(SCENARIOS.find((s) => s.id === scenario)?.group ?? "");
+  const alone = (job: Job) =>
+    ALONE.has(SCENARIOS.find((s) => s.id === job.scenario)?.group ?? "");
   const jobs: Job[] = options.tools
     .flatMap((tool) =>
       options.scenarios.flatMap((scenario) =>
@@ -264,8 +277,10 @@ export async function runParallel(
   };
 
   const pending = [...jobs];
+  /** Set while a run that has the machine to itself is going. */
+  let exclusive = false;
   while (pending.length > 0 || running.size > 0) {
-    while (free.length > 0 && !stopping) {
+    while (free.length > 0 && !stopping && !exclusive) {
       // A tool nobody has prepared yet is prepared first, on a slot of its own.
       const cold = options.tools.find(
         (tool) =>
@@ -290,9 +305,13 @@ export async function runParallel(
         });
         continue;
       }
-      const next = pending.findIndex((job) => prepared.has(job.tool));
+      // A run that needs the machine to itself waits for it to empty.
+      const next = pending.findIndex(
+        (job) => prepared.has(job.tool) && (!alone(job) || running.size === 0)
+      );
       if (next === -1) break;
       const [job] = pending.splice(next, 1);
+      if (alone(job)) exclusive = true;
       occupy(async (slot) => {
         const label = `${job.tool} / ${job.scenario} #${job.attempt}`;
         console.log(`[${label}] starting on ${slot.name} (${elapsed()} in)`);
@@ -303,6 +322,7 @@ export async function runParallel(
           [job.tool, job.scenario, String(job.attempt)],
           resolve(LOG_DIR, job.tool, `${job.scenario}-${job.attempt}.log`)
         );
+        if (alone(job)) exclusive = false;
         // A run cut short by the interrupt is no result at all.
         if (stopping) return;
         console.log(
