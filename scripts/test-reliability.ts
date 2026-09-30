@@ -42,6 +42,7 @@ import {
 import {
   buildReliabilityTable,
   fillUnreportedColumns,
+  marked,
   parsePublishedReliability,
   reliabilityRowKey,
   toReliabilityRow,
@@ -658,10 +659,20 @@ check(
   table
 );
 check(
-  "a column below full marks reads as a tally, with its measure",
-  table.includes(`**0/${CRASH_CHECKS}** (2 restarts)`) &&
+  "a column below full marks reads as a tally, marked, with its measure",
+  table.includes(`**0/${CRASH_CHECKS}** 🔴 (2 restarts)`) &&
     table.includes(`**${ALL_CHECKS - CRASH_CHECKS} / ${ALL_CHECKS}**`),
   table
+);
+// A table published before failures were marked carries its failing cells
+// forward; they gain the mark rather than reading as neither pass nor fail.
+check(
+  "a carried failing cell gains its mark, and a passing or marked one is left as it is",
+  marked("**7/10** (no restarts)") === "**7/10** 🔴 (no restarts)" &&
+    marked("**0/7**") === "**0/7** 🔴" &&
+    marked("**0/7** 🔴") === "**0/7** 🔴" &&
+    marked("11/11 ✅ (2 restarts)") === "11/11 ✅ (2 restarts)" &&
+    marked("—") === "—"
 );
 // A row already being carried when it was published must still say so after a
 // round trip, or the next run republishes a stale result as a fresh one.

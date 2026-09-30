@@ -35,6 +35,7 @@ import {
 import {
   buildReliabilityTable,
   fillUnreportedColumns,
+  marked,
   parsePublishedReliability,
   reliabilityRowKey,
   toReliabilityRow,
@@ -115,7 +116,11 @@ for (const prior of published) {
   // from a table, and a tool that has since stopped being measured does not
   // linger because it was once printed.
   if (prior.overall.asked === 0 || !measured.has(key)) continue;
-  rows.push({ ...prior, carriedOver: true });
+  rows.push({
+    ...prior,
+    cells: Object.fromEntries(Object.entries(prior.cells).map(([id, cell]) => [id, marked(cell)])),
+    carriedOver: true,
+  });
 }
 
 // A tool with no row at all - nothing fresh, nothing published - is waiting on

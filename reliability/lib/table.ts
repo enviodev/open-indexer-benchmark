@@ -89,15 +89,15 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
 }
 
 /**
- * The tally, with a tick after it on the columns a tool passed whole.
+ * The tally, with a tick after it on the columns a tool passed whole and a red
+ * dot on the ones where something went wrong.
  *
  * Reading a row of "10/10, 6/6, 8/10" means dividing five fractions to find
- * the one that is not one. The tick does that division for the reader, so the
- * fractions left bare are the findings - but the count stays, because "8/10"
- * next to a tick says nothing about how much was asked unless the tick says it
- * too. The count comes first so the column reads as a column of counts, and
- * the tick after it lines up with the bold tallies of the columns that fell
- * short rather than pushing them out of alignment.
+ * the one that is not one. The marks do that division for the reader - a
+ * failure is as visible as a pass, rather than merely the cell without a tick
+ * - but the count stays, because a mark says nothing about how much was asked.
+ * The count comes first so the column reads as a column of counts, with the
+ * mark after it in the same place either way; a failing tally is bold as well.
  *
  * The link lives on the column heading rather than in every cell: the same URL
  * seven times a column is most of the table's width and none of its meaning.
@@ -110,7 +110,21 @@ function scoreCell(tally: Tally, headline: string | null): string {
   if (tally.asked === 0) return NO_VALUE;
   const count = `${tally.passed}/${tally.asked}`;
   if (tally.passed === tally.asked) return `${count} ✅${measure}`;
-  return `**${count}**${measure}`;
+  return `**${count}** ${FAILED}${measure}`;
+}
+
+/** The mark on a column where something went wrong. */
+const FAILED = "🔴";
+
+/**
+ * A published cell with its mark brought up to date: a failing tally from a
+ * table published before failures were marked gets its dot, so a carried cell
+ * reads like the fresh ones beside it.
+ */
+export function marked(cell: string): string {
+  const tally = cell.replace(/\*/g, "").match(/(\d+)\s*\/\s*(\d+)/);
+  if (!tally || Number(tally[1]) >= Number(tally[2]) || cell.includes(FAILED)) return cell;
+  return cell.replace(/^(\*\*\d+\s*\/\s*\d+\*\*)/, `$1 ${FAILED}`);
 }
 
 /**
@@ -181,7 +195,8 @@ export function toReliabilityRow(
  *
  * A run can stop before it reaches a column - a job that ran out of time, a
  * tool that was not selected. Left alone, the tool's other columns would
- * publish and the missing one would read as a dash - an absence dressed as a result, replacing a real one. So the last
+ * publish and the missing one would read as a dash - an absence dressed as a
+ * result, replacing a real one. So the last
  * published cell stands in, marked, and its tally counts towards the overall
  * again. Only a column nothing reported is filled: one the run reached and
  * could not measure is a result of this run, dash and all.
@@ -199,7 +214,7 @@ export function fillUnreportedColumns(
     const last = (prior.cells[group.id] ?? NO_VALUE).replace(/\s*⚠️\s*$/, "");
     const tally = last.replace(/\*/g, "").match(/(\d+)\s*\/\s*(\d+)/);
     if (!tally) continue;
-    cells[group.id] = `${last} ⚠️`;
+    cells[group.id] = `${marked(last)} ⚠️`;
     passed += Number(tally[1]);
     asked += Number(tally[2]);
     notes = notes.filter((note) => note.group !== group.id);
