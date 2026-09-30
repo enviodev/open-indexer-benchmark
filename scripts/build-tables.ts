@@ -166,6 +166,14 @@ for (const benchCase of cases) {
           });
     const label = `${row.name} via ${results[0].source}`;
 
+    const statuses = new Set(results.map((r) => r.correctness));
+    if (statuses.size > 1 && annotate) {
+      console.log(
+        `::warning::${title}: ${label} — runs disagree on its data ` +
+          `(${results.map((r) => r.correctness).join(", ")}); publishing the worst.`
+      );
+    }
+
     if (verdict?.kind === "shift" && annotate) {
       console.log(
         `::notice::${title}: ${label} moved from ${formatRate(verdict.from)} to ` +
@@ -240,15 +248,17 @@ for (const benchCase of cases) {
 
   const table = buildTable(rows);
   writeFileSync(join(OUT_DIR, `benchmark-table-${benchCase}.md`), table);
-  // The README publishes results; the pull request comment reports on a run.
-  // Which rows this particular run happened to re-measure is the second thing,
-  // not the first — a reader of the README wants the numbers, and a row marked
-  // stale forever because its tool is measured by hand reads as a defect. The
-  // correctness and unsupported notes stay in both: those are about the data,
-  // not about which job produced it.
+  // The README publishes results; the pull request comment and the job summary
+  // report on a run. Which rows this particular run re-measured, and how far
+  // its samples of a row disagreed, are about how the benchmark ran, not about
+  // the tools — a reader of the README wants the numbers, and should see the
+  // same table however the run that produced them went. The correctness and
+  // unsupported notes stay in both: those are about the data.
   writeFileSync(
     join(OUT_DIR, `benchmark-readme-${benchCase}.md`),
-    buildTable(rows.map((row) => ({ ...row, carriedOver: false, localOnly: false })))
+    buildTable(
+      rows.map((row) => ({ ...row, carriedOver: false, localOnly: false, unstable: undefined }))
+    )
   );
   // The PR comment is assembled by a workflow step that cannot import this
   // module, so the resolved name is handed over as a file.

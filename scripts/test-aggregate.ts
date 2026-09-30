@@ -78,7 +78,7 @@ console.log("\nMedian:");
     "correctness is the worst any sample reported",
     wrong.eventsPerSec === 200 &&
       wrong.correctness === "mismatch" &&
-      wrong.correctnessDetail === "in 1 of 3 runs: 3 balances wrong",
+      wrong.correctnessDetail === "3 balances wrong",
     JSON.stringify([wrong.correctness, wrong.correctnessDetail])
   );
   const partial = pickMedian([
@@ -204,12 +204,20 @@ console.log("\nbuild-tables.ts end to end:");
     // there, the median (lower middle) is 43.1, and the runs still disagree.
     write("envio-rpc", "recheck", result(270));
     const out = run("final");
-    const table = readFileSync(join(dir, `benchmark-readme-${benchCase}.md`), "utf8");
+    const report = readFileSync(join(dir, `benchmark-table-${benchCase}.md`), "utf8");
     check(
-      "a row still disagreeing is published with its note in the README",
-      table.includes("| 43.1 |") &&
-        table.includes("> ⚠️ Envio Indexer via RPC — 4 runs ranged 42.9–270.0 events/s"),
-      table
+      "a row still disagreeing is flagged with its range in the run's report",
+      report.includes("| 43.1 |") &&
+        report.includes("> ⚠️ Envio Indexer via RPC — 4 runs ranged 42.9–270.0 events/s"),
+      report
+    );
+    const readmeTable = readFileSync(join(dir, `benchmark-readme-${benchCase}.md`), "utf8");
+    check(
+      "the README gets its median and nothing about how the run went",
+      readmeTable.includes("| 43.1 |") &&
+        !readmeTable.includes("⚠️") &&
+        !readmeTable.includes("runs ranged"),
+      readmeTable
     );
     check("and is annotated on the run", out.includes("::warning::"), out);
     check(

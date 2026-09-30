@@ -78,12 +78,12 @@ export function pickMedian(samples: BenchmarkResult[]): BenchmarkResult {
   if (CORRECTNESS_RANK[worst.correctness] <= CORRECTNESS_RANK[median.correctness]) {
     return median;
   }
-  const failing = samples.filter((s) => s.correctness === worst.correctness).length;
+  // The detail reads the same as a single run's would, since it ends up in the
+  // README; how many of the runs it came from is the run's business.
   return {
     ...median,
     correctness: worst.correctness,
-    correctnessDetail:
-      `in ${failing} of ${samples.length} runs: ${worst.correctnessDetail}`.trim(),
+    correctnessDetail: worst.correctnessDetail,
   };
 }
 

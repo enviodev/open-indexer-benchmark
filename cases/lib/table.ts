@@ -45,8 +45,8 @@ export interface TableRow {
   unsupported?: string;
   /**
    * Set when this row's samples still disagreed after the gate measured it
-   * again: the median is published, and this says how far apart the runs were
-   * so the number is not read as a precise one.
+   * again: how far apart the runs were. Reported with the run, like a carried
+   * row, and left out of the README, which only ever shows the numbers.
    */
   unstable?: string;
 }
@@ -158,9 +158,6 @@ export function buildTable(rows: TableRow[]): string {
     );
   }
 
-  // Unlike a carried row, an unstable one is a statement about the data, so it
-  // is kept in the README as well as in the run's own report — and read back
-  // with the row, so carrying it forward does not quietly drop the doubt.
   for (const row of sorted.filter((r) => r.unstable)) {
     lines.push(
       "",
@@ -198,15 +195,9 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
   // split is on the first em-dash, which is safe because tool names never
   // contain one; a detail string may, and keeps it.
   const notes = new Map<string, string>();
-  // Unstable rows are noted as "> ⚠️ Tool via Source — detail.", keyed the
-  // same way rowKey keys a row. The carried and local-only notes never name a
-  // source, so they cannot be mistaken for one.
-  const unstable = new Map<string, string>();
   for (const line of body.split("\n")) {
     const note = line.match(/^>\s*\*\*\((\d+)\)\*\*\s*.*?—\s*(.+)$/);
     if (note) notes.set(note[1], note[2].trim());
-    const doubt = line.match(/^>\s*⚠️\s*(.+?) via (.+?) — (.+?)\.?$/);
-    if (doubt) unstable.set(`${doubt[1]}|${doubt[2]}`, doubt[3]);
   }
 
   for (const line of body.split("\n")) {
@@ -247,7 +238,7 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
     }
     if (!name || !Number.isFinite(eventsPerSec)) continue;
 
-    const row: TableRow = {
+    rows.push({
       name,
       eventsPerSec,
       cells: {
@@ -259,10 +250,7 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
         correctnessDetail: reference ? (notes.get(reference[2]) ?? "") : "",
         dbSize: cells[6],
       },
-    };
-    const doubt = unstable.get(rowKey(row));
-    if (doubt) row.unstable = doubt;
-    rows.push(row);
+    });
   }
   return rows;
 }

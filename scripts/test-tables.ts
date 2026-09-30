@@ -188,10 +188,9 @@ check(
   JSON.stringify(reparsed)
 );
 
-// A row whose runs still disagreed after the gate measured it again publishes
-// its median with a note saying how far apart they were. The note is about the
-// data, so it must survive into the README, and the row must still read back
-// as the same tool with the same rate on the next run.
+// A row whose runs still disagreed after the gate measured it again is flagged
+// in the run's report with how far apart they were, and must still read back as
+// the same tool with the same rate if that report is ever parsed.
 const unstableRow = { ...rows[2], unstable: "4 runs ranged 42.9–269.0 events/s against 269.0 last published; the median is shown" };
 const withUnstable = buildTable([rows[0], unstableRow]);
 check(
@@ -214,24 +213,6 @@ check(
         row.cells.tool === unstableRow.cells.tool
     ),
   JSON.stringify(unstableBack)
-);
-
-check(
-  "an unstable row reads its note back",
-  unstableBack.find((row) => row.cells.source.startsWith("[RPC]"))?.unstable === unstableRow.unstable &&
-    unstableBack.find((row) => row.cells.source.startsWith("[HyperSync]"))?.unstable === undefined,
-  JSON.stringify(unstableBack.map((row) => row.unstable))
-);
-// Its job failing next run must not launder the number into a clean one.
-const carriedUnstable = buildTable([
-  rows[0],
-  { ...unstableBack.find((row) => row.cells.source.startsWith("[RPC]"))!, carriedOver: true },
-]);
-check(
-  "a carried unstable row keeps its note",
-  carriedUnstable.includes(`> ⚠️ Envio Indexer via RPC — ${unstableRow.unstable}.`) &&
-    carriedUnstable.includes("carried forward"),
-  carriedUnstable
 );
 
 check("an empty table is handled", buildTable([]) === "_No results collected._");
