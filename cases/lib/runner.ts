@@ -17,9 +17,11 @@
 //   Phase B (throughput) — only for indexers that finished phase A in under
 //     the benchmark window. Wipe state and re-run with an end block just below
 //     the chain head, stopping at whichever comes first: the window elapsing or
-//     the end block being reached. The window is run more than once and the
+//     the end block being reached. The window is run twice by default and the
 //     best rate reported, because a single window on a shared CI runner is
-//     noisy enough to reorder the middle of the table. Indexers too slow to
+//     noisy enough to reorder the middle of the table; a main run, which
+//     repeats the whole job in rounds and takes the median, asks for one
+//     (`--windows=1`). Indexers too slow to
 //     finish phase A in the window instead have their rate derived from phase
 //     A, where the range and event count are known exactly.
 //
@@ -66,13 +68,19 @@ const HEAD_OFFSET = 500;
 const PHASE_A_TIMEOUT_S = 300;
 
 /**
- * How many throughput windows to run for indexers fast enough to get one.
- * A single window is noticeably noisy on shared CI runners — repeat rates have
- * been seen to differ by ~30% — so the window is run more than once and the
- * best result is reported. Interference only ever slows a run down, so the
- * fastest of the samples is the one least polluted by it.
+ * How many throughput windows to run for indexers fast enough to get one, unless
+ * `--windows=<n>` says otherwise. A single window is noticeably noisy on shared
+ * CI runners — repeat rates have been seen to differ by ~30% — so the window is
+ * run more than once and the best result is reported. Interference only ever
+ * slows a run down, so the fastest of the samples is the one least polluted by
+ * it.
+ *
+ * A main run passes 1: it measures every tool in three rounds half an hour
+ * apart and publishes the median, which covers the same noise better — two
+ * back-to-back windows share whatever slow minute the endpoint is having — and
+ * a second window per round would only add time.
  */
-const THROUGHPUT_RUNS = 2;
+const DEFAULT_THROUGHPUT_RUNS = 2;
 
 const DEFAULT_WINDOW_S = 100;
 
@@ -417,6 +425,7 @@ async function benchmarkIndexer(
   rpcUrl: string,
   apiToken: string,
   windowS: number,
+  throughputRuns: number,
   headEndBlock: number,
   mock: RpcMock | null
 ): Promise<BenchmarkResult> {
@@ -555,11 +564,11 @@ async function benchmarkIndexer(
     seconds: number;
   }[] = [];
 
-  for (let attempt = 1; attempt <= THROUGHPUT_RUNS; attempt++) {
+  for (let attempt = 1; attempt <= throughputRuns; attempt++) {
     const phaseB = factory({ config, rpcUrl, endBlock: headEndBlock });
     activeDriver = phaseB;
     console.log(
-      `\n--- ${name} — throughput (run ${attempt} of ${THROUGHPUT_RUNS}) ---\n`
+      `\n--- ${name} — throughput (run ${attempt} of ${throughputRuns}) ---\n`
     );
     console.log(
       `Running for up to ${windowS}s, stopping at block ${headEndBlock.toLocaleString(
@@ -736,6 +745,18 @@ function parseWindowSeconds(): number {
   return value;
 }
 
+/** Throughput windows per indexer, from `--windows=<n>`. */
+function parseThroughputRuns(): number {
+  const flag = process.argv.find((a) => a.startsWith("--windows="));
+  if (!flag) return DEFAULT_THROUGHPUT_RUNS;
+  const value = Number(flag.slice("--windows=".length));
+  if (!Number.isInteger(value) || value < 1) {
+    console.error(`Error: --windows must be a whole number of at least 1.`);
+    process.exit(1);
+  }
+  return value;
+}
+
 async function run(config: CaseConfig) {
   const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const selected = positional.length > 0 ? positional : INDEXERS;
@@ -750,6 +771,7 @@ async function run(config: CaseConfig) {
   }
 
   const windowS = parseWindowSeconds();
+  const throughputRuns = parseThroughputRuns();
 
   const apiToken = process.env.ENVIO_API_TOKEN;
   if (!apiToken) {
@@ -821,6 +843,7 @@ async function run(config: CaseConfig) {
       rpcUrl,
       apiToken,
       windowS,
+      throughputRuns,
       headEndBlock,
       mock
     );

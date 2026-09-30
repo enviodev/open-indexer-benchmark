@@ -20,6 +20,10 @@ on:
         description: 'Throughput window in seconds'
         required: true
         type: string
+      windows:
+        description: 'Throughput windows per indexer in each round'
+        required: true
+        type: string
       case1:
         type: string
         default: ''
@@ -64,6 +68,7 @@ jobs:
       case: ${{ inputs.case1 }}
       indexers: ${{ inputs.indexers1 }}
       duration: ${{ inputs.duration }}
+      windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
@@ -80,6 +85,7 @@ jobs:
       case: ${{ inputs.case2 }}
       indexers: ${{ inputs.indexers2 }}
       duration: ${{ inputs.duration }}
+      windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
@@ -92,6 +98,7 @@ jobs:
       case: ${{ inputs.case3 }}
       indexers: ${{ inputs.indexers3 }}
       duration: ${{ inputs.duration }}
+      windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
@@ -104,6 +111,7 @@ jobs:
       case: ${{ inputs.case4 }}
       indexers: ${{ inputs.indexers4 }}
       duration: ${{ inputs.duration }}
+      windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit
 
@@ -116,5 +124,6 @@ jobs:
       case: ${{ inputs.case5 }}
       indexers: ${{ inputs.indexers5 }}
       duration: ${{ inputs.duration }}
+      windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}
     secrets: inherit

@@ -66,6 +66,7 @@ jobs:
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
       rounds: ${{ steps.set-matrix.outputs.rounds }}
+      windows: ${{ steps.set-matrix.outputs.windows }}
       gate: ${{ steps.set-matrix.outputs.gate }}
       touched: ${{ steps.set-matrix.outputs.touched }}
     steps:
@@ -242,6 +243,18 @@ jobs:
           esac
           echo "rounds=$ROUNDS" >> "$GITHUB_OUTPUT"
 
+          # Throughput windows per job. A single-round run keeps the runner's
+          # best of two. Several rounds already sample each tool half an hour
+          # apart and publish the median, which a second back-to-back window —
+          # sharing the first one's slow minute on the endpoint — adds nothing
+          # to but time. The recheck takes the same, so it is a like-for-like
+          # fourth sample.
+          if [ "$ROUNDS" -gt 1 ]; then
+            echo "windows=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "windows=2" >> "$GITHUB_OUTPUT"
+          fi
+
           # Only a push publishes, so only a push is gated: a row that moved a
           # long way from the README, whose runs disagree, is measured again
           # before it replaces the published value.
@@ -294,6 +307,7 @@ jobs:
     with:
       round: '1'
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
       case1: ${{ needs.setup.outputs.case1 }}
       case2: ${{ needs.setup.outputs.case2 }}
       case3: ${{ needs.setup.outputs.case3 }}
@@ -316,6 +330,7 @@ jobs:
     with:
       round: '2'
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
       case1: ${{ needs.setup.outputs.case1 }}
       case2: ${{ needs.setup.outputs.case2 }}
       case3: ${{ needs.setup.outputs.case3 }}
@@ -336,6 +351,7 @@ jobs:
     with:
       round: '3'
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
       case1: ${{ needs.setup.outputs.case1 }}
       case2: ${{ needs.setup.outputs.case2 }}
       case3: ${{ needs.setup.outputs.case3 }}
@@ -421,6 +437,7 @@ jobs:
       case: ${{ matrix.case }}
       indexers: ${{ toJSON(fromJSON(needs.aggregate.outputs.recheck_indexers)[matrix.case]) }}
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
       round: recheck
     secrets: inherit
 
