@@ -25,13 +25,11 @@ on:
         type: string
   push:
     branches: [main]
-  # Disabled on pull requests while the reliability suite is being built out.
-  # Forty-four jobs of throughput measurement, none of which a change to the
-  # reliability suite can affect, were the slowest thing on every one of its
-  # pull requests. `main` still publishes the tables, and a dispatch still runs
-  # whatever is asked for. Uncomment to get the per-pull-request tables back.
-  #
-  # pull_request:
+  # A pull request runs only the scenarios and tools its diff touches (see
+  # scripts/select-scope.ts), once, and comments the tables on the pull
+  # request; it never publishes. A change to the reliability suite alone, or
+  # to READMEs and METHODOLOGY.md, runs nothing.
+  pull_request:
 
 # One run per branch at a time. Two runs side by side double how many indexers
 # hit the shared data endpoints at once, which is the noise the rest of this

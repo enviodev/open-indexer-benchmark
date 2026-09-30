@@ -133,7 +133,7 @@ function isInert(file: string, parts: string[]): boolean {
   // Documentation never changes what a run measures, wherever it sits.
   if (parts[parts.length - 1] === "README.md") return true;
   if (isReliabilityOnly(parts)) return true;
-  if (file === ".gitignore" || file === "LICENSE") return true;
+  if (file === ".gitignore" || file === "LICENSE" || file === "METHODOLOGY.md") return true;
   // Archived third-party results, kept for reference only.
   if (parts[0] === "sentio-benchmarks-may-2025") return true;
   return LOCAL_SCRIPTS.has(file);
