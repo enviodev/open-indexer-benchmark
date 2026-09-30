@@ -1,31 +1,35 @@
 # The reliability case, as a no-code rindexer project
 
-`rindexer.yaml` is the whole project. The `Transfer` rows come from rindexer's
-own event storage, which writes the decoded parameters alongside the block
-number and log index every comparison against the chain needs, and the running
-balance comes from a declared table whose upserts add and subtract on each
-transfer.
+`rindexer.yaml` is the whole project. The `Transfer` and `MetadataUpdated` rows
+come from rindexer's own event storage, which writes the decoded parameters
+alongside the block number and log index every comparison against the chain
+needs. The running balance and the token row come from two declared tables.
 
-## What the first real run will confirm
+## What rindexer's own storage decides
 
-rindexer's own event storage writes the decoded parameters alongside the
-block number and log index, which is what the `Transfer` comparison needs. That
+rindexer's event storage writes the decoded parameters alongside the block
+number and log index, which is what the `Transfer` comparison needs. That
 column set is rindexer's rather than this project's, so if it ever changes the
 harness says which column it could not find and names this project - a
 diagnosable failure rather than a silent wrong score.
 
-## The token row is missing here, on purpose
+## The token row
 
-Every other reliability project writes a `Token` row from a contract read - a
-`symbol()` that answers with no data and a `name` carrying a byte Postgres will
-not store. A no-code rindexer project has no facility for reading contract
-state: the yaml describes events and the tables they write, and nothing else.
+Every reliability project writes a `token` row from a contract read - a
+`symbol()` that answers with no data and a `name()` carrying a byte Postgres
+will not store. Here that is a declared table whose columns are filled by
+`$call_static(...)`, rindexer's view call for values that never change: each
+is read once and cached for the run.
 
-So this row has no token table, and the two data-fidelity checks that read one
-come back **unmeasured** rather than failed. That is the accurate statement -
-the scenario could not put the question to this project - and it is visible in
-the table as a smaller denominator rather than as a mark against the tool.
+What rindexer does with the two awkward answers is rindexer's own behaviour,
+not this project's, and is what the data fidelity checks measure:
 
-Writing those two checks would mean a rust rindexer project instead, which is
-what the External Contract Calls scenario uses for the same reason. That is a
-fair thing to want; it is a different project rather than a change to this one.
+- **No returndata.** The call yields no value, the column is left out of the
+  write, and the nullable column stores a null.
+- **A NUL in the name.** rindexer only reads returndata as a string when every
+  character is printable; otherwise it falls back to the raw bytes, which a
+  text column stores as hex. The row arrives, with no NUL in it - but the name
+  is `0x52656c...00546f6b656e` rather than `ReliabilityToken`.
+
+Both columns are `nullable`: a view call that yields nothing would otherwise
+fail the row.

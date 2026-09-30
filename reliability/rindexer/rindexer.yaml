@@ -66,6 +66,35 @@ contracts:
                   - column: balance
                     action: subtract
                     value: $value
+      # The token, written from a contract read. It exists for what that read
+      # returns: symbol() answers with no data at all, and the name carries a
+      # NUL byte Postgres will not store. Both columns are nullable, so a call
+      # that yields nothing leaves the column null rather than failing the row.
+      # $call_static reads each value once and caches it for the run - token
+      # metadata does not change - so every later transfer rewrites the row
+      # from the cache without asking the node again.
+      - name: token
+        columns:
+          - name: address
+          - name: symbol
+            type: string
+            nullable: true
+          - name: name
+            type: string
+            nullable: true
+        events:
+          - event: Transfer
+            operations:
+              - type: upsert
+                where:
+                  address: $rindexer_contract_address
+                set:
+                  - column: symbol
+                    action: set
+                    value: $call_static($rindexer_contract_address, "symbol()")
+                  - column: name
+                    action: set
+                    value: $call_static($rindexer_contract_address, "name()")
 
 global:
   # 8082 unless the driver says otherwise, which it does when the suite runs
