@@ -6,12 +6,46 @@ import { psql } from "../process.ts";
 import { resolveEntityTables, type EntityTable } from "../verify.ts";
 
 /**
+ * How far every port a driver binds is shifted, and what its containers are
+ * suffixed with, so several copies of the same tool can run on one machine.
+ *
+ * Both are unset for the throughput suite and for a reliability run done one
+ * scenario at a time, which keeps every port and name exactly as written
+ * below. The reliability runner sets them per worker when it runs scenarios
+ * side by side (reliability/lib/parallel.ts): each worker gets its own offset,
+ * a multiple of a hundred, and the ports below are chosen to differ from each
+ * other modulo a hundred, so no two workers - and no two tools - ever ask for
+ * the same one.
+ */
+export const PORT_OFFSET = portOffset(process.env.BENCHMARK_PORT_OFFSET);
+export const INSTANCE = process.env.BENCHMARK_INSTANCE ?? "";
+
+function portOffset(raw: string | undefined): number {
+  if (!raw) return 0;
+  const offset = Number(raw);
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error(`BENCHMARK_PORT_OFFSET must be a non-negative integer, not "${raw}"`);
+  }
+  return offset;
+}
+
+/** A driver's port, shifted into this worker's range. */
+export function port(base: number): number {
+  return base + PORT_OFFSET;
+}
+
+/** A container name, made this worker's own. */
+export function instanceName(name: string): string {
+  return INSTANCE ? `${name}-${INSTANCE}` : name;
+}
+
+/**
  * Port the indexers that insist on serving an HTTP API are pointed at. Progress
  * is read from PostgreSQL, so nothing here queries it; it exists so an indexer
  * whose API cannot be turned off binds somewhere predictable instead of
  * fighting another service for a default port.
  */
-export const BENCHMARK_PORT = 19_876;
+export const BENCHMARK_PORT = port(19_876);
 
 export interface Snapshot {
   /** Blocks indexed past the case's start block. */

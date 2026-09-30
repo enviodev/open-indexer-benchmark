@@ -6,11 +6,20 @@ import { exec, kill, psql, start, signalGroup } from "../process.ts";
 import {
   blocksIndexed,
   createProgressReader,
+  port,
   type DriverFactory,
   type Snapshot,
 } from "./common.ts";
 
-const PG_PORT = 5433;
+const PG_PORT = port(5433);
+
+/**
+ * The HTTP server HyperIndex always starts, for its metrics and health check.
+ * 9898 unless told otherwise, and told here only so two copies can run side by
+ * side; nothing reads it.
+ */
+export const ENVIO_INDEXER_PORT = port(9898);
+
 export const ENVIO_DB_URL = `postgresql://postgres:testing@localhost:${PG_PORT}/envio-dev`;
 
 /**
@@ -75,6 +84,7 @@ export const envioDriver = (mode: "hypersync" | "rpc"): DriverFactory => ({
     ENVIO_TUI: "false",
     ENVIO_HASURA: "false",
     ENVIO_PG_PORT: String(PG_PORT),
+    ENVIO_INDEXER_PORT: String(ENVIO_INDEXER_PORT),
     ENVIO_RPC_URL: rpcUrl,
     ENVIO_RPC_FOR: mode === "rpc" ? "sync" : "fallback",
     ENVIO_END_BLOCK: String(endBlock),
