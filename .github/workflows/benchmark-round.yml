@@ -70,10 +70,11 @@ jobs:
   scenario-2:
     name: ${{ inputs.case2 }}
     needs: [scenario-1]
-    # `always()` so a failing indexer in scenario 1 — which is a result in its
-    # own right, not a reason to skip the rest of the run — still lets scenario
-    # 2 start once scenario 1 is done.
-    if: always() && inputs.case2 != ''
+    # `!cancelled()` so a failing indexer in scenario 1 — which is a result in
+    # its own right, not a reason to skip the rest of the run — still lets
+    # scenario 2 start once scenario 1 is done, while cancelling the run still
+    # stops it. `always()` would carry on through a cancel.
+    if: ${{ !cancelled() && inputs.case2 != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ inputs.case2 }}
@@ -85,7 +86,7 @@ jobs:
   scenario-3:
     name: ${{ inputs.case3 }}
     needs: [scenario-1, scenario-2]
-    if: always() && inputs.case3 != ''
+    if: ${{ !cancelled() && inputs.case3 != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ inputs.case3 }}
@@ -97,7 +98,7 @@ jobs:
   scenario-4:
     name: ${{ inputs.case4 }}
     needs: [scenario-1, scenario-2, scenario-3]
-    if: always() && inputs.case4 != ''
+    if: ${{ !cancelled() && inputs.case4 != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ inputs.case4 }}
@@ -109,7 +110,7 @@ jobs:
   scenario-5:
     name: ${{ inputs.case5 }}
     needs: [scenario-1, scenario-2, scenario-3, scenario-4]
-    if: always() && inputs.case5 != ''
+    if: ${{ !cancelled() && inputs.case5 != '' }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
       case: ${{ inputs.case5 }}

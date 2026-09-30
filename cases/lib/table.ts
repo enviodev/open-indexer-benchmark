@@ -159,8 +159,9 @@ export function buildTable(rows: TableRow[]): string {
   }
 
   // Unlike a carried row, an unstable one is a statement about the data, so it
-  // is kept in the README as well as in the run's own report.
-  for (const row of sorted.filter((r) => r.unstable && !r.carriedOver)) {
+  // is kept in the README as well as in the run's own report — and read back
+  // with the row, so carrying it forward does not quietly drop the doubt.
+  for (const row of sorted.filter((r) => r.unstable)) {
     lines.push(
       "",
       `> ⚠️ ${row.name} via ${linkText(row.cells.source)} — ${row.unstable}.`
@@ -197,9 +198,15 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
   // split is on the first em-dash, which is safe because tool names never
   // contain one; a detail string may, and keeps it.
   const notes = new Map<string, string>();
+  // Unstable rows are noted as "> ⚠️ Tool via Source — detail.", keyed the
+  // same way rowKey keys a row. The carried and local-only notes never name a
+  // source, so they cannot be mistaken for one.
+  const unstable = new Map<string, string>();
   for (const line of body.split("\n")) {
     const note = line.match(/^>\s*\*\*\((\d+)\)\*\*\s*.*?—\s*(.+)$/);
     if (note) notes.set(note[1], note[2].trim());
+    const doubt = line.match(/^>\s*⚠️\s*(.+?) via (.+?) — (.+?)\.?$/);
+    if (doubt) unstable.set(`${doubt[1]}|${doubt[2]}`, doubt[3]);
   }
 
   for (const line of body.split("\n")) {
@@ -240,7 +247,7 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
     }
     if (!name || !Number.isFinite(eventsPerSec)) continue;
 
-    rows.push({
+    const row: TableRow = {
       name,
       eventsPerSec,
       cells: {
@@ -252,7 +259,10 @@ export function parsePublishedTable(markdown: string, benchCase: string): TableR
         correctnessDetail: reference ? (notes.get(reference[2]) ?? "") : "",
         dbSize: cells[6],
       },
-    });
+    };
+    const doubt = unstable.get(rowKey(row));
+    if (doubt) row.unstable = doubt;
+    rows.push(row);
   }
   return rows;
 }

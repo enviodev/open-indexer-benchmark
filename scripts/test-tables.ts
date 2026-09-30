@@ -216,6 +216,24 @@ check(
   JSON.stringify(unstableBack)
 );
 
+check(
+  "an unstable row reads its note back",
+  unstableBack.find((row) => row.cells.source.startsWith("[RPC]"))?.unstable === unstableRow.unstable &&
+    unstableBack.find((row) => row.cells.source.startsWith("[HyperSync]"))?.unstable === undefined,
+  JSON.stringify(unstableBack.map((row) => row.unstable))
+);
+// Its job failing next run must not launder the number into a clean one.
+const carriedUnstable = buildTable([
+  rows[0],
+  { ...unstableBack.find((row) => row.cells.source.startsWith("[RPC]"))!, carriedOver: true },
+]);
+check(
+  "a carried unstable row keeps its note",
+  carriedUnstable.includes(`> ⚠️ Envio Indexer via RPC — ${unstableRow.unstable}.`) &&
+    carriedUnstable.includes("carried forward"),
+  carriedUnstable
+);
+
 check("an empty table is handled", buildTable([]) === "_No results collected._");
 check(
   "a missing case yields no rows",

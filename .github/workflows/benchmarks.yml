@@ -251,16 +251,28 @@ jobs:
             echo "gate=off" >> "$GITHUB_OUTPUT"
           fi
 
-          # The rows this push changed the code of, worked out by the same
-          # filter that scopes a pull request. Those are expected to move, so
-          # the gate lets them through. A push whose previous commit is not in
-          # the clone — the first push of a branch, or a force-push — touches
-          # nothing as far as the gate knows, which costs at most a recheck.
+          # The rows whose code changed since the table was last measured,
+          # worked out by the same filter that scopes a pull request. Those are
+          # expected to move, so the gate lets them through. "Last measured" is
+          # the commit named in the newest README update's trailer rather than
+          # the push's own parent: pushes that queued behind a run collapse to
+          # the newest, and the ones skipped still changed code. Before any
+          # update carries the trailer, the push's parent stands in; with
+          # neither in the clone nothing counts as touched, which costs at most
+          # a recheck.
           TOUCHED='{}'
-          if [ "$EVENT_NAME" = "push" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
-            TOUCHED=$(CHANGED_FILES="$(git diff --name-only "$BEFORE_SHA" HEAD)" \
-              ALL_CASES="$CASES_JSON" ALL_INDEXERS="$INDEXERS_JSON" \
-              node scripts/select-scope.ts | jq -c '.indexers')
+          if [ "$EVENT_NAME" = "push" ]; then
+            SINCE=$(git log -1 --format=%B --grep='^Benchmarked-Commit: ' "origin/$GITHUB_REF_NAME" \
+              | sed -n 's/^Benchmarked-Commit: //p' | head -1)
+            if [ -z "$SINCE" ] || ! git cat-file -e "$SINCE^{commit}" 2>/dev/null; then
+              SINCE="$BEFORE_SHA"
+            fi
+            if git cat-file -e "$SINCE^{commit}" 2>/dev/null; then
+              echo "Changes since $SINCE:"
+              TOUCHED=$(CHANGED_FILES="$(git diff --name-only "$SINCE" HEAD)" \
+                ALL_CASES="$CASES_JSON" ALL_INDEXERS="$INDEXERS_JSON" \
+                node scripts/select-scope.ts | jq -c '.indexers')
+            fi
           fi
           echo "Touched by this push: $TOUCHED"
           echo "touched=$TOUCHED" >> "$GITHUB_OUTPUT"
@@ -297,9 +309,9 @@ jobs:
   round-2:
     name: Round 2
     needs: [setup, round-1]
-    # `always()` for the same reason the scenarios use it: a failed job in
+    # `!cancelled()` for the same reason the scenarios use it: a failed job in
     # round 1 is a result, not a reason to take fewer samples of the rest.
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && fromJSON(needs.setup.outputs.rounds) >= 2
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && fromJSON(needs.setup.outputs.rounds) >= 2 }}
     uses: ./.github/workflows/benchmark-round.yml
     with:
       round: '2'
@@ -319,7 +331,7 @@ jobs:
   round-3:
     name: Round 3
     needs: [setup, round-1, round-2]
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && fromJSON(needs.setup.outputs.rounds) >= 3
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && fromJSON(needs.setup.outputs.rounds) >= 3 }}
     uses: ./.github/workflows/benchmark-round.yml
     with:
       round: '3'
@@ -342,7 +354,7 @@ jobs:
   aggregate:
     name: Aggregate
     needs: [setup, round-1, round-2, round-3]
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != ''
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -350,9 +362,8 @@ jobs:
       recheck_cases: ${{ steps.gate.outputs.cases }}
       recheck_indexers: ${{ steps.gate.outputs.indexers }}
     steps:
+      # Credentials are kept for the fetch below; the token is read-only here.
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Download all results
         uses: actions/download-artifact@v4
@@ -363,6 +374,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      # A push checks out the commit that triggered it, whose README can be a
+      # run or more behind: this run may have waited in the concurrency queue
+      # while the one ahead of it published. The gate and the carry-forward
+      # have to compare against what is published now.
+      - name: Read the README as published now
+        if: github.event_name == 'push'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git show FETCH_HEAD:README.md > README.md
 
       - id: gate
         env:
@@ -386,7 +407,10 @@ jobs:
   recheck:
     name: Recheck ${{ matrix.case }}
     needs: [setup, aggregate]
-    if: needs.aggregate.outputs.recheck_cases != '' && needs.aggregate.outputs.recheck_cases != '[]'
+    # Without a status function GitHub adds `success()`, which looks at every
+    # job upstream — so one failed indexer in any round would skip the recheck
+    # and publish every held-back row as unstable.
+    if: ${{ !cancelled() && needs.aggregate.result == 'success' && needs.aggregate.outputs.recheck_cases != '' && needs.aggregate.outputs.recheck_cases != '[]' }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -407,14 +431,11 @@ jobs:
     # so there is nothing to tabulate — and an empty table reads as "measured,
     # found nothing" rather than "not measured". A recheck that failed still
     # publishes: the rows it was for fall back to the rounds' samples, flagged.
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && needs.aggregate.result == 'success'
+    # A cancelled run publishes nothing.
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && needs.aggregate.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # The README commit is rebased onto whatever main has gained during
-          # the run, which needs the history to rebase over.
-          fetch-depth: 0
 
       - name: Download all results
         uses: actions/download-artifact@v4
@@ -425,6 +446,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      # Same reason as in `aggregate`: rows carried forward and the gate's
+      # baseline have to be what is published now, not what was published
+      # when the pushed commit was made.
+      - name: Read the README as published now
+        if: github.event_name == 'push'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git show FETCH_HEAD:README.md > README.md
 
       - name: Build comparison tables
         env:
@@ -500,34 +530,42 @@ jobs:
         env:
           CASES: ${{ needs.setup.outputs.cases }}
         run: |
-          CHANGED=0
-          for CASE in $(echo "$CASES" | jq -r '.[]'); do
-            # The README variant, without this run's carried-forward marks.
-            TABLE="/tmp/benchmark-readme-${CASE}.md"
-            [ -f "$TABLE" ] || continue
+          # Replace each case's block in README.md with this run's table.
+          apply_tables() {
+            for CASE in $(echo "$CASES" | jq -r '.[]'); do
+              # The README variant, without this run's carried-forward marks.
+              TABLE="/tmp/benchmark-readme-${CASE}.md"
+              [ -f "$TABLE" ] || continue
+              awk -v start="<!-- BENCHMARK:${CASE}:START -->" \
+                  -v end="<!-- BENCHMARK:${CASE}:END -->" \
+                  -v tablefile="$TABLE" '
+                $0 ~ start { print; while ((getline line < tablefile) > 0) print line; skip=1; next }
+                $0 ~ end { skip=0 }
+                !skip { print }
+              ' README.md > README.tmp && mv README.tmp README.md
+            done
+          }
 
-            # Replace content between this case's markers with the new table
-            awk -v start="<!-- BENCHMARK:${CASE}:START -->" \
-                -v end="<!-- BENCHMARK:${CASE}:END -->" \
-                -v tablefile="$TABLE" '
-              $0 ~ start { print; while ((getline line < tablefile) > 0) print line; skip=1; next }
-              $0 ~ end { skip=0 }
-              !skip { print }
-            ' README.md > README.tmp && mv README.tmp README.md
-            CHANGED=1
-          done
-
-          [ "$CHANGED" = "1" ] || exit 0
-          git diff --quiet README.md && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "Update benchmark results in README"
-          # A main run takes well over an hour, so main has usually moved on by
-          # the time it finishes. The commit only touches the table blocks, so
-          # it rebases cleanly onto anything that did not rewrite them.
+
+          # A main run takes well over an hour, so the branch has usually moved
+          # on by the time it finishes. Rather than rebasing a commit made on
+          # the pushed commit — which conflicts with every table the run ahead
+          # of it published — each attempt starts from the branch as it is now
+          # and writes the tables onto it. The trailer records which commit was
+          # measured, so the next run can tell which tools changed since.
           for i in 1 2 3; do
-            git pull --rebase origin "$GITHUB_REF_NAME" && git push && exit 0
+            git fetch origin "$GITHUB_REF_NAME"
+            git reset -q --hard FETCH_HEAD
+            apply_tables
+            if git diff --quiet README.md; then
+              echo "README already holds these results."
+              exit 0
+            fi
+            git commit -q README.md -m "Update benchmark results in README" \
+              -m "Benchmarked-Commit: $GITHUB_SHA"
+            git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
             echo "Push attempt $i failed; retrying..." >&2
             sleep $((i * 10))
           done
