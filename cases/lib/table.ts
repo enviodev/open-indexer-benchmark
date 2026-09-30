@@ -1,5 +1,5 @@
 // Result table rendering, shared by the local benchmark runner and the CI
-// summary job so both publish an identical format.
+// CI jobs that build the tables, so both publish an identical format.
 //
 // Rows are indexers and columns are metrics: a benchmark gains metrics far
 // more often than it gains indexers, and only this orientation has room to

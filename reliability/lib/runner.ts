@@ -4,7 +4,7 @@
 //
 // The repeat is the part worth explaining. Every other number this repository
 // publishes is a measurement, and a measurement is allowed to be noisy - the
-// throughput runner takes the best of two windows and says so. A check is not
+// throughput tables publish the median of three runs and say so. A check is not
 // a measurement. It is a claim that a tool does something, and a claim that
 // holds two times in three is not a weaker claim, it is a different and worse
 // one: an indexer that survives a database restart unless the restart lands

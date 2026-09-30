@@ -1,6 +1,6 @@
 // The shape a benchmark run reports, and how it renders into a table row.
 //
-// Kept apart from the runner so the CI summary job can turn recorded results
+// Kept apart from the runner so the CI jobs that build the tables can turn recorded results
 // into tables without importing every driver — and without the process-level
 // signal handlers the runner installs to tear down containers.
 

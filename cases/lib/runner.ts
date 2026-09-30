@@ -713,7 +713,7 @@ async function benchmarkIndexer(
 export async function runBenchmark(config: CaseConfig) {
   // Installed here rather than at module scope: importing this file should not
   // silently take over the process's signal handling, and result.ts exists as a
-  // separate module partly so the CI summary job can avoid exactly that.
+  // separate module partly so the CI table-building jobs can avoid exactly that.
   const onSignal = (code: number) => async () => {
     await cleanup();
     process.exit(code);
@@ -855,7 +855,7 @@ async function run(config: CaseConfig) {
       )} events/s, ${formatRate(result.blocksPerSec)} blocks/s, ` +
         `data ${result.correctness}, db ${formatBytes(result.dbSizeBytes)}\n`
     );
-    // Machine-readable line consumed by the CI summary job.
+    // Machine-readable line consumed by build-tables.ts in CI.
     console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);
     await sleep(3_000);
   }

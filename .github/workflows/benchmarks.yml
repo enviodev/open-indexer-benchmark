@@ -38,9 +38,11 @@ on:
 # workflow goes to lengths to keep out. On main a new push waits rather than
 # cancelling: the run in flight publishes the table. GitHub keeps one pending
 # run per group, so a burst of merges collapses to the run in flight plus the
-# newest. On a pull request the newer push makes the older run moot.
+# newest. On a pull request the newer push makes the older run moot. The event
+# is part of the group so a manual run on main — which never publishes — cannot
+# replace a queued push and leave the README a push behind.
 concurrency:
-  group: benchmarks-${{ github.ref }}
+  group: benchmarks-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -109,8 +111,8 @@ jobs:
           COUNT=$(echo "$CASES_JSON" | jq 'length')
 
           # An input of nothing but separators splits into no scenarios at all.
-          # Left alone every scenario job would skip and the summary would still
-          # publish an empty table, which reads as "measured, found nothing".
+          # Left alone every scenario job would skip and the publish job would
+          # still write an empty table, which reads as "measured, found nothing".
           if [ "$COUNT" -eq 0 ]; then
             echo "No scenarios resolved from the cases input." >&2
             exit 1
@@ -134,7 +136,7 @@ jobs:
           # `main` and manual runs stay full — they publish the README table,
           # which has to hold a complete set of results.
           PARTIAL=0
-          # Both empty unless the run is scoped. SELECTED lets the summary tell
+          # Both empty unless the run is scoped. SELECTED lets publish tell
           # an indexer that was asked to run and reported nothing — a failed
           # job — apart from one this run never selected.
           SCOPE=""
@@ -184,7 +186,7 @@ jobs:
             node scripts/case-indexers.ts)
           echo "Available per scenario: $AVAILABLE"
 
-          # The summary reads SELECTED to tell a job that failed apart from one
+          # Publish reads SELECTED to tell a job that failed apart from one
           # this run never asked for, so it has to be narrowed the same way the
           # matrix is — otherwise a tool a scenario does not implement is
           # reported as a job that produced nothing.
@@ -527,10 +529,18 @@ jobs:
           # untracked, so the reset leaves them alone. The trailer records
           # which commit was measured, so the next run can tell which tools
           # changed since.
+          # A copy of the tree this run measured, to build the tables with
+          # once the loop has moved the checkout to the branch tip.
+          AT_SHA="$RUNNER_TEMP/at-sha"
+          git worktree add --quiet --detach "$AT_SHA" "$GITHUB_SHA"
+
           for ATTEMPT in 1 2 3 4 5; do
             git fetch --quiet origin "$BRANCH"
             git reset --quiet --hard "origin/$BRANCH"
-            node scripts/build-tables.ts > /dev/null
+            # The run's own scripts, not the tip's: a later push may already
+            # have changed how results are read or rendered.
+            README_PATH="$PWD/README.md" RESULTS_DIR="$PWD/results" \
+              node "$AT_SHA/scripts/build-tables.ts" > /dev/null
 
             CHANGED=0
             for CASE in $(echo "$CASES" | jq -r '.[]'); do
