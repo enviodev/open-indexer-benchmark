@@ -127,8 +127,9 @@ jobs:
           # per scenario in benchmark-round.yml — GitHub cannot order a matrix.
           # That makes the number of scenario slots fixed: adding a sixth
           # scenario means adding a sixth `scenario-N` job (and its inputs)
-          # there, and passing it from each round below. Fail loudly rather than silently
-          # dropping the extra scenario from the run and from the table.
+          # there, and passing it from each round below. Fail loudly rather
+          # than silently dropping the extra scenario from the run and from
+          # the table.
           if [ "$COUNT" -gt 5 ]; then
             echo "Only 5 scenarios can run per workflow run; add a scenario-N job to benchmark-round.yml." >&2
             exit 1
@@ -204,9 +205,9 @@ jobs:
           echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
           echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
 
-          # One scenario slot per `scenario-N` job in benchmark-round.yml. A slot with no case
-          # is skipped by that job's `if`, so the loop covers a run with fewer
-          # scenarios than slots without special-casing it.
+          # One scenario slot per `scenario-N` job in benchmark-round.yml. A
+          # slot with no case is skipped by that job's `if`, so the loop covers
+          # a run with fewer scenarios than slots without special-casing it.
           for N in 1 2 3 4 5; do
             CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
             if [ -n "$SCOPE" ]; then
@@ -264,14 +265,9 @@ jobs:
           echo "Touched by this push: $TOUCHED"
           echo "touched=$TOUCHED" >> "$GITHUB_OUTPUT"
 
-  # The harness has four test scripts — scripts/test-verification.ts,
-  # scripts/test-tables.ts, scripts/test-rpc-mock.ts and scripts/test-scope.ts —
-  # that are run locally when the verification layer, the result table, the
-  # endpoint that serves a case's contract calls, or the pull request run filter
-  # changes. They are deliberately not a CI job: the verification test needs a
-  # live HyperSync token, which forks do not have. The one exception is
-  # test-scope.ts, which the setup job runs before trusting the filter's
-  # decision, since it needs no credentials and takes under a second.
+  # The harness's own tests — the scope filter, the tables and the median and
+  # gate below — run in checks.yml. On a pull request the setup job also runs
+  # the scope filter's test before trusting its decision.
 
   # Each round is one pass over every scenario, scenario after scenario (see
   # benchmark-round.yml). Rounds run one after another rather than side by

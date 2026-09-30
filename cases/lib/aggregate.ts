@@ -46,6 +46,15 @@ export function parseArtifactIndexer(part: string): { indexer: string; round: st
   return { indexer: part.slice(0, match.index), round: match[1] };
 }
 
+/**
+ * The middle value, or the lower of the two middles on an even count, so the
+ * result is always one of the inputs rather than an average none of them was.
+ */
+function lowerMedian<T>(items: T[], value: (item: T) => number): T {
+  const sorted = [...items].sort((a, b) => value(a) - value(b));
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+}
+
 const CORRECTNESS_RANK: Record<BenchmarkResult["correctness"], number> = {
   ok: 0,
   unknown: 1,
@@ -63,8 +72,7 @@ const CORRECTNESS_RANK: Record<BenchmarkResult["correctness"], number> = {
  */
 export function pickMedian(samples: BenchmarkResult[]): BenchmarkResult {
   if (samples.length === 0) throw new Error("pickMedian needs at least one sample");
-  const sorted = [...samples].sort((a, b) => a.eventsPerSec - b.eventsPerSec);
-  const median = sorted[Math.floor((sorted.length - 1) / 2)];
+  const median = lowerMedian(samples, (s) => s.eventsPerSec);
 
   const worst = samples.reduce((a, b) =>
     CORRECTNESS_RANK[b.correctness] > CORRECTNESS_RANK[a.correctness] ? b : a
@@ -114,7 +122,7 @@ export function judge({ samples, published, touched, final }: GateInput): Verdic
   if (touched || published === null || !(published > 0) || samples.length === 0) {
     return { kind: "publish" };
   }
-  const median = [...samples].sort((a, b) => a - b)[Math.floor((samples.length - 1) / 2)];
+  const median = lowerMedian(samples, (s) => s);
   if (!(median > 0)) return { kind: "publish" };
 
   const ratio = Math.max(median, published) / Math.min(median, published);

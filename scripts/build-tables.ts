@@ -62,8 +62,8 @@ const touched: Record<string, string[]> = process.env.TOUCHED_INDEXERS
   : {};
 /**
  * The recheck pass only decides what to measure again; the publish pass that
- * follows it repeats every warning, so this one keeps quiet rather than
- * annotating the run twice.
+ * follows it repeats every warning and notice, so this one keeps quiet rather
+ * than annotating the run twice.
  */
 const annotate = gate !== "recheck";
 /** Rows to measure again, by case — written out in recheck mode. */
@@ -161,7 +161,7 @@ for (const benchCase of cases) {
     });
     const label = `${row.name} via ${results[0].source}`;
 
-    if (gate !== "off" && verdict.kind === "shift") {
+    if (gate !== "off" && annotate && verdict.kind === "shift") {
       console.log(
         `::notice::${title}: ${label} moved from ${formatRate(verdict.from)} to ` +
           `${formatRate(verdict.to)} events/s, and all ${rates.length} runs agree — publishing.`
