@@ -1,5 +1,2 @@
-.env
 .rindexer
 generated_csv
-generated/
-target/

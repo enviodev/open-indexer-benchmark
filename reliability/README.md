@@ -165,10 +165,8 @@ are already common to every tool.
 
 A project that cannot implement one of the three entities loses the checks
 that read it, and nothing else: they come back unmeasured, so that column's
-denominator is smaller rather than its numerator being lower. Every row
-implements all three today; Rindexer's project is a rust one rather than
-no-code so that its handler can read the token's metadata and write the token
-row, and the two metadata checks are put to it like every other tool.
+denominator is smaller rather than its numerator being lower. No row is in
+that position today: every project writes all three.
 
 <a id="crash-recovery"></a>
 
