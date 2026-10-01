@@ -18,15 +18,30 @@ on:
         required: false
         default: '100'
         type: string
+      rounds:
+        description: 'Times to measure each indexer, 1-3; the median is published. Pushes to main always take 3.'
+        required: false
+        default: '1'
+        type: string
   push:
     branches: [main]
-  # Disabled on pull requests while the reliability suite is being built out.
-  # Forty-four jobs of throughput measurement, none of which a change to the
-  # reliability suite can affect, were the slowest thing on every one of its
-  # pull requests. `main` still publishes the tables, and a dispatch still runs
-  # whatever is asked for. Uncomment to get the per-pull-request tables back.
-  #
-  # pull_request:
+  # A pull request runs only the scenarios and tools its diff touches (see
+  # scripts/select-scope.ts), once, and comments the tables on the pull
+  # request; it never publishes. A change to the reliability suite alone, or
+  # to READMEs and METHODOLOGY.md, runs nothing.
+  pull_request:
+
+# One run per branch at a time. Two runs side by side double how many indexers
+# hit the shared data endpoints at once, which is the noise the rest of this
+# workflow goes to lengths to keep out. On main a new push waits rather than
+# cancelling: the run in flight publishes the table. GitHub keeps one pending
+# run per group, so a burst of merges collapses to the run in flight plus the
+# newest. On a pull request the newer push makes the older run moot. The event
+# is part of the group so a manual run on main — which never publishes — cannot
+# replace a queued push and leave the README a push behind.
+concurrency:
+  group: benchmarks-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   setup:
@@ -38,18 +53,14 @@ jobs:
     outputs:
       cases: ${{ steps.set-matrix.outputs.cases }}
       case1: ${{ steps.set-matrix.outputs.case1 }}
-      case2: ${{ steps.set-matrix.outputs.case2 }}
-      case3: ${{ steps.set-matrix.outputs.case3 }}
-      case4: ${{ steps.set-matrix.outputs.case4 }}
-      case5: ${{ steps.set-matrix.outputs.case5 }}
-      indexers1: ${{ steps.set-matrix.outputs.indexers1 }}
-      indexers2: ${{ steps.set-matrix.outputs.indexers2 }}
-      indexers3: ${{ steps.set-matrix.outputs.indexers3 }}
-      indexers4: ${{ steps.set-matrix.outputs.indexers4 }}
-      indexers5: ${{ steps.set-matrix.outputs.indexers5 }}
+      slots: ${{ steps.set-matrix.outputs.slots }}
       partial: ${{ steps.set-matrix.outputs.partial }}
       selected: ${{ steps.set-matrix.outputs.selected }}
       duration: ${{ steps.set-matrix.outputs.duration }}
+      rounds: ${{ steps.set-matrix.outputs.rounds }}
+      windows: ${{ steps.set-matrix.outputs.windows }}
+      gate: ${{ steps.set-matrix.outputs.gate }}
+      touched: ${{ steps.set-matrix.outputs.touched }}
     steps:
       # Needed on every event: the step below runs scripts/case-indexers.ts to
       # work out which tools each scenario implements, whether or not the run
@@ -76,8 +87,10 @@ jobs:
           INDEXERS: ${{ inputs.indexers }}
           CASES: ${{ inputs.cases }}
           DURATION_INPUT: ${{ inputs.duration }}
+          ROUNDS_INPUT: ${{ inputs.rounds }}
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           if [ -z "$INDEXERS" ]; then
             # Every registered indexer, whether or not a scenario runs it: the
@@ -96,20 +109,22 @@ jobs:
           COUNT=$(echo "$CASES_JSON" | jq 'length')
 
           # An input of nothing but separators splits into no scenarios at all.
-          # Left alone every scenario job would skip and the summary would still
-          # publish an empty table, which reads as "measured, found nothing".
+          # Left alone every scenario job would skip and the publish job would
+          # still write an empty table, which reads as "measured, found nothing".
           if [ "$COUNT" -eq 0 ]; then
             echo "No scenarios resolved from the cases input." >&2
             exit 1
           fi
 
           # Scenarios run one after another, which needs one `needs`-chained job
-          # per scenario below — GitHub cannot order a matrix. That makes the
-          # number of scenario slots fixed: adding a sixth scenario means adding
-          # a sixth `scenario-N` job here. Fail loudly rather than silently
-          # dropping the extra scenario from the run and from the table.
+          # per scenario in benchmark-round.yml — GitHub cannot order a matrix.
+          # That makes the number of scenario slots fixed: adding a sixth
+          # scenario means adding a sixth `scenario-N` job (and its inputs)
+          # there, and passing it from each round below. Fail loudly rather
+          # than silently dropping the extra scenario from the run and from
+          # the table.
           if [ "$COUNT" -gt 5 ]; then
-            echo "Only 5 scenarios can run per workflow run; add a scenario-N job to benchmarks.yml." >&2
+            echo "Only 5 scenarios can run per workflow run; add a scenario-N job to benchmark-round.yml." >&2
             exit 1
           fi
 
@@ -119,7 +134,7 @@ jobs:
           # `main` and manual runs stay full — they publish the README table,
           # which has to hold a complete set of results.
           PARTIAL=0
-          # Both empty unless the run is scoped. SELECTED lets the summary tell
+          # Both empty unless the run is scoped. SELECTED lets publish tell
           # an indexer that was asked to run and reported nothing — a failed
           # job — apart from one this run never selected.
           SCOPE=""
@@ -169,7 +184,7 @@ jobs:
             node scripts/case-indexers.ts)
           echo "Available per scenario: $AVAILABLE"
 
-          # The summary reads SELECTED to tell a job that failed apart from one
+          # Publish reads SELECTED to tell a job that failed apart from one
           # this run never asked for, so it has to be narrowed the same way the
           # matrix is — otherwise a tool a scenario does not implement is
           # reported as a job that produced nothing.
@@ -183,9 +198,11 @@ jobs:
           echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
           echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
 
-          # One scenario slot per `scenario-N` job below. A slot with no case
-          # is skipped by that job's `if`, so the loop covers a run with fewer
-          # scenarios than slots without special-casing it.
+          # One slot per `scenario-N` job in benchmark-round.yml, always five,
+          # so a round can index them without bounds checks. A slot with no
+          # case is skipped by that job's `if`, so the loop covers a run with
+          # fewer scenarios than slots without special-casing it.
+          SLOTS='[]'
           for N in 1 2 3 4 5; do
             CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
             if [ -n "$SCOPE" ]; then
@@ -197,91 +214,227 @@ jobs:
             INDEXERS_N=$(jq -cn --argjson want "$INDEXERS_N" \
               --argjson have "$(echo "$AVAILABLE" | jq -c --arg c "$CASE_N" '.[$c] // []')" \
               '$want - ($want - $have)')
-            echo "case$N=$CASE_N" >> "$GITHUB_OUTPUT"
-            echo "indexers$N=$INDEXERS_N" >> "$GITHUB_OUTPUT"
+            SLOTS=$(jq -cn --argjson s "$SLOTS" --arg c "$CASE_N" --argjson i "$INDEXERS_N" \
+              '$s + [{case: $c, indexers: $i}]')
           done
+          echo "Scenario slots: $SLOTS"
+          echo "slots=$SLOTS" >> "$GITHUB_OUTPUT"
+          # Whether there is anything to run at all.
+          echo "case1=$(echo "$SLOTS" | jq -r '.[0].case')" >> "$GITHUB_OUTPUT"
 
           echo "duration=${DURATION_INPUT:-100}" >> "$GITHUB_OUTPUT"
 
-  # The harness has four test scripts — scripts/test-verification.ts,
-  # scripts/test-tables.ts, scripts/test-rpc-mock.ts and scripts/test-scope.ts —
-  # that are run locally when the verification layer, the result table, the
-  # endpoint that serves a case's contract calls, or the pull request run filter
-  # changes. They are deliberately not a CI job: the verification test needs a
-  # live HyperSync token, which forks do not have. The one exception is
-  # test-scope.ts, which the setup job runs before trusting the filter's
-  # decision, since it needs no credentials and takes under a second.
+          # How many times each indexer is measured. A push to main publishes
+          # the README table, so it takes three samples and publishes their
+          # median; a pull request takes one, so iterating on it stays as fast
+          # as it was. There are three round slots below, hence the ceiling.
+          if [ "$EVENT_NAME" = "push" ]; then
+            ROUNDS=3
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            ROUNDS="${ROUNDS_INPUT:-1}"
+          else
+            ROUNDS=1
+          fi
+          case "$ROUNDS" in
+            1|2|3) ;;
+            *) echo "rounds must be 1, 2 or 3, not '$ROUNDS'." >&2; exit 1 ;;
+          esac
+          echo "rounds=$ROUNDS" >> "$GITHUB_OUTPUT"
 
-  # One scenario at a time: every indexer of scenario 1 runs in parallel, and
-  # scenario 2 only starts once they have all finished. Keeping the scenarios
-  # apart halves how many indexers hit the shared data endpoints at once, so a
-  # scenario's numbers are not shaped by what the other scenario was doing.
-  scenario-1:
-    name: ${{ needs.setup.outputs.case1 }}
+          # Throughput windows per job. A single-round run keeps the runner's
+          # best of two. Several rounds already sample each tool half an hour
+          # apart and publish the median, which a second back-to-back window —
+          # sharing the first one's slow minute on the endpoint — adds nothing
+          # to but time. The recheck takes the same, so it is a like-for-like
+          # fourth sample.
+          if [ "$ROUNDS" -gt 1 ]; then
+            echo "windows=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "windows=2" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Only a push publishes, so only a push is gated: a row that moved a
+          # long way from the README, whose runs disagree, is measured again
+          # before it replaces the published value.
+          if [ "$EVENT_NAME" = "push" ]; then
+            echo "gate=recheck" >> "$GITHUB_OUTPUT"
+          else
+            echo "gate=off" >> "$GITHUB_OUTPUT"
+          fi
+
+          # The rows whose code changed since the table was last measured,
+          # worked out by the same filter that scopes a pull request. Those are
+          # expected to move, so the gate lets them through. "Last measured" is
+          # the commit named in the newest README update's trailer rather than
+          # the push's own parent: pushes that queued behind a run collapse to
+          # the newest, and the ones skipped still changed code. Before any
+          # update carries the trailer, the push's parent stands in; with
+          # neither in the clone nothing counts as touched, which costs at most
+          # a recheck.
+          TOUCHED='{}'
+          if [ "$EVENT_NAME" = "push" ]; then
+            # Only the bot's own README updates count: a human commit that quotes
+            # the trailer — a revert, a squash-merge of a pull request about it —
+            # must not move the baseline.
+            SINCE=$(git log -1 --format=%B --author='github-actions\[bot\]' \
+              --grep='^Benchmarked-Commit: ' "origin/$GITHUB_REF_NAME" \
+              | sed -n 's/^Benchmarked-Commit: //p' | head -1)
+            if [ -z "$SINCE" ] || ! git cat-file -e "$SINCE^{commit}" 2>/dev/null; then
+              SINCE="$BEFORE_SHA"
+            fi
+            if git cat-file -e "$SINCE^{commit}" 2>/dev/null; then
+              echo "Changes since $SINCE:"
+              TOUCHED=$(CHANGED_FILES="$(git diff --name-only "$SINCE" HEAD)" \
+                ALL_CASES="$CASES_JSON" ALL_INDEXERS="$INDEXERS_JSON" \
+                node scripts/select-scope.ts | jq -c '.indexers')
+            fi
+          fi
+          echo "Touched by this push: $TOUCHED"
+          echo "touched=$TOUCHED" >> "$GITHUB_OUTPUT"
+
+  # The harness's own tests — the scope filter, the tables and the median and
+  # gate below — run in checks.yml. On a pull request the setup job also runs
+  # the scope filter's test before trusting its decision.
+
+  # Each round is one pass over every scenario, scenario after scenario (see
+  # benchmark-round.yml). Rounds run one after another rather than side by
+  # side: running them at once would triple the load on the shared endpoints
+  # and put all three samples in the same slow minute, which is exactly the
+  # noise the extra samples are there to average out.
+  round-1:
+    name: Round 1
     needs: setup
     if: needs.setup.outputs.case1 != ''
-    uses: ./.github/workflows/benchmark-case.yml
+    uses: ./.github/workflows/benchmark-round.yml
     with:
-      case: ${{ needs.setup.outputs.case1 }}
-      indexers: ${{ needs.setup.outputs.indexers1 }}
+      round: '1'
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
+      slots: ${{ needs.setup.outputs.slots }}
     secrets: inherit
 
-  scenario-2:
-    name: ${{ needs.setup.outputs.case2 }}
-    needs: [setup, scenario-1]
-    # `always()` so a failing indexer in scenario 1 — which is a result in its
-    # own right, not a reason to skip the rest of the run — still lets scenario
-    # 2 start once scenario 1 is done.
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case2 != ''
-    uses: ./.github/workflows/benchmark-case.yml
+  round-2:
+    name: Round 2
+    needs: [setup, round-1]
+    # `!cancelled()` for the same reason the scenarios use it: a failed job in
+    # round 1 is a result, not a reason to take fewer samples of the rest.
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && fromJSON(needs.setup.outputs.rounds) >= 2 }}
+    uses: ./.github/workflows/benchmark-round.yml
     with:
-      case: ${{ needs.setup.outputs.case2 }}
-      indexers: ${{ needs.setup.outputs.indexers2 }}
+      round: '2'
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
+      slots: ${{ needs.setup.outputs.slots }}
     secrets: inherit
 
-  scenario-3:
-    name: ${{ needs.setup.outputs.case3 }}
-    needs: [setup, scenario-1, scenario-2]
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case3 != ''
-    uses: ./.github/workflows/benchmark-case.yml
+  round-3:
+    name: Round 3
+    needs: [setup, round-1, round-2]
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && fromJSON(needs.setup.outputs.rounds) >= 3 }}
+    uses: ./.github/workflows/benchmark-round.yml
     with:
-      case: ${{ needs.setup.outputs.case3 }}
-      indexers: ${{ needs.setup.outputs.indexers3 }}
+      round: '3'
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
+      slots: ${{ needs.setup.outputs.slots }}
     secrets: inherit
 
-  scenario-4:
-    name: ${{ needs.setup.outputs.case4 }}
-    needs: [setup, scenario-1, scenario-2, scenario-3]
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case4 != ''
+  # Takes the median of every round and holds back the rows that moved a long
+  # way from the README without their runs agreeing where to. Publishes nothing
+  # itself; `publish` does, once any recheck is in.
+  aggregate:
+    name: Aggregate
+    needs: [setup, round-1, round-2, round-3]
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      recheck: ${{ steps.gate.outputs.recheck }}
+    steps:
+      # Credentials are kept for the fetch below; the token is read-only here.
+      - uses: actions/checkout@v4
+
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: benchmark-*
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # A push checks out the commit that triggered it, whose README can be a
+      # run or more behind: this run may have waited in the concurrency queue
+      # while the one ahead of it published. The gate and the carry-forward
+      # have to compare against what is published now.
+      - name: Read the README as published now
+        if: github.event_name == 'push'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git show FETCH_HEAD:README.md > README.md
+
+      - id: gate
+        env:
+          CASES: ${{ needs.setup.outputs.cases }}
+          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
+          GATE: ${{ needs.setup.outputs.gate }}
+          TOUCHED_INDEXERS: ${{ needs.setup.outputs.touched }}
+          # This job's tables are a preview; publish writes the real ones.
+          WRITE_SUMMARY: '0'
+        run: |
+          node scripts/build-tables.ts
+          # [{case, indexers}] in the order the scenarios ran; absent when the
+          # gate is off.
+          echo "recheck=$(cat /tmp/benchmark-recheck.json 2>/dev/null || echo '[]')" >> "$GITHUB_OUTPUT"
+
+  # A fourth sample of each row the gate held back, one scenario at a time like
+  # every other round. Skipped entirely on the usual run, where nothing moved.
+  recheck:
+    name: Recheck ${{ matrix.slot.case }}
+    needs: [setup, aggregate]
+    # Without a status function GitHub adds `success()`, which looks at every
+    # job upstream — so one failed indexer in any round would skip the recheck
+    # and publish every held-back row as unstable.
+    if: ${{ !cancelled() && needs.aggregate.result == 'success' && needs.aggregate.outputs.recheck != '' && needs.aggregate.outputs.recheck != '[]' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        slot: ${{ fromJSON(needs.aggregate.outputs.recheck) }}
     uses: ./.github/workflows/benchmark-case.yml
     with:
-      case: ${{ needs.setup.outputs.case4 }}
-      indexers: ${{ needs.setup.outputs.indexers4 }}
+      case: ${{ matrix.slot.case }}
+      indexers: ${{ toJSON(matrix.slot.indexers) }}
       duration: ${{ needs.setup.outputs.duration }}
+      windows: ${{ needs.setup.outputs.windows }}
+      round: recheck
     secrets: inherit
 
-  scenario-5:
-    name: ${{ needs.setup.outputs.case5 }}
-    needs: [setup, scenario-1, scenario-2, scenario-3, scenario-4]
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case5 != ''
-    uses: ./.github/workflows/benchmark-case.yml
-    with:
-      case: ${{ needs.setup.outputs.case5 }}
-      indexers: ${{ needs.setup.outputs.indexers5 }}
-      duration: ${{ needs.setup.outputs.duration }}
-    secrets: inherit
-
-  summary:
-    name: Summary
-    needs: [setup, scenario-1, scenario-2, scenario-3, scenario-4, scenario-5]
+  publish:
+    name: Publish
+    needs: [setup, aggregate, recheck]
     # A pull request that changed nothing benchmark-related runs no scenario,
     # so there is nothing to tabulate — and an empty table reads as "measured,
-    # found nothing" rather than "not measured".
-    if: always() && needs.setup.result == 'success' && needs.setup.outputs.case1 != ''
+    # found nothing" rather than "not measured". A recheck that failed still
+    # publishes: the rows it was for fall back to the rounds' samples, flagged.
+    # A cancelled run publishes nothing.
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && needs.aggregate.result == 'success' }}
     runs-on: ubuntu-latest
+    # Pushes the README on main and comments the tables on a pull request;
+    # nothing else.
+    permissions:
+      contents: write
+      pull-requests: write
+    # Shared by every build-tables.ts call below, so the README rebuild decides
+    # each row exactly as the first build did. The recheck has had its turn, so
+    # a row that still disagrees is published with a note rather than held back.
+    env:
+      CASES: ${{ needs.setup.outputs.cases }}
+      SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
+      GATE: ${{ needs.setup.outputs.gate == 'off' && 'off' || 'final' }}
+      TOUCHED_INDEXERS: ${{ needs.setup.outputs.touched }}
     steps:
       - uses: actions/checkout@v4
 
@@ -295,10 +448,16 @@ jobs:
         with:
           node-version: 24
 
+      # Same reason as in `aggregate`: rows carried forward and the gate's
+      # baseline have to be what is published now, not what was published
+      # when the pushed commit was made.
+      - name: Read the README as published now
+        if: github.event_name == 'push'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git show FETCH_HEAD:README.md > README.md
+
       - name: Build comparison tables
-        env:
-          CASES: ${{ needs.setup.outputs.cases }}
-          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
         run: node scripts/build-tables.ts
 
       - name: Comment results on PR
@@ -307,7 +466,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           SECTION: benchmarks
-          CASES: ${{ needs.setup.outputs.cases }}
           PARTIAL_RUN: ${{ needs.setup.outputs.partial }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -363,8 +521,8 @@ jobs:
       - name: Update README
         if: github.event_name == 'push'
         env:
-          CASES: ${{ needs.setup.outputs.cases }}
-          SELECTED_INDEXERS: ${{ needs.setup.outputs.selected }}
+          # Rebuilt once per attempt; the step above already wrote the summary.
+          WRITE_SUMMARY: '0'
           BRANCH: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
@@ -375,11 +533,21 @@ jobs:
           # README, and a plain push that lost the race dropped a whole run's
           # results. The tables are rebuilt each time because what they carry
           # forward is read from the README. The results they read are
-          # untracked, so the reset leaves them alone.
+          # untracked, so the reset leaves them alone. The trailer records
+          # which commit was measured, so the next run can tell which tools
+          # changed since.
+          # A copy of the tree this run measured, to build the tables with
+          # once the loop has moved the checkout to the branch tip.
+          AT_SHA="$RUNNER_TEMP/at-sha"
+          git worktree add --quiet --detach "$AT_SHA" "$GITHUB_SHA"
+
           for ATTEMPT in 1 2 3 4 5; do
             git fetch --quiet origin "$BRANCH"
             git reset --quiet --hard "origin/$BRANCH"
-            node scripts/build-tables.ts > /dev/null
+            # The run's own scripts, not the tip's: a later push may already
+            # have changed how results are read or rendered.
+            README_PATH="$PWD/README.md" RESULTS_DIR="$PWD/results" \
+              node "$AT_SHA/scripts/build-tables.ts" > /dev/null
 
             CHANGED=0
             for CASE in $(echo "$CASES" | jq -r '.[]'); do
@@ -401,7 +569,8 @@ jobs:
             [ "$CHANGED" = "1" ] || exit 0
             git diff --quiet README.md && exit 0
             git add README.md
-            git commit --quiet -m "Update benchmark results in README"
+            git commit --quiet -m "Update benchmark results in README" \
+              -m "Benchmarked-Commit: $GITHUB_SHA"
             if git push origin "HEAD:$BRANCH"; then
               exit 0
             fi

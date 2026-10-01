@@ -21,10 +21,20 @@ on:
         description: 'Throughput window in seconds'
         required: true
         type: string
+      windows:
+        description: 'Throughput windows per indexer (the runner''s --windows). The best is kept.'
+        required: false
+        default: '2'
+        type: string
+      round:
+        description: 'Which sample this is — r1, r2, … or recheck. Part of the artifact name, so the rounds of one run do not overwrite each other.'
+        required: false
+        default: 'r1'
+        type: string
 
 jobs:
   benchmark:
-    name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }}"
+    name: "Benchmark: ${{ inputs.case }} / ${{ matrix.indexer }} (${{ inputs.round }})"
     runs-on: ubuntu-latest
     # One job is one indexer on one scenario, and they all run concurrently, so
     # this bounds a single benchmark rather than the suite: phase A's five-minute
@@ -174,11 +184,12 @@ jobs:
           # it goes as high as the runner allows before anything starts.
           ulimit -n "$(ulimit -Hn)" || true
           echo "open files: $(ulimit -n)"
-          node "cases/$CASE/run.ts" "$INDEXER" --duration="$DURATION" 2>&1 | tee /tmp/benchmark-output.txt
+          node "cases/$CASE/run.ts" "$INDEXER" --duration="$DURATION" --windows="$WINDOWS" 2>&1 | tee /tmp/benchmark-output.txt
         env:
           CASE: ${{ inputs.case }}
           INDEXER: ${{ matrix.indexer }}
           DURATION: ${{ inputs.duration }}
+          WINDOWS: ${{ inputs.windows }}
           ENVIO_API_TOKEN: ${{ secrets.ENVIO_API_TOKEN }}
           # The SQD Network gateway (v2.archive.subsquid.io) requires an API key
           # as of 19 May 2026. The @subsquid archive client reads it from
@@ -204,6 +215,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-${{ inputs.case }}--${{ matrix.indexer }}
+          # build-tables.ts reads the indexer and the round back out of this
+          # name (cases/lib/aggregate.ts), so its shape is load-bearing.
+          name: benchmark-${{ inputs.case }}--${{ matrix.indexer }}--${{ inputs.round }}
           path: /tmp/benchmark-output.txt
           if-no-files-found: ignore

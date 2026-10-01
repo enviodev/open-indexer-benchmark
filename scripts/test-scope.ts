@@ -268,6 +268,7 @@ check("workflow changes run everything", [".github/workflows/benchmark-case.yml"
 
 check("docs and local scripts run nothing", [
   "README.md",
+  "METHODOLOGY.md",
   "cases/erc20-transfer-events/README.md",
   "cases/erc20-transfer-events/ponder/README.md",
   ".gitignore",

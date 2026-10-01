@@ -1,5 +1,5 @@
 // Result table rendering, shared by the local benchmark runner and the CI
-// summary job so both publish an identical format.
+// CI jobs that build the tables, so both publish an identical format.
 //
 // Rows are indexers and columns are metrics: a benchmark gains metrics far
 // more often than it gains indexers, and only this orientation has room to
@@ -43,6 +43,12 @@ export interface TableRow {
    * because it has no rate to compare.
    */
   unsupported?: string;
+  /**
+   * Set when this row's samples still disagreed after the gate measured it
+   * again: how far apart the runs were. Reported with the run, like a carried
+   * row, and left out of the README, which only ever shows the numbers.
+   */
+  unstable?: string;
 }
 
 /**
@@ -100,7 +106,7 @@ export function buildTable(rows: TableRow[]): string {
   const notes: string[] = [];
   for (const row of sorted) {
     const tool = row.cells.tool || row.name;
-    const name = row.carriedOver ? `${tool} ⚠️` : tool;
+    const name = row.carriedOver || row.unstable ? `${tool} ⚠️` : tool;
 
     if (row.unsupported) {
       // Every measured column is a dash — there is nothing to report — and the
@@ -149,6 +155,13 @@ export function buildTable(rows: TableRow[]): string {
       `> ⚠️ ${carried.join(
         ", "
       )} — carried forward from a previous run; the latest run produced no fresh result.`
+    );
+  }
+
+  for (const row of sorted.filter((r) => r.unstable)) {
+    lines.push(
+      "",
+      `> ⚠️ ${row.name} via ${linkText(row.cells.source)} — ${row.unstable}.`
     );
   }
 
