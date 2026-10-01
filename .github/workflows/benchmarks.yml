@@ -273,7 +273,11 @@ jobs:
           # a recheck.
           TOUCHED='{}'
           if [ "$EVENT_NAME" = "push" ]; then
-            SINCE=$(git log -1 --format=%B --grep='^Benchmarked-Commit: ' "origin/$GITHUB_REF_NAME" \
+            # Only the bot's own README updates count: a human commit that quotes
+            # the trailer — a revert, a squash-merge of a pull request about it —
+            # must not move the baseline.
+            SINCE=$(git log -1 --format=%B --author='github-actions\[bot\]' \
+              --grep='^Benchmarked-Commit: ' "origin/$GITHUB_REF_NAME" \
               | sed -n 's/^Benchmarked-Commit: //p' | head -1)
             if [ -z "$SINCE" ] || ! git cat-file -e "$SINCE^{commit}" 2>/dev/null; then
               SINCE="$BEFORE_SHA"
@@ -418,6 +422,11 @@ jobs:
     # A cancelled run publishes nothing.
     if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.case1 != '' && needs.aggregate.result == 'success' }}
     runs-on: ubuntu-latest
+    # Pushes the README on main and comments the tables on a pull request;
+    # nothing else.
+    permissions:
+      contents: write
+      pull-requests: write
     # Shared by every build-tables.ts call below, so the README rebuild decides
     # each row exactly as the first build did. The recheck has had its turn, so
     # a row that still disagrees is published with a note rather than held back.
