@@ -1425,6 +1425,12 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
       : `did not get through a range whose logs were served twice: ${doubled.summary}`
   );
 
+  // A phase that starts from data an earlier one left wrong is judged on the
+  // blocks it produced and nothing else, the way the reorg cases are: a hole
+  // one fault left would otherwise fail every check that came after it.
+  const judgeFrom = async (from: number) =>
+    (await compare(ctx)).clean ? () => compare(ctx) : () => compare(ctx, undefined, from);
+
   // ── A block the endpoint says is not there ──
   //
   // The logs are still served; only the block lookups come back null, which
@@ -1432,14 +1438,15 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   // by one machine and asked of another a second behind it. A tool that takes
   // the null as "no such block" and moves on has a hole; one that takes it as
   // fatal is down for a condition that resolves itself.
+  const judgePhantom = await judgeFrom(ctx.chain.head() + 1);
   ctx.chain.advance(30);
   const beforePhantom = await ctx.observe.count().catch(() => 0);
   ctx.chain.fail({ kind: "missing", rate: 0.5, seed: 11 });
   await sleep(20_000);
   ctx.chain.fail(null);
   ctx.chain.advance(10);
-  const pastPhantom = await synced(ctx);
-  const phantom = await settled(ctx);
+  const pastPhantom = await synced(ctx, ctx.patience.syncMs, { judge: judgePhantom });
+  const phantom = await settled(ctx, ctx.patience.reactMs, judgePhantom);
   checks["missing-block"] = verdict(
     ctx.alive() && pastPhantom && phantom.clean,
     !ctx.alive()
@@ -1456,13 +1463,14 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   // appears, which is when the replica serving the logs has not seen it yet.
   // A batch of blocks handed over at once would be read from below the lag
   // and never meet the fault.
+  const judgeLagging = await judgeFrom(ctx.chain.head() + 1);
   const beforeLagging = await ctx.observe.count().catch(() => 0);
   ctx.chain.setLogsLag(3);
   await produce(ctx, 10, 2_000);
   ctx.chain.setLogsLag(0);
   ctx.chain.advance(10);
-  const pastLagging = await synced(ctx);
-  const lagging = await settled(ctx);
+  const pastLagging = await synced(ctx, ctx.patience.syncMs, { judge: judgeLagging });
+  const lagging = await settled(ctx, ctx.patience.reactMs, judgeLagging);
   checks["lagging-logs"] = verdict(
     ctx.alive() && pastLagging && lagging.clean,
     !ctx.alive()
@@ -1479,6 +1487,7 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   // between, so the tool never reads the old branch's headers: only the logs
   // replica knows it existed. Blocks keep coming while the replica is stuck on
   // it, so the tool is asking about the rewritten heights for the whole window.
+  const judgeSplit = await judgeFrom(ctx.chain.head() + 1);
   const beforeSplit = await ctx.observe.count().catch(() => 0);
   ctx.chain.setLogsFromReplacedBranch(true);
   ctx.chain.advance(3, { logs: false });
@@ -1486,8 +1495,8 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   await produce(ctx, 10, 2_000);
   ctx.chain.setLogsFromReplacedBranch(false);
   ctx.chain.advance(10);
-  const pastSplit = await synced(ctx);
-  const split = await settled(ctx);
+  const pastSplit = await synced(ctx, ctx.patience.syncMs, { judge: judgeSplit });
+  const split = await settled(ctx, ctx.patience.reactMs, judgeSplit);
   checks["split-branch-logs"] = verdict(
     ctx.alive() && pastSplit && split.clean,
     !ctx.alive()
@@ -1499,11 +1508,12 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   await reviveIfNeeded(ctx, "exited when logs were answered from a replaced branch");
 
   // ── A hash that stops existing under a request ──
+  const judgeStale = await judgeFrom(ctx.chain.head() + 1);
   ctx.chain.advance(20);
   ctx.chain.reorg({ depth: 6, logs: "changed" });
   ctx.chain.advance(10);
-  const afterStale = await synced(ctx);
-  const stale = await settled(ctx);
+  const afterStale = await synced(ctx, ctx.patience.syncMs, { judge: judgeStale });
+  const stale = await settled(ctx, ctx.patience.reactMs, judgeStale);
   checks["stale-hash"] = verdict(
     ctx.alive() && afterStale && stale.clean,
     !ctx.alive()

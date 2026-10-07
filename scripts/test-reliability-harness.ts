@@ -317,7 +317,9 @@ const EXPECTATIONS: Expectation[] = [
     scenario: "rpc-inconsistency",
     defects: ["trusts-empty-logs"],
     fails: ["lagging-logs", "split-branch-logs"],
-    passes: ["head-goes-backwards", "duplicate-delivery", "missing-block"],
+    // Judged on its own blocks, so the holes the two before it left are not
+    // its failure.
+    passes: ["head-goes-backwards", "duplicate-delivery", "missing-block", "stale-hash"],
     slow: true,
   },
   // Retrying a failing node flat out: every request is still answered in the
