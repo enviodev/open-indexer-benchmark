@@ -441,7 +441,74 @@ try {
       (mock.control.reset(), mock.control.stats().subscriptions === 1),
       String(mock.control.stats().subscriptions)
     );
+
+    // A round trip for a request, half of one for an announcement, which
+    // leaves the node when the block exists rather than when it is asked.
+    mock.control.setLatency(200);
+    const askedAt = performance.now();
+    socket.send(JSON.stringify({ jsonrpc: "2.0", id: 4, method: "eth_blockNumber", params: [] }));
+    await waitFor(() => reply(4) !== undefined);
+    const answeredIn = performance.now() - askedAt;
+    const publishedAt = performance.now();
+    mock.control.advance(1);
+    await waitFor(() => heads().length >= 6);
+    const announcedIn = performance.now() - publishedAt;
+    mock.control.setLatency(0);
+    check(
+      "a request over the WebSocket waits one round trip",
+      reply(4) !== undefined && answeredIn >= 200 && answeredIn < 400,
+      `${Math.round(answeredIn)}ms`
+    );
+    check(
+      "a new block is announced half a round trip after it exists",
+      heads().length === 6 && announcedIn >= 100 && announcedIn < 200,
+      `${Math.round(announcedIn)}ms`
+    );
     socket.close();
+  }
+
+  // ── Network latency ──
+  //
+  // One round trip per HTTP request, however many calls it batches: a tool
+  // that asks for three things in one request waits once, and one that asks
+  // three times waits three times. A wide latency keeps the bounds clear of
+  // timer jitter on a busy runner.
+  {
+    const timed = async (request: () => Promise<unknown>) => {
+      const startedAt = performance.now();
+      await request();
+      return performance.now() - startedAt;
+    };
+    mock.control.setLatency(200);
+    const single = await timed(() => rpc("eth_blockNumber"));
+    const batched = await timed(() =>
+      fetch(mock!.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify([1, 2, 3].map((id) => ({ jsonrpc: "2.0", id, method: "eth_blockNumber" }))),
+      }).then((res) => res.json())
+    );
+    const sequential = await timed(async () => {
+      for (let i = 0; i < 3; i++) await rpc("eth_blockNumber");
+    });
+    mock.control.setLatency(0);
+    const instant = await timed(() => rpc("eth_blockNumber"));
+    check(
+      "a request waits one round trip",
+      single >= 200 && single < 400,
+      `${Math.round(single)}ms`
+    );
+    check(
+      "a batch waits one round trip, not one per call",
+      batched >= 200 && batched < 400,
+      `${Math.round(batched)}ms`
+    );
+    check(
+      "requests one after another wait one round trip each",
+      sequential >= 600,
+      `${Math.round(sequential)}ms`
+    );
+    check("no latency is the default again once cleared", instant < 200, `${Math.round(instant)}ms`);
   }
 
   // ── A fault that answers some methods still answers errors as errors ──

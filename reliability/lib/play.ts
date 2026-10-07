@@ -1756,6 +1756,14 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
 export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
   const BLOCK_MS = 2_000;
   const BLOCKS = 90;
+  /**
+   * A provider's round trip. With an endpoint on the same machine every
+   * request is free, and a tool that makes five in a row at each block reads
+   * as fast as one that makes one; a real provider is tens of milliseconds
+   * away, and that difference is what this scenario is for.
+   */
+  const RPC_LATENCY_MS = 50;
+  ctx.chain.setLatency(RPC_LATENCY_MS);
 
   // Latency is read from the database's own commit times where it can be:
   // exact to the moment a row became readable, where a poll only brackets it

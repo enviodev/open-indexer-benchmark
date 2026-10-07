@@ -387,6 +387,15 @@ export interface ChainControl {
    */
   setLimits(limits: { maxBlockRange?: number; maxLogsPerResponse?: number }): void;
   /**
+   * Answer every request a round trip of `ms` after it was sent, over HTTP
+   * and the WebSocket alike, with new-block announcements arriving half that
+   * after the block exists. Real providers are tens of milliseconds away, and
+   * at the head that is what separates a tool that asks once per block from
+   * one that asks five times in a row. A batch is one round trip however many
+   * calls it carries. Zero, the default, answers at once.
+   */
+  setLatency(ms: number): void;
+  /**
    * Answer from `blocks` behind the real head, the way one node of a
    * load-balanced endpoint does. Blocks above the lagging head are reported as
    * missing too, because a replica that has not seen them does not have them.
@@ -461,6 +470,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   let maxBlockRange = spec.maxBlockRange;
   let maxLogsPerResponse = spec.maxLogsPerResponse;
   let headLag = 0;
+  let latencyMs = 0;
   let duplicateLogs = false;
   /** The canonical chain, oldest first. Index 0 is `spec.startBlock`. */
   const chain: MockBlock[] = [];
@@ -876,7 +886,29 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     return fault;
   }
 
+  /**
+   * Run `fn` half a round trip from now: the time a message takes to cross
+   * the network one way.
+   */
+  function afterHalfTrip(fn: () => void) {
+    if (latencyMs > 0) setTimeout(fn, latencyMs / 2);
+    else fn();
+  }
+
   const server: Server = createServer((req, res) => {
+    if (latencyMs > 0) {
+      // The request reaches the node half a round trip after it was sent, and
+      // the answer reaches the tool half a round trip after that. Splitting it
+      // matters at the head: the node answers with the chain as it stands when
+      // the request arrives, not when it left.
+      req.pause();
+      afterHalfTrip(() => req.resume());
+      const end = res.end.bind(res) as (...args: unknown[]) => void;
+      res.end = ((...args: unknown[]) => {
+        afterHalfTrip(() => end(...args));
+        return res;
+      }) as typeof res.end;
+    }
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
@@ -992,12 +1024,14 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     const header = serializeBlock(block, false);
     for (const [connection, ids] of subscribers) {
       for (const subscription of ids) {
-        connection.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            method: "eth_subscription",
-            params: { subscription, result: header },
-          })
+        afterHalfTrip(() =>
+          connection.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_subscription",
+              params: { subscription, result: header },
+            })
+          )
         );
       }
     }
@@ -1046,11 +1080,14 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         return { jsonrpc: "2.0", id, error: { code, message: (err as Error).message } };
       }
     });
-    connection.send(JSON.stringify(Array.isArray(payload) ? answers : answers[0]));
+    const answer = JSON.stringify(Array.isArray(payload) ? answers : answers[0]);
+    afterHalfTrip(() => connection.send(answer));
   }
 
   server.on("upgrade", (req, socket) => {
-    const connection = acceptWebSocket(req, socket, answerOverSocket, (closed) => {
+    const answerAfterHalfTrip = (text: string, connection: WsConnection) =>
+      afterHalfTrip(() => answerOverSocket(text, connection));
+    const connection = acceptWebSocket(req, socket, answerAfterHalfTrip, (closed) => {
       sockets.delete(closed);
       subscribers.delete(closed);
     });
@@ -1144,6 +1181,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     setLimits(limits) {
       maxBlockRange = limits.maxBlockRange;
       maxLogsPerResponse = limits.maxLogsPerResponse;
+    },
+    setLatency(ms) {
+      latencyMs = Math.max(0, ms);
     },
     setHeadLag(blocks) {
       headLag = Math.max(0, blocks);
