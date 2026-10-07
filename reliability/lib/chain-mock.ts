@@ -328,8 +328,11 @@ export interface ChainStats {
 export interface ChainControl {
   /** Highest block currently on the chain. */
   head(): number;
-  /** Append blocks to the head. */
-  advance(blocks?: number): void;
+  /**
+   * Append blocks to the head. `logs: false` makes them empty, so a reorg can
+   * replace blocks that held nothing with ones that hold something.
+   */
+  advance(blocks?: number, opts?: { logs?: boolean }): void;
   /**
    * Rewrite the last `depth` blocks and replace them with `depth + extend`
    * fresh ones, so the head moves forward across the rewrite the way a real
@@ -393,6 +396,28 @@ export interface ChainControl {
    * Zero restores the truth.
    */
   setHeadLag(blocks: number): void;
+  /**
+   * Answer eth_getLogs from a replica `blocks` behind the head, while the head
+   * and every block lookup still come from one that is not. The blocks the
+   * replica has not seen yet answer an empty range as holding no logs - no
+   * error, no null, a well-formed `[]` - and a lookup by one of their hashes as
+   * an unknown block. This is a load-balanced provider announcing a block from
+   * one machine and answering for its logs from another, and it is the one
+   * fault a client cannot see from the response alone: it has to compare the
+   * logs against the headers it read.
+   * Zero restores the truth.
+   */
+  setLogsLag(blocks: number): void;
+  /**
+   * Answer eth_getLogs for the blocks the last reorg replaced from the branch
+   * it replaced them on, while the head and every block lookup come from the
+   * branch the chain is on now. A lookup by one of the new branch's hashes is
+   * an unknown block. This is a load-balanced provider whose log replica has
+   * not switched forks yet: the headers a tool reads say one branch, the logs
+   * it is handed say another, and when the old branch held nothing in those
+   * blocks there is not even a log hash to disagree with the header.
+   */
+  setLogsFromReplacedBranch(on: boolean): void;
   /**
    * Serve every log twice in the same response. A chain cannot do this; a
    * provider stitching two backends together can, and an indexer that writes
@@ -461,6 +486,10 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   let maxBlockRange = spec.maxBlockRange;
   let maxLogsPerResponse = spec.maxLogsPerResponse;
   let headLag = 0;
+  let logsLag = 0;
+  let logsFromReplacedBranch = false;
+  /** The blocks the last reorg cut, by height. */
+  let replacedBranch = new Map<number, MockBlock>();
   let duplicateLogs = false;
   /** The canonical chain, oldest first. Index 0 is `spec.startBlock`. */
   const chain: MockBlock[] = [];
@@ -622,6 +651,11 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     return chain[height - spec.startBlock] ?? null;
   }
 
+  /** The highest block whose logs the endpoint can currently answer for. */
+  function logsHead(): number {
+    return servedHead() - logsLag;
+  }
+
   /** The head as the endpoint currently admits to, which may be behind. */
   function servedHead(): number {
     const real = chain[chain.length - 1]?.number ?? spec.startBlock;
@@ -699,13 +733,26 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  /** The block at a height as the replica answering eth_getLogs sees it. */
+  function logsBlockAt(height: number): MockBlock | null {
+    if (logsFromReplacedBranch) {
+      const replaced = replacedBranch.get(height);
+      if (replaced) return replaced;
+    }
+    return blockAt(height);
+  }
+
   function getLogs(filter: Record<string, unknown>) {
     if (typeof filter?.blockHash === "string") {
-      const block = chain.find((b) => b.hash === filter.blockHash);
+      const block = [...chain, ...replacedBranch.values()].find(
+        (b) => b.hash === filter.blockHash
+      );
       // A hash that is no longer on the chain is not an empty answer: it is
       // gone, and a tool told "no logs" would record a reorged block as one
       // that simply held nothing.
-      if (!block) throw rpcFault(-32_000, "unknown block");
+      if (!block || block.number > logsHead() || logsBlockAt(block.number) !== block) {
+        throw rpcFault(-32_000, "unknown block");
+      }
       return filterLogs(logsOf(block), filter);
     }
     const head = servedHead();
@@ -717,8 +764,10 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       throw rpcFault(-32_600, `query exceeds max block range ${maxBlockRange}`);
     }
     const out: ReturnType<typeof logsOf> = [];
-    for (let height = from; height <= to; height++) {
-      const block = blockAt(height);
+    // The range is still answered up to `to`: the replica does not refuse a
+    // block it has not seen, it reports it as empty.
+    for (let height = from; height <= Math.min(to, logsHead()); height++) {
+      const block = logsBlockAt(height);
       if (block) out.push(...filterLogs(logsOf(block), filter));
     }
     if (maxLogsPerResponse && out.length > maxLogsPerResponse) {
@@ -1084,9 +1133,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
 
   const control: ChainControl = {
     head: () => chain[chain.length - 1]?.number ?? spec.startBlock,
-    advance(blocks = 1) {
+    advance(blocks = 1, { logs = true } = {}) {
       const epoch = chain[chain.length - 1]?.epoch ?? 0;
-      for (let i = 0; i < blocks; i++) announce(append(epoch, true));
+      for (let i = 0; i < blocks; i++) announce(append(epoch, logs));
     },
     reorg({ depth, extend = 0, logs = "changed" }) {
       const head = chain[chain.length - 1];
@@ -1097,6 +1146,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       const replacements = Math.max(1, cut + extend);
       const from = head.number - cut + 1;
       const epoch = head.epoch + 1;
+      replacedBranch = new Map(chain.slice(chain.length - cut).map((b) => [b.number, b]));
       chain.length = chain.length - cut;
       // Announced block by block, as a node announces the new branch it
       // switched to.
@@ -1147,6 +1197,12 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     },
     setHeadLag(blocks) {
       headLag = Math.max(0, blocks);
+    },
+    setLogsLag(blocks) {
+      logsLag = Math.max(0, blocks);
+    },
+    setLogsFromReplacedBranch(on) {
+      logsFromReplacedBranch = on;
     },
     setDuplicateLogs(on) {
       duplicateLogs = on;

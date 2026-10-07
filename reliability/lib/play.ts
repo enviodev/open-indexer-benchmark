@@ -1450,6 +1450,54 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   );
   await reviveIfNeeded(ctx, "exited when a block came back null");
 
+  // ── Logs answered from a replica that has not seen the newest blocks ──
+  //
+  // Produced a block at a time, so the tool is asking about each one as it
+  // appears, which is when the replica serving the logs has not seen it yet.
+  // A batch of blocks handed over at once would be read from below the lag
+  // and never meet the fault.
+  const beforeLagging = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setLogsLag(3);
+  await produce(ctx, 10, 2_000);
+  ctx.chain.setLogsLag(0);
+  ctx.chain.advance(10);
+  const pastLagging = await synced(ctx);
+  const lagging = await settled(ctx);
+  checks["lagging-logs"] = verdict(
+    ctx.alive() && pastLagging && lagging.clean,
+    !ctx.alive()
+      ? "exited when the endpoint answered a block's logs from behind"
+      : (await ctx.observe.count().catch(() => 0)) === beforeLagging
+        ? "stopped indexing when the endpoint answered a block's logs from behind"
+        : `lost the events in blocks the endpoint answered as empty: ${lagging.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when a block's logs were answered from behind");
+
+  // ── Logs answered from the branch a reorg replaced ──
+  //
+  // The empty blocks and the reorg that replaces them happen with no await
+  // between, so the tool never reads the old branch's headers: only the logs
+  // replica knows it existed. Blocks keep coming while the replica is stuck on
+  // it, so the tool is asking about the rewritten heights for the whole window.
+  const beforeSplit = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setLogsFromReplacedBranch(true);
+  ctx.chain.advance(3, { logs: false });
+  ctx.chain.reorg({ depth: 3, logs: "changed" });
+  await produce(ctx, 10, 2_000);
+  ctx.chain.setLogsFromReplacedBranch(false);
+  ctx.chain.advance(10);
+  const pastSplit = await synced(ctx);
+  const split = await settled(ctx);
+  checks["split-branch-logs"] = verdict(
+    ctx.alive() && pastSplit && split.clean,
+    !ctx.alive()
+      ? "exited when the endpoint answered logs from a branch the chain had left"
+      : (await ctx.observe.count().catch(() => 0)) === beforeSplit
+        ? "stopped indexing when the endpoint answered logs from a branch the chain had left"
+        : `lost the events in blocks answered from the replaced branch: ${split.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when logs were answered from a replaced branch");
+
   // ── A hash that stops existing under a request ──
   ctx.chain.advance(20);
   ctx.chain.reorg({ depth: 6, logs: "changed" });

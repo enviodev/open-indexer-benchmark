@@ -271,7 +271,7 @@ Reported alongside the score, and not part of it:
 
 Whether a node that errors, stalls, rate limits, contradicts itself or stops announcing new blocks costs throughput or costs data.
 
-5 scenarios, 16 checks between them; the column counts all of them together.
+5 scenarios, 18 checks between them; the column counts all of them together.
 
 <a id="rpc-outage"></a>
 
@@ -334,13 +334,15 @@ Public endpoints cap what one request may ask for: a block range, a number of re
 
 The failure nobody plans for, because it should not happen and does: a load-balanced endpoint answering from two nodes at different heights, so the head goes backwards; a block hash that was valid a second ago and is not now; the same block served twice. A tool that trusts the endpoint's answers unconditionally will happily record any of it.
 
-**What the harness does.** The chain is made to answer from behind for a while - a head lower than one already reported - and to serve a block range twice in succession, and a hash the tool has already used is reorged out from under a request in flight.
+**What the harness does.** The chain is made to answer from behind for a while - a head lower than one already reported - to serve a block range twice in succession, to answer for the logs of the newest blocks from a replica that has not seen them yet or that is still on a branch a reorg replaced, and a hash the tool has already used is reorged out from under a request in flight.
 
 | check | what a pass means |
 | --- | --- |
 | keeps its data when an RPC node briefly reports an older block | The tool neither crashes nor rewinds its own data on the strength of one lagging answer, and carries on once the head recovers. Treating a lagging replica as a reorg is a real and expensive false positive. |
 | counts nothing twice when the RPC node sends it twice | The same logs arriving a second time produce no second row and no doubled aggregate. Idempotent ingestion, tested by asking for it rather than hoping. |
 | handles a block the RPC node briefly fails to return | Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as "no such block" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself. |
+| keeps the events an RPC node briefly answers as empty | For twenty seconds at the head, eth_getLogs is answered by a replica three blocks behind, while the head and every block header come from one that is not. The replica has no error to give for a block it has not seen: it answers the range with the logs it has, which for the newest blocks is none. This is what a load-balanced provider does on a chain that makes blocks faster than its machines agree, and nothing in the response says so - the header the tool reads for the same block does, with a bloom filter that says the block holds logs. A tool that takes the empty answer at its word records those blocks as holding nothing and moves on, and since it believes it has them, it never asks again. |
+| keeps the events an RPC node answers from a branch the chain left | Three empty blocks at the head are replaced by three that carry transfers, and for twenty seconds eth_getLogs is answered by a replica still on the branch that was replaced, while the head and every header come from the branch the chain switched to. The tool never sees the old branch's headers, so there is no stored hash for a reorg check to trip on, and since the old blocks held nothing there is not even a log hash to disagree with the header. The header's bloom filter says those blocks hold logs; a tool that stores the header's hash next to an empty answer has a hole that every later hash comparison agrees with. |
 | handles a block being replaced while it asks for it | A request against a hash the chain has reorged away comes back an error, not an empty result. The tool has to treat that as a reorg signal; treating it as a failed request and retrying forever is the stall this check finds. |
 
 <a id="subscription-stall"></a>
