@@ -444,6 +444,85 @@ try {
     socket.close();
   }
 
+  // ── Logs answered from a replica behind the head ──
+  //
+  // The head and the headers are the truth; only the logs come from behind.
+  // That split is the whole fault: a tool that trusts an empty answer for a
+  // block whose header it has just read records the block as holding nothing.
+  {
+    const head = mock.control.head();
+    const tip = `0x${head.toString(16)}`;
+    const lagged = `0x${(head - 2).toString(16)}`;
+    mock.control.setLogsLag(2);
+    const nearHead = await amountsAt(head - 3, head);
+    const { result: reportedHead } = await rpc("eth_blockNumber");
+    const { result: tipBlock } = await rpc("eth_getBlockByNumber", [tip, false]);
+    const { result: laggedBlock } = await rpc("eth_getBlockByNumber", [lagged, false]);
+    const byHash = await rpc("eth_getLogs", [{ blockHash: tipBlock?.hash }]);
+    mock.control.setLogsLag(0);
+    check(
+      "a lagging log replica answers nothing for the blocks it has not seen",
+      nearHead.length === 4,
+      `${nearHead.length} transfers across the last four blocks`
+    );
+    check(
+      "a lagging log replica leaves the head and the headers alone",
+      BigInt(reportedHead) === BigInt(head) &&
+        tipBlock?.logsBloom !== `0x${"0".repeat(512)}` &&
+        laggedBlock?.number === lagged,
+      JSON.stringify({ reportedHead, tip: tipBlock?.number, lagged: laggedBlock?.number })
+    );
+    check(
+      "a lagging log replica refuses a block hash it has not seen, rather than answering empty",
+      byHash?.error !== undefined,
+      JSON.stringify(byHash)
+    );
+    check(
+      "the logs come back once the replica catches up",
+      (await amountsAt(head - 3, head)).length === 8
+    );
+  }
+
+  // ── Logs answered from the branch a reorg replaced ──
+  //
+  // Three empty blocks are replaced by three that carry transfers, and the
+  // logs replica has not switched: it answers the rewritten heights as the
+  // branch it is still on, which held nothing, while every header is from the
+  // branch the chain is on now.
+  {
+    mock.control.advance(3, { logs: false });
+    const replaced = mock.control.blockAt(mock.control.head())!;
+    const rewritten = mock.control.reorg({ depth: 3, logs: "changed" });
+    const current = mock.control.blockAt(rewritten.to)!;
+    mock.control.setLogsFromReplacedBranch(true);
+    const stale = await amountsAt(rewritten.from, rewritten.to);
+    const byNewHash = await rpc("eth_getLogs", [{ blockHash: current.hash }]);
+    const { result: header } = await rpc("eth_getBlockByNumber", [
+      `0x${rewritten.to.toString(16)}`,
+      false,
+    ]);
+    mock.control.setLogsFromReplacedBranch(false);
+    check(
+      "a replica on the replaced branch answers the rewritten blocks as that branch",
+      stale.length === 0 && replaced.hash !== current.hash,
+      `${stale.length} transfers`
+    );
+    check(
+      "a replica on the replaced branch refuses the new branch's hashes",
+      byNewHash?.error !== undefined,
+      JSON.stringify(byNewHash)
+    );
+    check(
+      "the headers are from the branch the chain is on",
+      header?.hash === current.hash && header?.logsBloom !== `0x${"0".repeat(512)}`,
+      JSON.stringify(header?.hash)
+    );
+    check(
+      "the rewritten blocks' logs come back once the replica switches branch",
+      (await amountsAt(rewritten.from, rewritten.to)).length === 6
+    );
+  }
+
   // ── A fault that answers some methods still answers errors as errors ──
   //
   // The missing-block fault passes everything but block lookups through to
