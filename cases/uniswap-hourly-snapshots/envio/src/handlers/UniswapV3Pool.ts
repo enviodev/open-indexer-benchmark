@@ -10,7 +10,6 @@ indexer.onEvent(
     context.Pool.set({
       id: POOL_ID,
       sqrtPriceX96: event.params.sqrtPriceX96,
-      liquidity: event.params.liquidity,
       tick: event.params.tick,
     });
 

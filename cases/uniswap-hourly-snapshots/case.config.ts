@@ -4,15 +4,18 @@ import type { CustomCaseConfig } from "../lib/case.ts";
 import { canonicalRow, encodeAmount, encodeSeconds } from "../lib/checksum.ts";
 import { fetchLogs, post, uintAtWord, type DecodedLog } from "../lib/hypersync.ts";
 
-const POOL = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"; // USDC/WETH 0.05%
+const POOL = "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"; // USDC/WETH 0.3%
 
 const SWAP_TOPIC =
   "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
 
 const START_BLOCK = 21_000_000;
 
-// 50,000 blocks is about a week: 26,932 swaps and 168 hourly snapshots.
-const VERIFY_END_BLOCK = 21_049_999;
+// 200,000 blocks is about four weeks: 11,959 swaps and 671 hourly snapshots,
+// 31 of them for hours without a swap. The pool is the quieter of the two
+// USDC/WETH pools on purpose: on the busier one every hour has a swap, so an
+// implementation that never looked at a block would get the prices right.
+const VERIFY_END_BLOCK = 21_199_999;
 
 const HOUR = 3600;
 
@@ -88,7 +91,6 @@ export const caseConfig: CustomCaseConfig = {
           kind: "amount",
           candidates: ["sqrtPriceX96", "sqrt_price_x96", "sqrt_price"],
         },
-        { role: "liquidity", kind: "amount", candidates: ["liquidity"] },
         { role: "tick", kind: "amount", candidates: ["tick"] },
       ],
     },
@@ -121,7 +123,7 @@ export const caseConfig: CustomCaseConfig = {
 
     const swapRows: string[] = [];
     const snapshots = new Map<number, string>();
-    let pool: { sqrtPriceX96: bigint; liquidity: bigint; tick: bigint } | null = null;
+    let pool: { sqrtPriceX96: bigint; tick: bigint } | null = null;
 
     for (const block of blocks) {
       for (const log of swapsByBlock.get(block.number) ?? []) {
@@ -129,7 +131,6 @@ export const caseConfig: CustomCaseConfig = {
         //      uint160 sqrtPriceX96, uint128 liquidity, int24 tick)
         pool = {
           sqrtPriceX96: uintAtWord(log.data, 2),
-          liquidity: uintAtWord(log.data, 3),
           tick: intAtWord(log.data, 4),
         };
         swapRows.push(
@@ -149,7 +150,6 @@ export const caseConfig: CustomCaseConfig = {
           encodeSeconds(hour),
           encodeAmount(BigInt(block.number)),
           encodeAmount(pool.sqrtPriceX96),
-          encodeAmount(pool.liquidity),
           encodeAmount(pool.tick),
         ])
       );

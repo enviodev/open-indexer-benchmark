@@ -14,4 +14,4 @@ chains:
       for: ${ENVIO_RPC_FOR:-fallback}
     contracts:
       - name: UniswapV3Pool
-        address: 0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640 # USDC/WETH 0.05%
+        address: 0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8 # USDC/WETH 0.3%
