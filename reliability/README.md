@@ -151,6 +151,7 @@ write down, which is not the same as a reliable tool - see
 | Subgraph | RPC | measured |
 | SubQuery | RPC | measured |
 | Envio Indexer | HyperSync | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Indexer's RPC row is measured instead |
+| Envio Indexer (ClickHouse) | HyperSync | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Indexer's RPC row is measured instead |
 | Envio Subgraph | HyperSync | reads HyperSync, which the benchmark cannot make reorg or fail on demand; the Envio Subgraph's RPC row is measured instead |
 | Rindexer | HyperSync | reads HyperSync, which the benchmark cannot make reorg or fail on demand; Rindexer's RPC row is measured instead |
 | Squid SDK | SQD Network | reads SQD Network, which the benchmark cannot make reorg or fail on demand; the Squid SDK's RPC row is measured instead |
