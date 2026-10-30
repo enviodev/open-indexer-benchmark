@@ -109,16 +109,17 @@ export interface EvmCaseConfig extends CommonCaseConfig {
 /**
  * A case the log path cannot express, which builds its own ground truth —
  * from a second reading of the chain, or from a snapshot of its reference
- * implementation where the logic is not replayable from raw data.
+ * implementation where the logic is not replayable from raw data. Solana is
+ * one; an EVM case that reads blocks as well as logs is another.
  */
-export interface SvmCaseConfig extends CommonCaseConfig {
+export interface CustomCaseConfig extends CommonCaseConfig {
   buildGroundTruth(
     token: string,
     onProgress?: (progress: FetchProgress) => void
   ): Promise<GroundTruth>;
 }
 
-export type CaseConfig = EvmCaseConfig | SvmCaseConfig;
+export type CaseConfig = EvmCaseConfig | CustomCaseConfig;
 
 export function isEvmCase(config: CaseConfig): config is EvmCaseConfig {
   return "topics" in config;

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: uniswap-hourly-snapshots
+description: Hourly snapshots of a Uniswap V3 pool
+contracts:
+  - name: UniswapV3Pool
+    events:
+      - event: "Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)"
+chains:
+  - id: 1 # Ethereum Mainnet
+    start_block: 21000000
+    end_block: ${ENVIO_END_BLOCK}
+    rpc:
+      url: ${ENVIO_RPC_URL}
+      for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: UniswapV3Pool
+        address: 0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640 # USDC/WETH 0.05%
