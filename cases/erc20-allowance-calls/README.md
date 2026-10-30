@@ -257,6 +257,8 @@ quickest way to see where a run's time went: `envio_preload_seconds` is the
 phase the calls happen in, against `envio_processing_seconds` for the handlers'
 second pass and `envio_storage_write_seconds` for the writes.
 
+The `envio-clickhouse` variant reads HyperSync like `envio`, and keeps every entity in ClickHouse instead of Postgres (`storage: {clickhouse: {default: true}}`, appended to `config.yaml` by the driver).
+
 ### Ponder
 
 Uses `context.client.readContract`, which reads at the event's block by default.

@@ -17,6 +17,7 @@ import {
   canonicalExprSql,
   checksumSql,
   whereClause,
+  type Dialect,
   type EntitySpec,
   type Expected,
   type FieldSpec,
@@ -26,6 +27,8 @@ import {
 export type SqlRunner = (query: string) => Promise<string>;
 
 export interface VerifyOptions {
+  /** Which database `sql` talks to. PostgreSQL unless a driver says otherwise. */
+  dialect?: Dialect;
   /**
    * Rebuilds the expected rows per entity key, in the same canonical encoding
    * the checksum uses. Called at most once, and only when something mismatched,
@@ -81,6 +84,8 @@ interface ResolvedTable {
 
 /** A resolved entity: where its rows live and how to encode them. */
 interface ResolvedEntity {
+  schema: string;
+  table: string;
   qualified: string;
   displayName: string;
   fieldExprs: string[];
@@ -113,21 +118,32 @@ function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
-async function introspect(sql: SqlRunner): Promise<ColumnInfo[]> {
+async function introspect(sql: SqlRunner, dialect: Dialect): Promise<ColumnInfo[]> {
   // Assembled server-side into a single value with explicit separators rather
   // than relying on psql's column and row formatting: this is the one layer
   // whose whole job is to cope with whatever names an indexer chose, so it must
   // not be the layer that a "|" in a column name breaks.
+  //
+  // ClickHouse has no information_schema worth the name, so it is asked through
+  // its own system tables, scoped to the database the connection names. A view
+  // reports as one, the way PostgreSQL's table_type does.
   const field = `E'\\x1f'`;
   const rows = await sql(
-    `SELECT string_agg(
-       c.table_schema || ${field} || c.table_name || ${field} || c.column_name ||
-       ${field} || c.data_type || ${field} || t.table_type, E'\\x1e')
-     FROM information_schema.columns c
-     JOIN information_schema.tables t
-       ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-     WHERE c.table_schema NOT IN (${SYSTEM_SCHEMAS.map((s) => `'${s}'`).join(", ")})
-       AND c.table_schema NOT LIKE 'pg_%'`
+    dialect === "clickhouse"
+      ? `SELECT arrayStringConcat(groupArray(concat(
+           c.database, '\\x1f', c.table, '\\x1f', c.name, '\\x1f', c.type, '\\x1f',
+           if(t.engine = 'View', 'VIEW', 'BASE TABLE'))), '\\x1e')
+         FROM system.columns c
+         JOIN system.tables t ON t.database = c.database AND t.name = c.table
+         WHERE c.database = currentDatabase()`
+      : `SELECT string_agg(
+           c.table_schema || ${field} || c.table_name || ${field} || c.column_name ||
+           ${field} || c.data_type || ${field} || t.table_type, E'\\x1e')
+         FROM information_schema.columns c
+         JOIN information_schema.tables t
+           ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+         WHERE c.table_schema NOT IN (${SYSTEM_SCHEMAS.map((s) => `'${s}'`).join(", ")})
+           AND c.table_schema NOT LIKE 'pg_%'`
   );
   const out: ColumnInfo[] = [];
   for (const line of rows.split(RECORD_SEP)) {
@@ -173,9 +189,10 @@ function findColumn(table: ResolvedTable, field: FieldSpec): ColumnInfo | undefi
 }
 
 /** Canonical SQL expression for a column, normalising across storage types. */
-function fieldExpr(field: FieldSpec, col: ColumnInfo): string {
+function fieldExpr(field: FieldSpec, col: ColumnInfo, dialect: Dialect): string {
   const ident = quoteIdent(col.column);
   const type = col.dataType.toLowerCase();
+  if (dialect === "clickhouse") return clickhouseFieldExpr(field, ident, type);
   switch (field.kind) {
     case "address":
       // Ponder stores hex as bytea; everyone else as text.
@@ -202,6 +219,28 @@ function fieldExpr(field: FieldSpec, col: ColumnInfo): string {
 }
 
 /**
+ * The same encoding in ClickHouse. Its types are spelled differently and
+ * wrapped (`Nullable(DateTime64(3))`), and every value renders to the
+ * canonical text through toString: a UInt256 or Decimal(76, 0) prints its
+ * digits with no scale to strip, which is all the PostgreSQL cast to numeric
+ * is there to guarantee.
+ */
+function clickhouseFieldExpr(field: FieldSpec, ident: string, type: string): string {
+  switch (field.kind) {
+    case "address":
+      return `lower(toString(${ident}))`;
+    case "seconds":
+      return type.includes("datetime") || type.includes("date")
+        ? `toString(toUnixTimestamp(${ident}))`
+        : `toString(toInt64(${ident}))`;
+    case "base58":
+    case "amount":
+    case "text":
+      return `toString(${ident})`;
+  }
+}
+
+/**
  * Pick the table backing an entity. Candidates are ranked by position in
  * `tableCandidates`; among equally-ranked matches, only those exposing every
  * required field are considered, and anything still ambiguous is rejected
@@ -209,7 +248,8 @@ function fieldExpr(field: FieldSpec, col: ColumnInfo): string {
  */
 function resolveEntity(
   spec: EntitySpec,
-  tables: ResolvedTable[]
+  tables: ResolvedTable[],
+  dialect: Dialect
 ): ResolvedEntity | { error: string } {
   const candidates = spec.tableCandidates.map(normalise);
   let best: { rank: number; matches: ResolvedTable[] } | null = null;
@@ -251,10 +291,12 @@ function resolveEntity(
           `(tried ${field.candidates.join(" / ")})`,
       };
     }
-    fieldExprs.push(fieldExpr(field, col));
+    fieldExprs.push(fieldExpr(field, col, dialect));
   }
 
   return {
+    schema: table.schema,
+    table: table.table,
     qualified: `${quoteIdent(table.schema)}.${quoteIdent(table.table)}`,
     displayName,
     fieldExprs,
@@ -275,6 +317,8 @@ function resolveEntity(
 /** Where an entity's rows live, without the per-field encoding. */
 export interface EntityTable {
   key: string;
+  schema: string;
+  table: string;
   qualified: string;
   displayName: string;
   /** Bare predicate restricting the entity's rows, or "" for all of them. */
@@ -293,14 +337,17 @@ export interface EntityTable {
  */
 export async function resolveEntityTables(
   sql: SqlRunner,
-  specs: EntitySpec[]
+  specs: EntitySpec[],
+  dialect: Dialect = "postgres"
 ): Promise<EntityTable[]> {
-  const tables = groupTables(await introspect(sql));
+  const tables = groupTables(await introspect(sql, dialect));
   return specs.map((spec) => {
-    const entity = resolveEntity(spec, tables);
+    const entity = resolveEntity(spec, tables, dialect);
     if ("error" in entity) throw new Error(entity.error);
     return {
       key: spec.key,
+      schema: entity.schema,
+      table: entity.table,
       qualified: entity.qualified,
       displayName: entity.displayName,
       predicate: entity.predicate,
@@ -431,9 +478,42 @@ function describeCounts(
     : `${count(delta)} unexpected ${noun(delta, spec)} (${count(actualRows)} vs ${count(expectedRows)} expected)`;
 }
 
+const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`;
+
+/**
+ * On-disk size of the table behind an entity: data, indexes and TOAST in
+ * PostgreSQL, and the compressed parts in ClickHouse.
+ *
+ * HyperIndex keeps a ClickHouse entity as a view over its change history,
+ * `envio_history_<Entity>`, and the history is where the rows are actually
+ * stored, so that table is counted in the view's place. A view has no parts of
+ * its own, so counting both names is right for a plain table too.
+ */
+async function entitySize(
+  sql: SqlRunner,
+  entity: ResolvedEntity,
+  dialect: Dialect
+): Promise<number> {
+  const out = await sql(
+    dialect === "clickhouse"
+      ? `SELECT toString(sum(bytes_on_disk)) FROM system.parts
+         WHERE active AND database = ${sqlString(entity.schema)}
+           AND table IN (${sqlString(entity.table)}, ${sqlString(`envio_history_${entity.table}`)})`
+      : `SELECT pg_total_relation_size(${sqlString(entity.qualified)}::regclass)::text`
+  );
+  return parseInt(out.trim(), 10);
+}
+
 /** Total size of every non-system relation in the database. */
-async function totalSize(sql: SqlRunner): Promise<number | null> {
+async function totalSize(sql: SqlRunner, dialect: Dialect): Promise<number | null> {
   try {
+    if (dialect === "clickhouse") {
+      const out = await sql(
+        `SELECT toString(sum(bytes_on_disk)) FROM system.parts
+         WHERE active AND database = currentDatabase()`
+      );
+      return parseInt(out.trim(), 10);
+    }
     const out = await sql(
       `SELECT coalesce(sum(pg_total_relation_size(c.oid)), 0)::text
        FROM pg_class c
@@ -454,9 +534,10 @@ export async function verify(
   expected: Expected,
   options: VerifyOptions = {}
 ): Promise<Verification> {
+  const dialect = options.dialect ?? "postgres";
   let tables: ResolvedTable[];
   try {
-    tables = groupTables(await introspect(sql));
+    tables = groupTables(await introspect(sql, dialect));
   } catch (err: any) {
     return {
       status: "unknown",
@@ -489,7 +570,7 @@ export async function verify(
       continue;
     }
 
-    const entity = resolveEntity(spec, tables);
+    const entity = resolveEntity(spec, tables, dialect);
     if ("error" in entity) {
       entities.push({ ...base, detail: entity.error });
       continue;
@@ -499,7 +580,7 @@ export async function verify(
     let row: string;
     try {
       row = await sql(
-        checksumSql(entity.qualified, entity.fieldExprs, entity.predicate)
+        checksumSql(entity.qualified, entity.fieldExprs, entity.predicate, dialect)
       );
     } catch (err: any) {
       entities.push({
@@ -515,10 +596,7 @@ export async function verify(
 
     let sizeBytes: number | undefined;
     try {
-      const size = await sql(
-        `SELECT pg_total_relation_size('${entity.qualified.replace(/'/g, "''")}'::regclass)::text`
-      );
-      sizeBytes = parseInt(size.trim(), 10);
+      sizeBytes = await entitySize(sql, entity, dialect);
     } catch {
       // Size is a nice-to-have; a failure here must not fail verification.
     }
@@ -589,6 +667,6 @@ export async function verify(
     detail,
     entities,
     dbSizeBytes,
-    dbTotalBytes: await totalSize(sql),
+    dbTotalBytes: await totalSize(sql, dialect),
   };
 }

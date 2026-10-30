@@ -144,18 +144,35 @@ export function whereClause(predicate: string): string {
   return predicate ? ` WHERE ${predicate}` : "";
 }
 
+/** The SQL dialect of the database an indexer keeps its entities in. */
+export type Dialect = "postgres" | "clickhouse";
+
 /**
  * SQL that reproduces `summarise` for a table, given per-field expressions in
  * canonical order. `substr(md5(…), 1, 15)` is read as a 60-bit integer, which
  * always fits a signed bigint; summing bigints yields numeric, so the total
  * never overflows.
+ *
+ * ClickHouse gets the same 60 bits another way: the first eight bytes of the
+ * raw digest read big-endian, shifted down by the four bits a sixteenth hex
+ * character would add, and summed as a UInt128.
  */
 export function checksumSql(
   qualifiedTable: string,
   fieldExprs: string[],
-  predicate = ""
+  predicate = "",
+  dialect: Dialect = "postgres"
 ): string {
   const canonical = canonicalExprSql(fieldExprs);
+  if (dialect === "clickhouse") {
+    return (
+      `SELECT toString(count()), ` +
+      `toString(sum(toUInt128(bitShiftRight(` +
+      `reinterpretAsUInt64(reverse(substring(MD5(${canonical}), 1, 8))), ` +
+      `${64 - HASH_HEX_CHARS * 4})))) ` +
+      `FROM ${qualifiedTable}${whereClause(predicate)}`
+    );
+  }
   return (
     `SELECT count(*)::text, ` +
     `coalesce(sum(('x' || substr(md5(${canonical}), 1, ${HASH_HEX_CHARS}))` +

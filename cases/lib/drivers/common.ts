@@ -1,9 +1,9 @@
 // What every driver has to provide, and the settings they share.
 
 import type { CaseConfig } from "../case.ts";
-import { whereClause } from "../checksum.ts";
+import { whereClause, type Dialect } from "../checksum.ts";
 import { psql } from "../process.ts";
-import { resolveEntityTables, type EntityTable } from "../verify.ts";
+import { resolveEntityTables, type EntityTable, type SqlRunner } from "../verify.ts";
 
 /**
  * How far every port a driver binds is shifted, and what its containers are
@@ -65,8 +65,19 @@ export interface Snapshot {
   rows?: number;
 }
 
+/** A database a driver's entities can be read from, and how to talk to it. */
+export interface EntityStore {
+  dialect: Dialect;
+  sql: SqlRunner;
+}
+
 export interface Driver {
   dbUrl: string;
+  /**
+   * Where the scenario's entities are verified and sized, when that is not the
+   * PostgreSQL database at `dbUrl` — a tool that keeps them in ClickHouse.
+   */
+  store?: EntityStore;
   /** Install, build and start infrastructure. Not part of the measurement. */
   prepare(): Promise<void>;
   /** Start indexing. The measured window opens when this returns. */

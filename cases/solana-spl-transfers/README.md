@@ -51,7 +51,8 @@ than a heuristic every implementation would have to reproduce identically.
 ## Implementations
 
 - **Envio** — [envio/](./envio/) — also the reference the ground truth is
-  snapshotted from
+  snapshotted from; benchmarked a second time with every entity kept in
+  ClickHouse instead of Postgres (`envio-clickhouse`)
 - **Squid SDK** — [sqd/](./sqd/) — reads the SQD Portal
 - **Carbon** — [carbon/](./carbon/) — reads plain RPC at Carbon's default 10
   concurrent `getBlock` calls, run locally

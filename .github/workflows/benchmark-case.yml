@@ -126,6 +126,11 @@ jobs:
             ponder)
               docker pull postgres:17-alpine
               ;;
+            envio-clickhouse)
+              # The image is pinned in the driver; read it from there so the
+              # two cannot drift.
+              docker pull "$(sed -n 's/^export const CLICKHOUSE_IMAGE = "\(.*\)";$/\1/p' cases/lib/drivers/envio.ts)"
+              ;;
             rindexer|rindexer-hypersync)
               docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
               # A rust project is a crate of its own and runs its own binary,

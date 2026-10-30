@@ -88,7 +88,7 @@ The tables backing each entity are found by introspection against the `tableCand
 
 Runs natively via `envio start -r`, which resets the database on each start. Hasura is disabled (`ENVIO_HASURA=false`) since the benchmark reads PostgreSQL directly. The timer starts when the process launches; Envio's internal init is fast enough not to materially affect the measurement.
 
-The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
+The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync. The `envio-clickhouse` variant reads HyperSync like `envio`, and keeps every entity in ClickHouse instead of Postgres (`storage: {clickhouse: {default: true}}`, appended to `config.yaml` by the driver).
 
 ### Ponder
 
