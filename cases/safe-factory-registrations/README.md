@@ -144,7 +144,7 @@ All indexers share port `19876` for their GraphQL endpoint. A local run benchmar
 
 Runs natively via `envio start -r`, which resets the database on each start. Hasura is disabled (`ENVIO_HASURA=false`) since the benchmark reads PostgreSQL directly.
 
-The two factory generations are two contracts in `config.yaml`, `SafeProxyFactory` and `SafeProxyFactoryModern`, each with its own event signature and address list. The `Safe` contract is declared with no address; `indexer.contractRegister` supplies one per `ProxyCreation`, from either factory. The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync.
+The two factory generations are two contracts in `config.yaml`, `SafeProxyFactory` and `SafeProxyFactoryModern`, each with its own event signature and address list. The `Safe` contract is declared with no address; `indexer.contractRegister` supplies one per `ProxyCreation`, from either factory. The `envio-rpc` variant forces RPC mode for historical sync (`ENVIO_RPC_FOR=sync`) instead of HyperSync. The `envio-clickhouse` variant reads HyperSync, as `envio` does, and keeps every entity in ClickHouse instead of Postgres. The driver leaves `config.yaml` as it is and writes `config.clickhouse.yaml` from it with `storage: {clickhouse: {default: true}}` added. The entities are verified and measured in ClickHouse; Postgres holds only HyperIndex's own progress, which is where the snapshot reads it from.
 
 ### Ponder
 

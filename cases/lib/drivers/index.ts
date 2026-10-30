@@ -17,6 +17,7 @@ export type { Ctx, Driver, DriverFactory, Snapshot } from "./common.ts";
 export const DRIVERS: Record<string, DriverFactory> = {
   envio: envioDriver("hypersync"),
   "envio-rpc": envioDriver("rpc"),
+  "envio-clickhouse": envioDriver("hypersync", "clickhouse"),
   "envio-subgraph": envioSubgraphDriver("hypersync"),
   "envio-subgraph-rpc": envioSubgraphDriver("rpc"),
   ponder: ponderDriver,
@@ -69,6 +70,17 @@ export const TOOLS: Record<
     source: "RPC",
     sourceUrl: HYPERRPC_URL,
     storage: "Postgres",
+  },
+  // The same project with `storage: {clickhouse: {default: true}}`, so every
+  // entity is written to ClickHouse instead of Postgres. Named apart from the
+  // HyperSync row because a published row is identified by name and source,
+  // and the two share a source.
+  "envio-clickhouse": {
+    name: "Envio Indexer (ClickHouse)",
+    toolUrl: "https://envio.dev",
+    source: "HyperSync",
+    sourceUrl: HYPERSYNC_URL,
+    storage: "ClickHouse",
   },
   // The Subgraph case's own project, indexed by HyperIndex instead of Graph
   // Node. Nothing in that directory changes, so the row is a like-for-like
