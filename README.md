@@ -28,14 +28,14 @@ What does an indexer do when something goes wrong? These scenarios restart its d
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Envio Indexer](https://envio.dev) | RPC | 11/11 ✅ (2 restarts) | 7/7 ✅ | 16/16 ✅ | 6/6 ✅ | 4/4 ✅ (6ms, WS) | **44 / 44** |
 | [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.10.0-subgraph) | RPC | 11/11 ✅ (2 restarts) | 7/7 ✅ | 16/16 ✅ | 6/6 ✅ | 4/4 ✅ (9ms, WS) | **44 / 44** |
-| [Squid SDK](https://sqd.dev/sdk/) | RPC | 11/11 ✅ (2 restarts) | 7/7 ✅ | **12/16** 🔴 | 6/6 ✅ | 4/4 ✅ (9ms, WS) | **40 / 44** |
-| [Subgraph](https://thegraph.com) | RPC | **9/11** 🔴 (no restarts) | 7/7 ✅ | **12/14** 🔴 | 6/6 ✅ | 4/4 ✅ (966ms) | **38 / 42** |
-| [Ponder](https://ponder.sh) | RPC | **8/9** 🔴 (no restarts) | 7/7 ✅ | **14/16** 🔴 | **5/6** 🔴 | 4/4 ✅ (15ms, WS) | **38 / 42** |
-| [SubQuery](https://subquery.network) | RPC | 11/11 ✅ (no restarts) | **0/7** 🔴 | 14/14 ✅ | 6/6 ✅ | **3/4** 🔴 (2.5s) | **34 / 42** |
-| [Rindexer](https://rindexer.xyz) | RPC | 11/11 ✅ (no restarts) | **1/7** 🔴 | **8/14** 🔴 | 6/6 ✅ | 4/4 ✅ (162ms) | **30 / 42** |
+| [Squid SDK](https://sqd.dev/sdk/) | RPC | 11/11 ✅ (2 restarts) | 7/7 ✅ | **12/16** 🔴 | 6/6 ✅ | 4/4 ✅ (6ms, WS) | **40 / 44** |
+| [Ponder](https://ponder.sh) | RPC | **8/9** 🔴 (no restarts) | 7/7 ✅ | **14/16** 🔴 | **5/6** 🔴 | 4/4 ✅ (12ms, WS) | **38 / 42** |
+| [Subgraph](https://thegraph.com) | RPC | **9/11** 🔴 (no restarts) | 7/7 ✅ | **12/14** 🔴 | 6/6 ✅ | 4/4 ✅ (1.1s) | **38 / 42** |
+| [SubQuery](https://subquery.network) | RPC | 11/11 ✅ (no restarts) | **0/7** 🔴 | **13/14** 🔴 | 6/6 ✅ | **3/4** 🔴 (2.6s) | **33 / 42** |
+| [Rindexer](https://rindexer.xyz) | RPC | 11/11 ✅ (no restarts) | **1/7** 🔴 | **8/14** 🔴 | 6/6 ✅ | 4/4 ✅ (160ms) | **30 / 42** |
 
 <details>
-<summary>What failed, and what it means for you - 32 failing checks across 5 tools</summary>
+<summary>What failed, and what it means for you - 33 failing checks across 5 tools</summary>
 
 - **Squid SDK**
   - *rpc faults*
@@ -43,15 +43,6 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Stops indexing**: does not resume after the RPC node recovers
     - **Stops indexing**: crashes when the RPC provider fails some of its requests
     - **Stops indexing silently**: stops following the chain when its block subscription goes quiet
-- **Subgraph**
-  - *crash recovery*
-    - **Stops indexing**: never recovers after the database restarts mid-sync (only 2 of 3 runs)
-    - **Slow deploys**: ignores the shutdown signal for over 15 seconds and gets force-killed
-  - *rpc faults*
-    - **Stops indexing**: does not resume after the RPC node recovers
-    - **Wrong balances**: counts a transfer twice when the RPC node sends it twice (only 1 of 3 runs)
-    - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
-    - <i>not tested: fills in the blocks it was never told about</i>
 - **Ponder**
   - *crash recovery*
     - **Stops indexing**: never recovers after the database restarts mid-sync
@@ -62,9 +53,18 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Stops indexing silently**: stops following the chain when its block subscription goes quiet
   - *data fidelity*
     - **Missing data**: drops events with very large log indexes, which some providers emit
+- **Subgraph**
+  - *crash recovery*
+    - **Stops indexing**: never recovers after the database restarts mid-sync (only 2 of 3 runs)
+    - **Slow deploys**: ignores the shutdown signal for over 15 seconds and gets force-killed
+  - *rpc faults*
+    - **Stops indexing**: does not resume after the RPC node recovers
+    - **Wrong balances**: counts a transfer twice when the RPC node sends it twice (only 1 of 3 runs)
+    - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
+    - <i>not tested: fills in the blocks it was never told about</i>
 - **SubQuery**
   - *reorgs*
-    - **Stale data**: keeps an event after the chain replaced its block
+    - **Stale data**: keeps an event after the chain replaced its block (only 2 of 3 runs)
     - **Stale data**: keeps blocks from a fork the chain abandoned for a shorter one
     - **Stale data**: keeps an event the chain removed
     - **Wrong data**: carries on after a chain rewrite deeper than it can undo, instead of stopping
@@ -72,6 +72,7 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Wrong data**: loses track when the chain rewrites several times in a row
     - **Stale data**: misses a chain rewrite in blocks it was still syncing
   - *rpc faults*
+    - **Wrong balances**: counts a transfer twice when the RPC node sends it twice (only 1 of 3 runs)
     - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
     - <i>not tested: fills in the blocks it was never told about</i>
   - *head latency*
