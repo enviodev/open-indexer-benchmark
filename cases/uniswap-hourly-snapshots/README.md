@@ -36,6 +36,9 @@ Swaps are stored only so progress can be tracked by rows. Snapshots are too few 
 ## Implementations
 
 - **Envio** — [envio/](./envio/)
+- **SubQuery** — [subquery/](./subquery/)
+- **Squid SDK** — [sqd/](./sqd/)
+- **Subgraph** — [subgraph/](./subgraph/)
 
 Other tools are not implemented yet.
 
@@ -69,3 +72,26 @@ Built-in time triggers do not fit either: SubQuery's `timestamp` cron filter and
 ### Envio
 
 `indexer.onBlock` with `fields: { block: ["timestamp"] }` runs on every block and fetches only that one column. HyperIndex runs a block's handlers after its events, so the snapshot sees the block's swaps. `onBlock` has no time-based filter, only block-number ranges and a block stride, so the handler runs on every block and rewrites the hour's row each time.
+
+### SubQuery
+
+An `EthereumHandlerKind.Block` handler with no filter runs on every block, and SubQuery runs it before the block's logs. It writes the hour's row from the pool as of the previous block, which is the block's own close when the block has no swap. The Swap handler writes the hour's row again after each swap, with the swap's block number and the post-swap price, so the last swap of a block overwrites what the block handler wrote. The node keeps every version of the pool and the snapshot in its historical `_block_range` rows; verification reads the current ones.
+
+### Squid SDK
+
+The Squid SDK has no block handler, block stride or time filter. `includeAllBlocks` with the header's `timestamp` selected makes every block reach the batch handler, with or without a Swap log. The handler walks each batch's blocks in order, applies a block's swaps before writing its hour's row to an in-memory map, and upserts the pool, swaps and snapshots once per batch. Over RPC, `includeAllBlocks` means fetching every block in the range.
+
+### Substreams
+
+Substreams has no block handler, but every module sees every block, so the snapshot is a store whose only inputs are the block's clock and the pool's store. `store_pool` sets the pool's state at each swap's log ordinal, so the block's last swap remains. `store_snapshots` runs on every block and reads it with `get_last`, which includes that block's writes (`get_at(0, ..)` would read the pool before them), then sets the hour's key to the block number, price and tick. `db_out` turns each delta into a row: the first block of an hour creates the key and becomes an `INSERT`, later blocks update it and become an `UPDATE`, because the sink has no upsert.
+
+Substreams reads through StreamingFast, which bills by the request and needs an API key, so it is measured by hand rather than on every push:
+
+```bash
+ENVIO_API_TOKEN=your-token SUBSTREAMS_API_KEY=your-key \
+  node scripts/run-local.ts uniswap-hourly-snapshots --commit
+```
+
+### Subgraph
+
+A `blockHandlers` entry with no filter runs `handleBlock` on every block of the data source's range. Graph Node runs block triggers after the block's event triggers, so the handler loads the pool the Swap handler saved and rewrites the hour's `HourlySnapshot`. Swaps are `@entity(immutable: true)`; the pool and the snapshots are rewritten in place and stay mutable, so their tables keep every superseded version and verification reads only the current one. A block handler with no filter makes every block a trigger, so Graph Node fetches and processes every block in the range from RPC, and at `GRAPH_LOG=info` logs a `Start processing block` line for each.
