@@ -101,7 +101,7 @@ jobs:
             INDEXERS_JSON=$(echo "$INDEXERS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
           if [ -z "$CASES" ]; then
-            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations","solana-spl-transfers"]'
+            CASES_JSON='["erc20-account-balances","erc20-transfer-events","erc20-allowance-calls","safe-factory-registrations","uniswap-hourly-snapshots","solana-spl-transfers"]'
           else
             CASES_JSON=$(echo "$CASES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           fi
@@ -118,13 +118,13 @@ jobs:
 
           # Scenarios run one after another, which needs one `needs`-chained job
           # per scenario in benchmark-round.yml — GitHub cannot order a matrix.
-          # That makes the number of scenario slots fixed: adding a sixth
-          # scenario means adding a sixth `scenario-N` job (and its inputs)
+          # That makes the number of scenario slots fixed: adding a seventh
+          # scenario means adding a seventh `scenario-N` job (and its inputs)
           # there, and passing it from each round below. Fail loudly rather
           # than silently dropping the extra scenario from the run and from
           # the table.
-          if [ "$COUNT" -gt 5 ]; then
-            echo "Only 5 scenarios can run per workflow run; add a scenario-N job to benchmark-round.yml." >&2
+          if [ "$COUNT" -gt 6 ]; then
+            echo "Only 6 scenarios can run per workflow run; add a scenario-N job to benchmark-round.yml." >&2
             exit 1
           fi
 
@@ -198,12 +198,12 @@ jobs:
           echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
           echo "selected=$SELECTED" >> "$GITHUB_OUTPUT"
 
-          # One slot per `scenario-N` job in benchmark-round.yml, always five,
+          # One slot per `scenario-N` job in benchmark-round.yml, always six,
           # so a round can index them without bounds checks. A slot with no
           # case is skipped by that job's `if`, so the loop covers a run with
           # fewer scenarios than slots without special-casing it.
           SLOTS='[]'
-          for N in 1 2 3 4 5; do
+          for N in 1 2 3 4 5 6; do
             CASE_N=$(echo "$CASES_JSON" | jq -r --argjson i "$((N - 1))" '.[$i] // ""')
             if [ -n "$SCOPE" ]; then
               INDEXERS_N=$(echo "$SCOPE" | jq -c --arg c "$CASE_N" '.indexers[$c] // []')
