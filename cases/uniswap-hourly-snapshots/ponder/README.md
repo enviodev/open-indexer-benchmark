@@ -15,7 +15,7 @@ pnpm install
 ## Running locally
 
 ```bash
-PONDER_RPC_URL_1=https://... PONDER_END_BLOCK=21199999 pnpm dev
+PONDER_RPC_URL_1=https://... PONDER_END_BLOCK=21199995 pnpm dev
 ```
 
 The GraphQL endpoint is served at `http://localhost:42069`.

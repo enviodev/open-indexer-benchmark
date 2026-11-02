@@ -11,11 +11,15 @@ const SWAP_TOPIC =
 
 const START_BLOCK = 21_000_000;
 
-// 200,000 blocks is about four weeks: 11,959 swaps and 671 hourly snapshots,
-// 31 of them for hours without a swap. The pool is the quieter of the two
-// USDC/WETH pools on purpose: on the busier one every hour has a swap, so an
-// implementation that never looked at a block would get the prices right.
-const VERIFY_END_BLOCK = 21_199_999;
+// About four weeks: 11,959 swaps and 671 hourly snapshots, 31 of them for
+// hours without a swap. The pool is the quieter of the two USDC/WETH pools on
+// purpose: on the busier one every hour has a swap, so an implementation that
+// never looked at a block would get the prices right.
+//
+// The range ends on the block of its last swap. Some drivers read progress
+// from the swap rows, and would otherwise call the range done before the
+// blocks after that swap had closed the final hour's snapshot.
+const VERIFY_END_BLOCK = 21_199_995;
 
 const HOUR = 3600;
 
@@ -131,9 +135,18 @@ export const caseConfig: CustomCaseConfig = {
     const blocks = await fetchBlockTimestamps(token, START_BLOCK, VERIFY_END_BLOCK);
     onProgress?.({ pass: "blocks", block: VERIFY_END_BLOCK, logs: blocks.length });
 
+    const lastSwapBlock = logs[logs.length - 1].blockNumber;
+    if (lastSwapBlock !== VERIFY_END_BLOCK) {
+      throw new Error(
+        `the verification range must end on its last swap, at block ${lastSwapBlock}`
+      );
+    }
+
     const swapsByBlock = new Map<number, DecodedLog[]>();
     for (const log of logs) {
-      swapsByBlock.set(log.blockNumber, [...(swapsByBlock.get(log.blockNumber) ?? []), log]);
+      const inBlock = swapsByBlock.get(log.blockNumber);
+      if (inBlock) inBlock.push(log);
+      else swapsByBlock.set(log.blockNumber, [log]);
     }
 
     const swapRows: string[] = [];
@@ -173,9 +186,7 @@ export const caseConfig: CustomCaseConfig = {
     return {
       totalEvents: swapRows.length,
       entities: { swap: swapRows, hourlySnapshot: [...snapshots.values()] },
-      // The block handler has work in every block, not only those with a swap:
-      // the last snapshot is not final until the range's last block is in.
-      lastEventBlock: VERIFY_END_BLOCK,
+      lastEventBlock: lastSwapBlock,
     };
   },
 

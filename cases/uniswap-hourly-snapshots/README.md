@@ -10,7 +10,7 @@ A snapshot is time-based, not event-based. An hour without a swap still gets a r
 - **Events Indexed**: Swap
 - **Block Handler**: every block, reading its timestamp
 - **Block Range**: 21,000,000 to latest
-- **Verification Range**: 21,000,000 to 21,199,999 — about four weeks: 11,959 swaps and 671 hourly snapshots, 31 of them for hours without a swap, indexed to completion, then checked against `expected.json`
+- **Verification Range**: 21,000,000 to 21,199,995 (the block of its last swap) — about four weeks: 11,959 swaps and 671 hourly snapshots, 31 of them for hours without a swap, indexed to completion, then checked against `expected.json`
 - **Features**: `event decoding`, `block handler`, `block field selection`, `storage update on conflict`
 
 ## Case Logic
