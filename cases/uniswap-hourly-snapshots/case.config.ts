@@ -82,8 +82,8 @@ export const caseConfig: CustomCaseConfig = {
   // none of the indexed events, so an hour without a swap has nothing to
   // write its row.
   unsupported: {
-    rindexer: "Rindexer has no block handlers, so it cannot act on a block without an event",
-    "rindexer-hypersync": "Rindexer has no block handlers, so it cannot act on a block without an event",
+    rindexer: "it has event handlers only, so it cannot act on a block without an event",
+    "rindexer-hypersync": "it has event handlers only, so it cannot act on a block without an event",
   },
 
   entities: [

@@ -30,7 +30,7 @@ import {
   rowKey,
   type TableRow,
 } from "../cases/lib/table.ts";
-import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
+import { toTableRow, unsupportedResult, type BenchmarkResult } from "../cases/lib/result.ts";
 import { artifactIndexer, judge, pickMedian, type Verdict } from "../cases/lib/aggregate.ts";
 import { TOOLS } from "../cases/lib/drivers/index.ts";
 
@@ -91,6 +91,20 @@ async function localOnlyRowKeys(name: string): Promise<Set<string>> {
     );
   } catch {
     return new Set();
+  }
+}
+
+/**
+ * Tools a scenario declares unsupported, with the reason. They never get a
+ * job, so their rows are built here from the declaration; without this the
+ * table would only show them if someone ran them by hand.
+ */
+async function unsupportedReasons(name: string): Promise<Record<string, string>> {
+  try {
+    const mod = await import(resolve(ROOT, "cases", name, "case.config.ts"));
+    return mod.caseConfig?.unsupported ?? {};
+  } catch {
+    return {};
   }
 }
 
@@ -216,6 +230,16 @@ for (const benchCase of cases) {
     rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
     if (!isLocal) carried.push(`${prior.name} via ${prior.cells.source}`);
   }
+  // A declared unsupported row replaces whatever was published for that tool,
+  // so a reworded reason reaches the table on the next run.
+  for (const [indexer, reason] of Object.entries(await unsupportedReasons(benchCase))) {
+    if (!TOOLS[indexer]) continue;
+    const row = toTableRow(unsupportedResult(TOOLS[indexer], reason));
+    const at = rows.findIndex((r) => rowKey(r) === rowKey(row));
+    if (at === -1) rows.push(row);
+    else rows[at] = row;
+  }
+
   // A run scoped to part of the matrix — a pull request — carries most rows
   // forward by design, so annotating those as failures would cry wolf on
   // every pull request. An indexer that was selected and still reported

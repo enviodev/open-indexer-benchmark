@@ -72,3 +72,28 @@ export function toTableRow(result: BenchmarkResult): TableRow {
     },
   };
 }
+
+/** What a tool is, independent of any run: its row's name, links and storage. */
+export type ToolInfo = Pick<BenchmarkResult, "name" | "toolUrl" | "source" | "sourceUrl" | "storage">;
+
+/**
+ * The row published for a tool the case declares unsupported. Every metric is
+ * zero and `unsupported` is what the table actually renders from, but the row
+ * is otherwise shaped exactly like one the tool would have produced had it run.
+ * Nothing about the tool is started or constructed to build it.
+ */
+export function unsupportedResult(tool: ToolInfo, reason: string): BenchmarkResult {
+  return {
+    ...tool,
+    blocksPerSec: 0,
+    eventsPerSec: 0,
+    throughputSource: "range",
+    correctness: "unknown",
+    correctnessDetail: reason,
+    dbSizeBytes: null,
+    dbTotalBytes: null,
+    rangeSeconds: null,
+    windowSeconds: null,
+    unsupported: reason,
+  };
+}
