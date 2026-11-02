@@ -63,6 +63,7 @@ async function fetchBlockTimestamps(
 export const caseConfig: CustomCaseConfig = {
   name: "uniswap-hourly-snapshots",
   title: "Time-Based Snapshots",
+  chain: "evm",
   dir: dirname(fileURLToPath(import.meta.url)),
   startBlock: START_BLOCK,
   verifyEndBlock: VERIFY_END_BLOCK,
@@ -72,6 +73,14 @@ export const caseConfig: CustomCaseConfig = {
   // serves the RPC rows. Its row is produced by `scripts/run-local.ts` and
   // committed, the way Carbon's is on the Solana scenario.
   localOnly: ["substreams"],
+
+  // Rindexer has event handlers only: nothing runs for a block that carries
+  // none of the indexed events, so an hour without a swap has nothing to
+  // write its row.
+  unsupported: {
+    rindexer: "Rindexer has no block handlers, so it cannot act on a block without an event",
+    "rindexer-hypersync": "Rindexer has no block handlers, so it cannot act on a block without an event",
+  },
 
   entities: [
     {

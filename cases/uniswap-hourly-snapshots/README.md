@@ -36,11 +36,22 @@ Swaps are stored only so progress can be tracked by rows. Snapshots are too few 
 ## Implementations
 
 - **Envio** — [envio/](./envio/)
-- **SubQuery** — [subquery/](./subquery/)
+- **Ponder** — [ponder/](./ponder/)
 - **Squid SDK** — [sqd/](./sqd/)
-- **Subgraph** — [subgraph/](./subgraph/)
+- **Subgraph** — [subgraph/](./subgraph/) (requires Docker)
+- **SubQuery** — [subquery/](./subquery/) (requires Docker)
+- **Substreams** — [substreams/](./substreams/), run locally
 
-Other tools are not implemented yet.
+Rindexer has event handlers only, so it cannot write the row for an hour without a swap, and is marked unsupported.
+
+Substreams reads through StreamingFast, which bills by the request and needs an
+API key, so unlike the rows above it is measured by hand rather than on every
+push:
+
+```bash
+ENVIO_API_TOKEN=your-token SUBSTREAMS_API_KEY=your-key \
+  node scripts/run-local.ts uniswap-hourly-snapshots --commit
+```
 
 ## Running the Benchmark
 
@@ -84,13 +95,6 @@ The Squid SDK has no block handler, block stride or time filter. `includeAllBloc
 ### Substreams
 
 Substreams has no block handler, but every module sees every block, so the snapshot is a store whose only inputs are the block's clock and the pool's store. `store_pool` sets the pool's state at each swap's log ordinal, so the block's last swap remains. `store_snapshots` runs on every block and reads it with `get_last`, which includes that block's writes (`get_at(0, ..)` would read the pool before them), then sets the hour's key to the block number, price and tick. `db_out` turns each delta into a row: the first block of an hour creates the key and becomes an `INSERT`, later blocks update it and become an `UPDATE`, because the sink has no upsert.
-
-Substreams reads through StreamingFast, which bills by the request and needs an API key, so it is measured by hand rather than on every push:
-
-```bash
-ENVIO_API_TOKEN=your-token SUBSTREAMS_API_KEY=your-key \
-  node scripts/run-local.ts uniswap-hourly-snapshots --commit
-```
 
 ### Subgraph
 

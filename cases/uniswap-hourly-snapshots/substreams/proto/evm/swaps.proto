@@ -1,0 +1,16 @@
+syntax = "proto3";
+package evm.swaps.v1;
+
+message Swaps {
+  repeated Swap swaps = 1;
+}
+
+message Swap {
+  string id = 1;
+  string amount0 = 2;
+  string amount1 = 3;
+  string sqrt_price_x96 = 4;
+  string tick = 5;
+  int64 timestamp = 6;
+  uint64 ordinal = 7;
+}

@@ -1,0 +1,78 @@
+specVersion: v0.1.0
+package:
+  name: 'uniswap_hourly_snapshots'
+  version: v0.1.0
+
+imports:
+  # substreams-sink-sql resolves the sink type from this spkg — it does not
+  # bundle the descriptors. The `substreams` CLI does bundle them, so with this
+  # import present its own commands (`run`, `protogen`) fail on an ambiguous
+  # sf.substreams.sink.sql.v1.Service; comment it out for those, and see the
+  # README.
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.7/substreams-sink-sql-protodefs-v1.0.7.spkg
+  database: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.3.1/substreams-database-change-v1.3.1.spkg
+
+protobuf:
+  files:
+    - evm/swaps.proto
+  importPaths:
+    - ./proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/substreams_uniswap_hourly_snapshots.wasm
+
+modules:
+  - name: map_swaps
+    kind: map
+    # The pool's state is the one the range produces, the way every other
+    # implementation computes it: nothing until the first swap past the start
+    # block. A store otherwise accumulates from its initial block, which
+    # defaults to genesis.
+    initialBlock: 21000000
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:evm.swaps.v1.Swaps
+
+  - name: store_pool
+    kind: store
+    initialBlock: 21000000
+    updatePolicy: set
+    valueType: string
+    inputs:
+      - map: map_swaps
+
+  # The block handler. Its input is the clock, so it runs on every block, and
+  # it reads the pool after that block's swaps.
+  - name: store_snapshots
+    kind: store
+    initialBlock: 21000000
+    updatePolicy: set
+    valueType: string
+    inputs:
+      - source: sf.substreams.v1.Clock
+      - store: store_pool
+
+  - name: db_out
+    kind: map
+    initialBlock: 21000000
+    inputs:
+      - map: map_swaps
+      - store: store_snapshots
+        mode: deltas
+    output:
+      type: proto:sf.substreams.sink.database.v1.DatabaseChanges
+
+network: mainnet
+params:
+  map_swaps: pool:0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8
+
+sink:
+  module: db_out
+  type: sf.substreams.sink.sql.v1.Service
+  config:
+    schema: "./schema.sql"
+    engine: postgres

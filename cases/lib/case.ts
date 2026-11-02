@@ -113,6 +113,8 @@ export interface EvmCaseConfig extends CommonCaseConfig {
  * one; an EVM case that reads blocks as well as logs is another.
  */
 export interface CustomCaseConfig extends CommonCaseConfig {
+  /** The chain it reads, which a case built from logs is always on: EVM. */
+  chain: "evm" | "solana";
   buildGroundTruth(
     token: string,
     onProgress?: (progress: FetchProgress) => void

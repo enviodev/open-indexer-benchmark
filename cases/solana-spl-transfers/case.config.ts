@@ -16,6 +16,7 @@ const VERIFY_END_SLOT = 440_003_999;
 export const caseConfig: CustomCaseConfig = {
   name: "solana-spl-transfers",
   title: "Solana USDC Transfers",
+  chain: "solana",
   dir: dirname(fileURLToPath(import.meta.url)),
   startBlock: START_SLOT,
   verifyEndBlock: VERIFY_END_SLOT,
