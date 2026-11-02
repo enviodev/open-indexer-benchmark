@@ -45,7 +45,7 @@ import {
 } from "./drivers/index.ts";
 import { fetchChainHeight } from "./hypersync.ts";
 import { psql, sleep } from "./process.ts";
-import { type BenchmarkResult, toTableRow } from "./result.ts";
+import { type BenchmarkResult, toTableRow, unsupportedResult } from "./result.ts";
 import { startRpcMock, type RpcMock } from "./rpc-mock.ts";
 import { buildTable, formatBytes, formatRate } from "./table.ts";
 import { verify, type Verification } from "./verify.ts";
@@ -375,28 +375,6 @@ function buildResult(
     rangeSeconds: parts.rangeSeconds,
     windowSeconds: parts.windowSeconds,
     ...(parts.windowRuns ? { windowRuns: parts.windowRuns } : {}),
-  };
-}
-
-/**
- * The row published for a tool the case declares unsupported. Every metric is
- * zero and `unsupported` is what the table actually renders from, but the row
- * is otherwise shaped exactly like one the tool would have produced had it run.
- * Nothing about the tool is started or constructed to build it.
- */
-function unsupportedResult(key: string, reason: string): BenchmarkResult {
-  return {
-    ...TOOLS[key],
-    blocksPerSec: 0,
-    eventsPerSec: 0,
-    throughputSource: "range",
-    correctness: "unknown",
-    correctnessDetail: reason,
-    dbSizeBytes: null,
-    dbTotalBytes: null,
-    rangeSeconds: null,
-    windowSeconds: null,
-    unsupported: reason,
   };
 }
 
@@ -832,7 +810,7 @@ async function run(config: CaseConfig) {
       // Published rather than skipped silently. A tool that cannot express the
       // case is a finding about the tool, and dropping its row would make that
       // finding indistinguishable from a job that crashed.
-      const result = unsupportedResult(name, reason);
+      const result = unsupportedResult(TOOLS[name], reason);
       results.push(result);
       console.log(`\n--- ${result.name} — not run ---\n  ${reason}\n`);
       console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);

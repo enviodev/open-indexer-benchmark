@@ -1,6 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { isEvmCase } from "../case.ts";
 import { exec, kill, psql, start, waitPg } from "../process.ts";
 import {
   blocksIndexed,
@@ -32,10 +33,9 @@ export const substreamsDriver: DriverFactory = ({ config, endBlock }) => {
         "exchanges it for a JWT and Substreams serves nothing without one"
     );
   }
-  // An EVM case declares the contract it indexes; a Solana one builds its own
-  // ground truth and has none. That is what picks the chain's endpoint, so a
-  // scenario does not have to restate it.
-  const isEvm = "contract" in config;
+  // A case built from logs is EVM; one that builds its own ground truth says
+  // which chain it reads. That is what picks the endpoint.
+  const isEvm = isEvmCase(config) || config.chain === "evm";
   const endpoint =
     process.env.SUBSTREAMS_ENDPOINT ??
     (isEvm

@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SvmCaseConfig } from "../lib/case.ts";
+import type { CustomCaseConfig } from "../lib/case.ts";
 import { canonicalRow, encodeAmount, encodeBase58, encodeSeconds } from "../lib/checksum.ts";
 import { snapshotEnvioRows } from "../lib/envio-snapshot.ts";
 import { assertSlotRetained } from "../lib/hypersync-svm-retention.ts";
@@ -13,9 +13,10 @@ const START_SLOT = 440_000_000;
 // last commit dominate what the verification run reports.
 const VERIFY_END_SLOT = 440_003_999;
 
-export const caseConfig: SvmCaseConfig = {
+export const caseConfig: CustomCaseConfig = {
   name: "solana-spl-transfers",
   title: "Solana USDC Transfers",
+  chain: "solana",
   dir: dirname(fileURLToPath(import.meta.url)),
   startBlock: START_SLOT,
   verifyEndBlock: VERIFY_END_SLOT,

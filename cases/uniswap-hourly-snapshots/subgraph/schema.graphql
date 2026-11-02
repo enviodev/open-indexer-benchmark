@@ -1,0 +1,23 @@
+# Swaps are written once and never updated, so they are declared immutable —
+# the storage layout The Graph's docs recommend for event data. The pool and
+# its hourly snapshots are rewritten in place and so stay mutable.
+type Swap @entity(immutable: true) {
+  id: ID!
+  amount0: BigInt!
+  amount1: BigInt!
+  timestamp: Int!
+}
+
+type Pool @entity(immutable: false) {
+  id: ID!
+  sqrtPriceX96: BigInt!
+  tick: BigInt!
+}
+
+type HourlySnapshot @entity(immutable: false) {
+  id: ID!
+  timestamp: Int!
+  blockNumber: Int!
+  sqrtPriceX96: BigInt!
+  tick: BigInt!
+}

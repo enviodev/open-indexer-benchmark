@@ -219,6 +219,16 @@ What happens when you do not know the contracts up front? The indexer watches th
 [How this case works, and how to run it →](./cases/safe-factory-registrations/README.md)
 
 
+### Time-Based Snapshots
+
+Some data is read at a fixed time rather than when something happens. The indexer keeps an hourly price snapshot of the Uniswap V3 USDC/WETH 0.3% pool, including the hours nobody traded, so it has to act on every block, not just the pool's events.
+
+<!-- BENCHMARK:uniswap-hourly-snapshots:START -->
+<!-- BENCHMARK:uniswap-hourly-snapshots:END -->
+
+[How this case works, and how to run it →](./cases/uniswap-hourly-snapshots/README.md)
+
+
 ### Solana USDC Transfers
 
 Every USDC transfer on Solana, through the chain's busiest program. Solana makes that harder than it sounds: transfers hide inside swaps and routers, and many never say which token they moved. The scenario follows StreamingFast's [SPL token Substreams](https://github.com/streamingfast/substreams-solana-spl-token).
