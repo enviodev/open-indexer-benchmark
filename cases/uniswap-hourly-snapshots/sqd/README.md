@@ -47,10 +47,14 @@ pnpm install
 # Start PostgreSQL
 docker compose up -d
 
+# Generate the TypeORM models from schema.graphql
+pnpm codegen
+
 # Build
 pnpm build
 
-# Apply migrations
+# Generate and apply migrations
+npx squid-typeorm-migration generate
 npx squid-typeorm-migration apply
 
 # Start the processor (in one terminal)
