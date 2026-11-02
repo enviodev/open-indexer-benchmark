@@ -1,0 +1,31 @@
+specVersion: 1.3.0
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: UniswapV3Pool
+    network: mainnet
+    source:
+      address: "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8" # USDC/WETH 0.3%
+      abi: UniswapV3Pool
+      startBlock: __START_BLOCK__
+      endBlock: __END_BLOCK__
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Pool
+        - Swap
+        - HourlySnapshot
+      abis:
+        - name: UniswapV3Pool
+          file: ./abis/UniswapV3Pool.json
+      eventHandlers:
+        - event: Swap(indexed address,indexed address,int256,int256,uint160,uint128,int24)
+          handler: handleSwap
+      # No filter: the handler runs on every block in the range. Graph Node
+      # runs block triggers after the block's event triggers.
+      blockHandlers:
+        - handler: handleBlock
+      file: ./src/mapping.ts
