@@ -35,3 +35,5 @@ generated
 .envio
 envio-env.d.ts
 .env
+# Written by the benchmark driver for the ClickHouse row
+config.clickhouse.yaml

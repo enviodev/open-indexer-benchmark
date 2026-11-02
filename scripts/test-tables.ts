@@ -10,6 +10,7 @@
 
 import { buildTable, parsePublishedTable, rowKey } from "../cases/lib/table.ts";
 import { toTableRow, type BenchmarkResult } from "../cases/lib/result.ts";
+import { TOOLS } from "../cases/lib/drivers/index.ts";
 
 const HYPERSYNC = "https://docs.envio.dev/docs/HyperSync/overview";
 const HYPERRPC = "https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc";
@@ -214,6 +215,17 @@ check(
     ),
   JSON.stringify(unstableBack)
 );
+
+// A published row is matched to a fresh one by name and source, so two tools
+// sharing both would overwrite each other's row and carry each other's numbers.
+{
+  const keys = Object.values(TOOLS).map((tool) => `${tool.name}|${tool.source}`);
+  check(
+    "every registered tool has its own name and source",
+    new Set(keys).size === keys.length,
+    keys.filter((key, at) => keys.indexOf(key) !== at).join(", ")
+  );
+}
 
 check("an empty table is handled", buildTable([]) === "_No results collected._");
 check(

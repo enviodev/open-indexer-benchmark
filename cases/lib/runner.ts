@@ -479,7 +479,7 @@ async function benchmarkIndexer(
           `— verifying what was indexed...`
   );
   let verification: Verification = await verify(
-    (query) => psql(phaseA.dbUrl, query),
+    phaseA.store?.sql ?? ((query) => psql(phaseA.dbUrl, query)),
     config.entities,
     expected,
     // Rebuilding the ground-truth rows turns "the checksum differs" into
@@ -487,14 +487,17 @@ async function benchmarkIndexer(
     // pass over HyperSync when a completed run disagrees. A run that stopped
     // early disagrees by construction — every entity is short — so the diff
     // would cost the same fetch to restate what the shortfall already says.
-    rangeRun.completed
-      ? {
-          fetchExpectedRows: async () => {
-            console.log("  Mismatch found — rebuilding ground truth to diff it...");
-            return (await buildGroundTruth(config, apiToken)).entities;
-          },
-        }
-      : {}
+    {
+      dialect: phaseA.store?.dialect,
+      ...(rangeRun.completed
+        ? {
+            fetchExpectedRows: async () => {
+              console.log("  Mismatch found — rebuilding ground truth to diff it...");
+              return (await buildGroundTruth(config, apiToken)).entities;
+            },
+          }
+        : {}),
+    }
   );
 
   console.log(`  ${verification.status}: ${verification.detail}`);

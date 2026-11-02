@@ -46,6 +46,7 @@
  */
 export const INDEXER_DIRS: Record<string, string> = {
   "envio-rpc": "envio",
+  "envio-clickhouse": "envio",
   "sqd-rpc": "sqd",
   "rindexer-hypersync": "rindexer",
   "envio-subgraph": "subgraph",
@@ -58,7 +59,7 @@ export const INDEXER_DIRS: Record<string, string> = {
  * test-scope.ts pins both against the registry so they cannot drift silently.
  */
 const DRIVER_INDEXERS: Record<string, string[]> = {
-  envio: ["envio", "envio-rpc"],
+  envio: ["envio", "envio-rpc", "envio-clickhouse"],
   sqd: ["sqd", "sqd-rpc"],
   rindexer: ["rindexer", "rindexer-hypersync"],
   "envio-subgraph": ["envio-subgraph", "envio-subgraph-rpc"],
