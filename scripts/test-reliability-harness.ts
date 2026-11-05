@@ -171,6 +171,7 @@ const EXPECTATIONS: Expectation[] = [
       "shallow",
       "shortening",
       "removes-event",
+      "fills-empty-block",
       "while-down",
       "storm",
       "deep",
@@ -316,7 +317,7 @@ const EXPECTATIONS: Expectation[] = [
   {
     scenario: "rpc-inconsistency",
     defects: ["trusts-empty-logs"],
-    fails: ["lagging-logs", "split-branch-logs"],
+    fails: ["lagging-logs", "split-branch-logs", "lagging-logs-no-eip234", "hole-in-range"],
     // Judged on its own blocks, so the holes the two before it left are not
     // its failure.
     passes: ["head-goes-backwards", "duplicate-delivery", "missing-block", "stale-hash"],
@@ -394,7 +395,12 @@ const EXPECTATIONS: Expectation[] = [
       "missing-block",
       "lagging-logs",
       "split-branch-logs",
+      "lagging-logs-no-eip234",
+      "hole-in-range",
     ],
+    // A block that still has some of its logs in the answer agrees with its
+    // header, so an indexer reading one endpoint cannot see what was left out.
+    fails: ["partial-block-logs"],
     slow: true,
   },
   {
@@ -411,7 +417,16 @@ const EXPECTATIONS: Expectation[] = [
     // Every case, each on its own rewrite: the first leaves the data wrong,
     // and the rest are judged on the blocks they rewrote rather than failing
     // on the first one's rows.
-    fails: ["shallow", "shortening", "removes-event", "while-down", "storm", "during-backfill", "deep"],
+    fails: [
+      "shallow",
+      "shortening",
+      "removes-event",
+      "fills-empty-block",
+      "while-down",
+      "storm",
+      "during-backfill",
+      "deep",
+    ],
   },
   {
     scenario: "process-kill",

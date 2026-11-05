@@ -1055,6 +1055,15 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     ctx.chain.reorg({ depth: 3, logs: "dropped" })
   );
 
+  // Blocks the tool has read as empty, replaced by blocks that hold events. A
+  // tool that keeps the hashes of only the blocks it got logs for has nothing
+  // stored at these heights to disagree with the new branch.
+  ctx.chain.advance(3, { logs: false });
+  await synced(ctx);
+  checks["fills-empty-block"] = await reconciles("reorg that puts events into empty blocks", () =>
+    ctx.chain.reorg({ depth: 3, logs: "changed" })
+  );
+
   // Six blocks replaced by three, so the chain is genuinely shorter than what
   // the tool has already stored and its head has to move backwards. Every
   // other reorg here can be handled by an indexer that only ever moves
@@ -1506,6 +1515,80 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
         : `lost the events in blocks answered from the replaced branch: ${split.summary}`
   );
   await reviveIfNeeded(ctx, "exited when logs were answered from a replaced branch");
+
+  // ── The lagging replica again, on an endpoint that breaks EIP-234 ──
+  //
+  // Asked for a block by its hash, the replica that has not seen it answers no
+  // logs instead of an error, so a tool that asks again by hash to be sure gets
+  // the same wrong answer the range gave it.
+  const judgeNoEip234 = await judgeFrom(ctx.chain.head() + 1);
+  const beforeNoEip234 = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setLogsLag(3);
+  ctx.chain.setUnknownHashAnswersEmpty(true);
+  await produce(ctx, 10, 2_000);
+  ctx.chain.setUnknownHashAnswersEmpty(false);
+  ctx.chain.setLogsLag(0);
+  ctx.chain.advance(10);
+  const pastNoEip234 = await synced(ctx, ctx.patience.syncMs, { judge: judgeNoEip234 });
+  const noEip234 = await settled(ctx, ctx.patience.reactMs, judgeNoEip234);
+  checks["lagging-logs-no-eip234"] = verdict(
+    ctx.alive() && pastNoEip234 && noEip234.clean,
+    !ctx.alive()
+      ? "exited when a lagging replica answered an unknown block hash as empty"
+      : (await ctx.observe.count().catch(() => 0)) === beforeNoEip234
+        ? "stopped indexing when a lagging replica answered an unknown block hash as empty"
+        : `lost the events in blocks a lagging replica answered as empty, by range and by hash: ${noEip234.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when an unknown block hash was answered as empty");
+
+  // ── A range answered without the blocks inside it ──
+  //
+  // Blocks arrive four at a time, so a tool at the head asks for ranges with
+  // blocks inside them, and those come back with no logs while the range's
+  // ends, every header and every one-block read are right.
+  const judgeHoles = await judgeFrom(ctx.chain.head() + 1);
+  const beforeHoles = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setRangeHoles(true);
+  for (let step = 0; step < 5; step++) {
+    ctx.chain.advance(4);
+    await sleep(4_000);
+  }
+  ctx.chain.setRangeHoles(false);
+  ctx.chain.advance(10);
+  const pastHoles = await synced(ctx, ctx.patience.syncMs, { judge: judgeHoles });
+  const holes = await settled(ctx, ctx.patience.reactMs, judgeHoles);
+  checks["hole-in-range"] = verdict(
+    ctx.alive() && pastHoles && holes.clean,
+    !ctx.alive()
+      ? "exited when a range came back without the blocks inside it"
+      : (await ctx.observe.count().catch(() => 0)) === beforeHoles
+        ? "stopped indexing when a range came back without the blocks inside it"
+        : `lost the events in blocks a range answer left out: ${holes.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when a range came back without the blocks inside it");
+
+  // ── Some of a block's logs left out ──
+  //
+  // Every block in an answer still has logs, so neither its bloom filter nor
+  // any hash disagrees with it. Only a second source, its receipts or another
+  // endpoint, can tell.
+  const judgePartial = await judgeFrom(ctx.chain.head() + 1);
+  const beforePartial = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setPartialBlockLogs(true);
+  await produce(ctx, 10, 2_000);
+  ctx.chain.setPartialBlockLogs(false);
+  ctx.chain.advance(10);
+  const pastPartial = await synced(ctx, ctx.patience.syncMs, { judge: judgePartial });
+  const partial = await settled(ctx, ctx.patience.reactMs, judgePartial);
+  checks["partial-block-logs"] = verdict(
+    ctx.alive() && pastPartial && partial.clean,
+    !ctx.alive()
+      ? "exited when an answer left out some of a block's logs"
+      : (await ctx.observe.count().catch(() => 0)) === beforePartial
+        ? "stopped indexing when an answer left out some of a block's logs"
+        : `lost the logs an answer left out of blocks it returned others for: ${partial.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when an answer left out some of a block's logs");
 
   // ── A hash that stops existing under a request ──
   const judgeStale = await judgeFrom(ctx.chain.head() + 1);

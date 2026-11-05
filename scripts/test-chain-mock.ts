@@ -483,6 +483,68 @@ try {
     );
   }
 
+  // ── A lagging replica that answers an unknown hash with nothing ──
+  {
+    const head = mock.control.head();
+    const { result: tipBlock } = await rpc("eth_getBlockByNumber", [
+      `0x${head.toString(16)}`,
+      false,
+    ]);
+    mock.control.setLogsLag(2);
+    mock.control.setUnknownHashAnswersEmpty(true);
+    const byHash = await rpc("eth_getLogs", [{ blockHash: tipBlock?.hash }]);
+    mock.control.setUnknownHashAnswersEmpty(false);
+    mock.control.setLogsLag(0);
+    check(
+      "a replica breaking EIP-234 answers a hash it has not seen as empty",
+      Array.isArray(byHash?.result) && byHash.result.length === 0,
+      JSON.stringify(byHash)
+    );
+  }
+
+  // ── A range stitched from backends at different heights ──
+  {
+    const head = mock.control.head();
+    const ranged = await amountsAt(head - 3, head);
+    const { result: oneBlock } = await rpc("eth_getLogs", [
+      { fromBlock: `0x${(head - 1).toString(16)}`, toBlock: `0x${(head - 1).toString(16)}` },
+    ]);
+    mock.control.setRangeHoles(true);
+    const holed = await amountsAt(head - 3, head);
+    const { result: oneBlockHoled } = await rpc("eth_getLogs", [
+      { fromBlock: `0x${(head - 1).toString(16)}`, toBlock: `0x${(head - 1).toString(16)}` },
+    ]);
+    mock.control.setRangeHoles(false);
+    check(
+      "a holed range keeps its first and last blocks and leaves out the ones inside",
+      ranged.length === 8 && holed.length === 4,
+      `${ranged.length} transfers whole, ${holed.length} holed`
+    );
+    check(
+      "a one-block range has no inside to leave out",
+      oneBlockHoled?.length === oneBlock?.length && oneBlock?.length > 0,
+      `${oneBlock?.length} and ${oneBlockHoled?.length} logs`
+    );
+  }
+
+  // ── Every block's last log left out ──
+  {
+    const head = mock.control.head();
+    const { result: tipBlock } = await rpc("eth_getBlockByNumber", [
+      `0x${head.toString(16)}`,
+      false,
+    ]);
+    mock.control.setPartialBlockLogs(true);
+    const partial = await amountsAt(head - 3, head);
+    const { result: byHash } = await rpc("eth_getLogs", [{ blockHash: tipBlock?.hash }]);
+    mock.control.setPartialBlockLogs(false);
+    check(
+      "a partial answer keeps one of each block's two transfers, by range and by hash",
+      partial.length === 4 && byHash?.length === 1,
+      `${partial.length} transfers by range, ${byHash?.length} logs by hash`
+    );
+  }
+
   // ── Logs answered from the branch a reorg replaced ──
   //
   // Three empty blocks are replaced by three that carry transfers, and the

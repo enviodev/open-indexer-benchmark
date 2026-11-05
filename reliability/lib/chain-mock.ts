@@ -419,6 +419,26 @@ export interface ChainControl {
    */
   setLogsFromReplacedBranch(on: boolean): void;
   /**
+   * Answer a lookup by a hash the log replica has not seen with no logs
+   * rather than an error. EIP-234 forbids it, and Monad's public endpoint does
+   * it. With setLogsLag on, the one question that could expose the replica
+   * gets the same wrong answer as the range did.
+   */
+  setUnknownHashAnswersEmpty(on: boolean): void;
+  /**
+   * Answer a range of three or more blocks without the logs of the blocks
+   * inside it, while its first and last blocks, every header and every
+   * one-block or by-hash lookup stay right. A provider stitching a range
+   * together from backends at different heights answers this way.
+   */
+  setRangeHoles(on: boolean): void;
+  /**
+   * Leave the last log out of every block that holds more than one, in every
+   * eth_getLogs answer. The block still has logs in the answer, so neither its
+   * bloom filter nor any hash disagrees: only another source can tell.
+   */
+  setPartialBlockLogs(on: boolean): void;
+  /**
    * Serve every log twice in the same response. A chain cannot do this; a
    * provider stitching two backends together can, and an indexer that writes
    * what it is given ends up with each transfer stored twice.
@@ -488,6 +508,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   let headLag = 0;
   let logsLag = 0;
   let logsFromReplacedBranch = false;
+  let unknownHashAnswersEmpty = false;
+  let rangeHoles = false;
+  let partialBlockLogs = false;
   /** The blocks the last reorg cut, by height. */
   let replacedBranch = new Map<number, MockBlock>();
   let duplicateLogs = false;
@@ -751,9 +774,10 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       // gone, and a tool told "no logs" would record a reorged block as one
       // that simply held nothing.
       if (!block || block.number > logsHead() || logsBlockAt(block.number) !== block) {
+        if (unknownHashAnswersEmpty) return [];
         throw rpcFault(-32_000, "unknown block");
       }
-      return filterLogs(logsOf(block), filter);
+      return answeredLogs(block, filter);
     }
     const head = servedHead();
     const from = Math.max(blockRef(filter?.fromBlock ?? "earliest") ?? spec.startBlock, spec.startBlock);
@@ -767,8 +791,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     // The range is still answered up to `to`: the replica does not refuse a
     // block it has not seen, it reports it as empty.
     for (let height = from; height <= Math.min(to, logsHead()); height++) {
+      if (rangeHoles && height > from && height < to) continue;
       const block = logsBlockAt(height);
-      if (block) out.push(...filterLogs(logsOf(block), filter));
+      if (block) out.push(...answeredLogs(block, filter));
     }
     if (maxLogsPerResponse && out.length > maxLogsPerResponse) {
       stats.capped.results++;
@@ -777,6 +802,12 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     // Doubling happens last, so it is the response that is wrong rather than
     // the chain: the same log, twice, with the same block, hash and index.
     return duplicateLogs ? out.flatMap((log) => [log, log]) : out;
+  }
+
+  /** A block's logs as the endpoint answers for them, faults included. */
+  function answeredLogs(block: MockBlock, filter: Record<string, unknown>) {
+    const logs = filterLogs(logsOf(block), filter);
+    return partialBlockLogs && logs.length > 1 ? logs.slice(0, -1) : logs;
   }
 
   function filterLogs(logs: ReturnType<typeof logsOf>, filter: Record<string, unknown>) {
@@ -1203,6 +1234,15 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     },
     setLogsFromReplacedBranch(on) {
       logsFromReplacedBranch = on;
+    },
+    setUnknownHashAnswersEmpty(on) {
+      unknownHashAnswersEmpty = on;
+    },
+    setRangeHoles(on) {
+      rangeHoles = on;
+    },
+    setPartialBlockLogs(on) {
+      partialBlockLogs = on;
     },
     setDuplicateLogs(on) {
       duplicateLogs = on;
