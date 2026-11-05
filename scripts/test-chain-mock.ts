@@ -483,6 +483,31 @@ try {
     );
   }
 
+  // ── A range stitched from backends at different heights ──
+  {
+    const head = mock.control.head();
+    const ranged = await amountsAt(head - 3, head);
+    const { result: oneBlock } = await rpc("eth_getLogs", [
+      { fromBlock: `0x${(head - 1).toString(16)}`, toBlock: `0x${(head - 1).toString(16)}` },
+    ]);
+    mock.control.setRangeHoles(true);
+    const holed = await amountsAt(head - 3, head);
+    const { result: oneBlockHoled } = await rpc("eth_getLogs", [
+      { fromBlock: `0x${(head - 1).toString(16)}`, toBlock: `0x${(head - 1).toString(16)}` },
+    ]);
+    mock.control.setRangeHoles(false);
+    check(
+      "a holed range keeps its first and last blocks and leaves out the ones inside",
+      ranged.length === 8 && holed.length === 4,
+      `${ranged.length} transfers whole, ${holed.length} holed`
+    );
+    check(
+      "a one-block range has no inside to leave out",
+      oneBlockHoled?.length === oneBlock?.length && oneBlock?.length > 0,
+      `${oneBlock?.length} and ${oneBlockHoled?.length} logs`
+    );
+  }
+
   // ── Logs answered from the branch a reorg replaced ──
   //
   // Three empty blocks are replaced by three that carry transfers, and the

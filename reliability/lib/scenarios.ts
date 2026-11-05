@@ -327,6 +327,13 @@ export const SCENARIOS: Scenario[] = [
           "The replacement blocks carry no logs. The rows for the discarded events must be gone, and any aggregate they contributed to must be back to what it was. This is the case an upsert-shaped rollback fails silently: writing the new state over the old works when there is new state, and does nothing at all when the event simply stopped existing.",
       },
       {
+        id: "fills-empty-block",
+        label: "picks up events a reorg puts into blocks it read as empty",
+        failing: "Missing data: skips events a reorg put into blocks it had read as empty",
+        detail:
+          "Three blocks the tool has already read, holding none of its events, are replaced by three that hold some. A tool that keeps the hashes of only the blocks it got logs for has nothing stored at those heights to disagree with the new branch, so the reorg passes it by, and the events in the new blocks are never asked for.",
+      },
+      {
         id: "deep",
         label: "stops, rather than carrying on, after a rewrite deeper than it can undo",
         failing: "Wrong data: carries on after a chain rewrite deeper than it can undo, instead of stopping",
@@ -495,7 +502,7 @@ export const SCENARIOS: Scenario[] = [
     summary:
       "The failure nobody plans for, because it should not happen and does: a load-balanced endpoint answering from two nodes at different heights, so the head goes backwards; a block hash that was valid a second ago and is not now; the same block served twice. A tool that trusts the endpoint's answers unconditionally will happily record any of it.",
     method:
-      "The chain is made to answer from behind for a while - a head lower than one already reported - to serve a block range twice in succession, to answer for the logs of the newest blocks from a replica that has not seen them yet or that is still on a branch a reorg replaced, and a hash the tool has already used is reorged out from under a request in flight.",
+      "The chain is made to answer from behind for a while - a head lower than one already reported - to serve a block range twice in succession, to answer for the logs of the newest blocks from a replica that has not seen them yet or that is still on a branch a reorg replaced, to leave the blocks inside a range out of its answer, and a hash the tool has already used is reorged out from under a request in flight.",
     checks: [
       {
         id: "head-goes-backwards",
@@ -531,6 +538,13 @@ export const SCENARIOS: Scenario[] = [
         failing: "Missing data: skips events in blocks an RPC node answered from the branch a reorg replaced",
         detail:
           "Three empty blocks at the head are replaced by three that carry transfers, and for twenty seconds eth_getLogs is answered by a replica still on the branch that was replaced, while the head and every header come from the branch the chain switched to. The tool never sees the old branch's headers, so there is no stored hash for a reorg check to trip on, and since the old blocks held nothing there is not even a log hash to disagree with the header. The header's bloom filter says those blocks hold logs; a tool that stores the header's hash next to an empty answer has a hole that every later hash comparison agrees with.",
+      },
+      {
+        id: "hole-in-range",
+        label: "keeps the events an RPC node leaves out of the middle of a range",
+        failing: "Missing data: skips events in blocks an RPC node left out of the middle of a range",
+        detail:
+          "Blocks arrive four at a time, and for twenty seconds a range answer leaves out the logs of the blocks inside it, while its first and last blocks, every header and every one-block read are right. A provider stitching a range together from backends at different heights answers this way. A tool that checks only the ends of a range, or only the blocks it got logs for, has a hole.",
       },
       {
         id: "stale-hash",

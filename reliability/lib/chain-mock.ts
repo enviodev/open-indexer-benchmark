@@ -419,6 +419,13 @@ export interface ChainControl {
    */
   setLogsFromReplacedBranch(on: boolean): void;
   /**
+   * Answer a range of three or more blocks without the logs of the blocks
+   * inside it, while its first and last blocks, every header and every
+   * one-block or by-hash lookup stay right. A provider stitching a range
+   * together from backends at different heights answers this way.
+   */
+  setRangeHoles(on: boolean): void;
+  /**
    * Serve every log twice in the same response. A chain cannot do this; a
    * provider stitching two backends together can, and an indexer that writes
    * what it is given ends up with each transfer stored twice.
@@ -488,6 +495,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   let headLag = 0;
   let logsLag = 0;
   let logsFromReplacedBranch = false;
+  let rangeHoles = false;
   /** The blocks the last reorg cut, by height. */
   let replacedBranch = new Map<number, MockBlock>();
   let duplicateLogs = false;
@@ -767,6 +775,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     // The range is still answered up to `to`: the replica does not refuse a
     // block it has not seen, it reports it as empty.
     for (let height = from; height <= Math.min(to, logsHead()); height++) {
+      if (rangeHoles && height > from && height < to) continue;
       const block = logsBlockAt(height);
       if (block) out.push(...filterLogs(logsOf(block), filter));
     }
@@ -1203,6 +1212,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     },
     setLogsFromReplacedBranch(on) {
       logsFromReplacedBranch = on;
+    },
+    setRangeHoles(on) {
+      rangeHoles = on;
     },
     setDuplicateLogs(on) {
       duplicateLogs = on;

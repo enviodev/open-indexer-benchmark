@@ -239,7 +239,7 @@ The ordinary case, and the one most likely to be assumed rather than tested: SIG
 
 Whether the data still matches the chain after the chain rewrites itself, in the awkward ways it really does.
 
-One scenario, 7 checks.
+One scenario, 8 checks.
 
 <a id="reorg-cases"></a>
 
@@ -254,6 +254,7 @@ Every indexer claims to handle reorgs, and a one-block reorg where an event's va
 | handles the chain replacing its latest block | The head block is replaced with one carrying different transfer amounts. Afterwards the stored amounts are the new ones. The baseline case: a tool that fails here has no reorg handling at all. |
 | handles the chain switching to a shorter fork | Six blocks are replaced by three, so the canonical chain is shorter than the one the tool has already stored and its head has to move backwards. An indexer that only ever moves forward - overwriting each block as it reads it, never deleting - handles every other reorg on this page and silently keeps three blocks' worth of rows that are on no chain at all. |
 | removes an event the chain dropped | The replacement blocks carry no logs. The rows for the discarded events must be gone, and any aggregate they contributed to must be back to what it was. This is the case an upsert-shaped rollback fails silently: writing the new state over the old works when there is new state, and does nothing at all when the event simply stopped existing. |
+| picks up events a reorg puts into blocks it read as empty | Three blocks the tool has already read, holding none of its events, are replaced by three that hold some. A tool that keeps the hashes of only the blocks it got logs for has nothing stored at those heights to disagree with the new branch, so the reorg passes it by, and the events in the new blocks are never asked for. |
 | stops, rather than carrying on, after a rewrite deeper than it can undo | Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Stopping means writing nothing more on top of rows it cannot undo: exiting counts, and so does staying up and refusing every new block, which is what Ponder and the Squid SDK do. Carrying on with data it can no longer reconcile is the failing outcome. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it. |
 | catches a chain rewrite that happened while it was offline | The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg - the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists. |
 | keeps up with several chain rewrites in a row | Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion - a rollback that is not itself atomic - leaves a mixture of two branches. |
@@ -271,7 +272,7 @@ Reported alongside the score, and not part of it:
 
 Whether a node that errors, stalls, rate limits, contradicts itself or stops announcing new blocks costs throughput or costs data.
 
-5 scenarios, 18 checks between them; the column counts all of them together.
+5 scenarios, 19 checks between them; the column counts all of them together.
 
 <a id="rpc-outage"></a>
 
@@ -334,7 +335,7 @@ Public endpoints cap what one request may ask for: a block range, a number of re
 
 The failure nobody plans for, because it should not happen and does: a load-balanced endpoint answering from two nodes at different heights, so the head goes backwards; a block hash that was valid a second ago and is not now; the same block served twice. A tool that trusts the endpoint's answers unconditionally will happily record any of it.
 
-**What the harness does.** The chain is made to answer from behind for a while - a head lower than one already reported - to serve a block range twice in succession, to answer for the logs of the newest blocks from a replica that has not seen them yet or that is still on a branch a reorg replaced, and a hash the tool has already used is reorged out from under a request in flight.
+**What the harness does.** The chain is made to answer from behind for a while - a head lower than one already reported - to serve a block range twice in succession, to answer for the logs of the newest blocks from a replica that has not seen them yet or that is still on a branch a reorg replaced, to leave the blocks inside a range out of its answer, and a hash the tool has already used is reorged out from under a request in flight.
 
 | check | what a pass means |
 | --- | --- |
@@ -343,6 +344,7 @@ The failure nobody plans for, because it should not happen and does: a load-bala
 | handles a block the RPC node briefly fails to return | Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as "no such block" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself. |
 | keeps the events an RPC node briefly answers as empty | For twenty seconds at the head, eth_getLogs is answered by a replica three blocks behind, while the head and every block header come from one that is not. The replica has no error to give for a block it has not seen: it answers the range with the logs it has, which for the newest blocks is none. This is what a load-balanced provider does on a chain that makes blocks faster than its machines agree, and nothing in the response says so - the header the tool reads for the same block does, with a bloom filter that says the block holds logs. A tool that takes the empty answer at its word records those blocks as holding nothing and moves on, and since it believes it has them, it never asks again. |
 | keeps the events an RPC node answers from a branch the chain left | Three empty blocks at the head are replaced by three that carry transfers, and for twenty seconds eth_getLogs is answered by a replica still on the branch that was replaced, while the head and every header come from the branch the chain switched to. The tool never sees the old branch's headers, so there is no stored hash for a reorg check to trip on, and since the old blocks held nothing there is not even a log hash to disagree with the header. The header's bloom filter says those blocks hold logs; a tool that stores the header's hash next to an empty answer has a hole that every later hash comparison agrees with. |
+| keeps the events an RPC node leaves out of the middle of a range | Blocks arrive four at a time, and for twenty seconds a range answer leaves out the logs of the blocks inside it, while its first and last blocks, every header and every one-block read are right. A provider stitching a range together from backends at different heights answers this way. A tool that checks only the ends of a range, or only the blocks it got logs for, has a hole. |
 | handles a block being replaced while it asks for it | A request against a hash the chain has reorged away comes back an error, not an empty result. The tool has to treat that as a reorg signal; treating it as a failed request and retrying forever is the stall this check finds. |
 
 <a id="subscription-stall"></a>
