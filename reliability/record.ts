@@ -77,6 +77,8 @@ const to = await height();
 await new Promise((resolve) => setTimeout(resolve, 15_000));
 
 const numbers = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+// The replay is paced by the time between blocks, which one block cannot give.
+if (numbers.length < 2) throw new Error(`only ${numbers.length} block(s) arrived; record for longer`);
 const blocks = await pooled(numbers, 8, (n) => rpc<Json>("eth_getBlockByNumber", [hex(n), true]));
 
 // One block at a time, by its hash: public endpoints refuse an address-free

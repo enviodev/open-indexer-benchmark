@@ -594,7 +594,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       // fetched. A tool that walks back one block from its start block finds a
       // chain rather than a dead end.
       parentHash: parent?.hash ?? hex32("ancestor", number - 1),
-      timestamp: 1_700_000_000 + (number - spec.startBlock) * spec.blockTimeS,
+      timestamp,
       epoch,
       logs,
       publishedAtMs: Date.now(),
