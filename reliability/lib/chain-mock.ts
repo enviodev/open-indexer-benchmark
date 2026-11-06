@@ -28,6 +28,8 @@
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { acceptWebSocket, type WsConnection } from "./ws-server.ts";
+import { logsBloom } from "./keccak.ts";
+import type { RecordedBlock, RecordedLog, Recording } from "./recording.ts";
 import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
 
 /**
@@ -98,6 +100,24 @@ export interface MockBlock {
    * the indexer could first have seen it.
    */
   publishedAtMs: number;
+  /**
+   * The recorded block this one replays, when the chain is replaying a real
+   * one: its transactions, its logs and the rest of its header are served as
+   * recorded, under this block's number, hash and place in time.
+   */
+  recorded?: RecordedBlock;
+  /** Milliseconds since the epoch, for a recorded chain whose blocks come faster than a second. */
+  timestampMs?: number;
+}
+
+/**
+ * What a response costs to deliver: a round trip, plus its size over the
+ * bandwidth. Fixed rather than sampled, so two runs pay the same price, and
+ * set by the payload alone, so a tool that asks for more pays for it.
+ */
+export interface NetworkProfile {
+  roundTripMs: number;
+  bytesPerSecond: number;
 }
 
 export interface ChainSpec {
@@ -173,6 +193,14 @@ export interface ChainSpec {
    * wants hostile ones overrides this.
    */
   metadataOf?: (block: number) => { symbol: string; name: string };
+  /**
+   * A stretch of a real chain that `replay()` appends block by block. Its
+   * token's logs are served under `contract`, and every other log, every
+   * transaction and the rest of each header as recorded.
+   */
+  recording?: Recording;
+  /** Delay every answer as a network would. Unset answers at once. */
+  network?: NetworkProfile;
 }
 
 /**
@@ -323,6 +351,8 @@ export interface ChainStats {
    * run, and it decides whether a subscription check can be asked.
    */
   subscriptions: number;
+  /** Bytes of the answers and announcements the chain has sent. */
+  bytesServed: number;
 }
 
 export interface ChainControl {
@@ -333,6 +363,13 @@ export interface ChainControl {
    * replace blocks that held nothing with ones that hold something.
    */
   advance(blocks?: number, opts?: { logs?: boolean }): void;
+  /**
+   * Append the next blocks of the recording, in its order. Throws once the
+   * recording has none left, rather than making a block up.
+   */
+  replay(blocks?: number): void;
+  /** How many recorded blocks `replay()` has left. */
+  replayLeft(): number;
   /**
    * Rewrite the last `depth` blocks and replace them with `depth + extend`
    * fresh ones, so the head moves forward across the rewrite the way a real
@@ -515,12 +552,40 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       refused: {},
       capped: { range: 0, results: 0 },
       subscriptions: 0,
+      bytesServed: 0,
     };
   }
 
-  function append(epoch: number, logs: boolean): MockBlock {
+  /** Where the replay has got to in the recording. */
+  let replayCursor = 0;
+  /** What to add to a recorded block's time to place it on this chain's clock. */
+  let replayOffsetMs: number | null = null;
+
+  /** A recorded block's time, to the millisecond where its chain says. */
+  const recordedTimeMs = (recorded: RecordedBlock) =>
+    typeof recorded.timestampMs === "string"
+      ? Number.parseInt(recorded.timestampMs, 16)
+      : Number.parseInt(recorded.timestamp, 16) * 1_000;
+
+  function append(epoch: number, logs: boolean, recorded?: RecordedBlock): MockBlock {
     const number = spec.startBlock + chain.length;
     const parent = chain[chain.length - 1];
+    // Never earlier than the parent: a replayed stretch runs faster than one
+    // block a second and has to hand back to the derived clock without
+    // stepping backwards.
+    let timestamp = Math.max(
+      1_700_000_000 + (number - spec.startBlock) * spec.blockTimeS,
+      parent?.timestamp ?? 0
+    );
+    let timestampMs: number | undefined;
+    if (recorded) {
+      // The recording keeps its own spacing, starting one recorded block time
+      // after the block it follows.
+      const parentMs = parent ? (parent.timestampMs ?? parent.timestamp * 1_000) : timestamp * 1_000;
+      replayOffsetMs ??= parentMs + (spec.recording?.blockTimeMs ?? 0) - recordedTimeMs(recorded);
+      timestampMs = recordedTimeMs(recorded) + replayOffsetMs;
+      timestamp = Math.floor(timestampMs / 1_000);
+    }
     const block: MockBlock = {
       number,
       hash: hex32("block", number, epoch),
@@ -533,9 +598,107 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       epoch,
       logs,
       publishedAtMs: Date.now(),
+      recorded,
+      timestampMs,
     };
     chain.push(block);
     return block;
+  }
+
+  // ── A replayed block, served under this chain's numbers ──
+
+  const replayed = new WeakMap<
+    MockBlock,
+    { logs: RecordedLog[]; bloom: string; receipts?: unknown[] }
+  >();
+
+  /** The recorded token becomes the projects' contract; every other address stays. */
+  const asServed = (address: string | null) =>
+    address && spec.recording && address.toLowerCase() === spec.recording.token.toLowerCase()
+      ? spec.contract
+      : address;
+
+  /** The fields a recorded log or transaction carries about its block, rewritten to this one. */
+  function placedIn(block: MockBlock, recorded: { blockTimestamp?: unknown; blockTimestampMs?: unknown }) {
+    return {
+      blockHash: block.hash,
+      blockNumber: quantity(block.number),
+      ...(recorded.blockTimestamp !== undefined ? { blockTimestamp: quantity(block.timestamp) } : {}),
+      ...(recorded.blockTimestampMs !== undefined && block.timestampMs !== undefined
+        ? { blockTimestampMs: quantity(block.timestampMs) }
+        : {}),
+    };
+  }
+
+  function replayedOf(block: MockBlock) {
+    let entry = replayed.get(block);
+    if (!entry) {
+      const logs = block.recorded!.logs.map((log: RecordedLog) => ({
+        ...log,
+        address: asServed(log.address)!,
+        ...placedIn(block, log),
+        removed: false,
+      }));
+      entry = { logs, bloom: logsBloom(logs) };
+      replayed.set(block, entry);
+    }
+    return entry;
+  }
+
+  function replayedHeader(block: MockBlock, fullTx: boolean) {
+    const { transactions, logs: _logs, ...header } = block.recorded!;
+    return {
+      ...header,
+      number: quantity(block.number),
+      hash: block.hash,
+      parentHash: block.parentHash,
+      timestamp: quantity(block.timestamp),
+      ...(header.timestampMs !== undefined && block.timestampMs !== undefined
+        ? { timestampMs: quantity(block.timestampMs) }
+        : {}),
+      logsBloom: replayedOf(block).bloom,
+      transactions: fullTx
+        ? transactions.map((tx) => ({
+            ...tx,
+            to: asServed(tx.to),
+            ...placedIn(block, tx),
+            ...(tx.chainId !== undefined ? { chainId: quantity(spec.chainId) } : {}),
+          }))
+        : transactions.map((tx) => tx.hash),
+    };
+  }
+
+  /**
+   * One receipt per recorded transaction, holding its logs. The recording
+   * keeps no receipts, so gas used is the transaction's gas limit: the size
+   * of the answer is what this chain is for, and that is the same either way.
+   */
+  function replayedReceipts(block: MockBlock): unknown[] {
+    const entry = replayedOf(block);
+    if (!entry.receipts) {
+      let cumulative = 0n;
+      entry.receipts = block.recorded!.transactions.map((tx, i) => {
+        const logs = entry.logs.filter((log) => log.transactionHash === tx.hash);
+        cumulative += BigInt(tx.gas);
+        return {
+          transactionHash: tx.hash,
+          transactionIndex: quantity(i),
+          blockHash: block.hash,
+          blockNumber: quantity(block.number),
+          from: tx.from,
+          to: asServed(tx.to),
+          cumulativeGasUsed: quantity(cumulative),
+          gasUsed: tx.gas,
+          effectiveGasPrice: (tx.gasPrice as string | undefined) ?? "0x0",
+          contractAddress: null,
+          logs,
+          logsBloom: logsBloom(logs),
+          status: "0x1",
+          type: tx.type,
+        };
+      });
+    }
+    return entry.receipts;
   }
 
   /**
@@ -558,6 +721,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   }
 
   function logsOf(block: MockBlock) {
+    if (block.recorded) return replayedOf(block).logs;
     if (!block.logs) return [];
     const empty = spec.emptyRange;
     if (empty && block.number >= empty.from && block.number <= empty.to) return [];
@@ -671,6 +835,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
   }
 
   function serializeBlock(block: MockBlock, fullTx: boolean) {
+    if (block.recorded) return replayedHeader(block, fullTx);
     const logs = logsOf(block);
     return {
       number: quantity(block.number),
@@ -856,10 +1021,16 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       case "eth_getBlockReceipts": {
         const height = blockRef(params[0]);
         const block = height === null ? null : blockAt(height);
+        if (block?.recorded) return replayedReceipts(block);
         return block ? logsOf(block).map((log, i) => receiptOf(block, log, i)) : null;
       }
       case "eth_getTransactionReceipt": {
         for (const block of chain) {
+          if (block.recorded) {
+            const index = block.recorded.transactions.findIndex((tx) => tx.hash === params[0]);
+            if (index >= 0) return replayedReceipts(block)[index];
+            continue;
+          }
           const logs = logsOf(block);
           const index = logs.findIndex((log) => log.transactionHash === params[0]);
           if (index >= 0) return receiptOf(block, logs[index], index);
@@ -1028,11 +1199,49 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
           };
         }
       });
-      res
-        .writeHead(200, JSON_HEADERS)
-        .end(JSON.stringify(Array.isArray(payload) ? answers : answers[0]));
+      const body = JSON.stringify(Array.isArray(payload) ? answers : answers[0]);
+      stats.bytesServed += Buffer.byteLength(body);
+      const answer = () => {
+        // The tool may have given up and closed the connection meanwhile.
+        if (!res.destroyed) res.writeHead(200, JSON_HEADERS).end(body);
+      };
+      if (spec.network) setTimeout(answer, networkDelayMs(body, { oneWay: false }));
+      else answer();
     });
   });
+
+  /**
+   * What the network profile charges for a message: a round trip for an
+   * answer, half of one for a message the chain pushes unasked, and its bytes
+   * over the bandwidth either way. Faults stay instant: they are about the
+   * answer, not the wire.
+   */
+  function networkDelayMs(body: string, { oneWay }: { oneWay: boolean }): number {
+    const network = spec.network;
+    if (!network) return 0;
+    return (
+      (oneWay ? network.roundTripMs / 2 : network.roundTripMs) +
+      (Buffer.byteLength(body) * 1_000) / network.bytesPerSecond
+    );
+  }
+
+  /**
+   * When a socket's earlier messages will have arrived. A socket is one
+   * stream, so a short message sent after a long one arrives after it, not
+   * before.
+   */
+  const socketFreeAt = new WeakMap<WsConnection, number>();
+
+  function sendOverSocket(connection: WsConnection, body: string, oneWay: boolean) {
+    stats.bytesServed += Buffer.byteLength(body);
+    if (!spec.network) return connection.send(body);
+    const at = Math.max(
+      performance.now() + networkDelayMs(body, { oneWay }),
+      socketFreeAt.get(connection) ?? 0
+    );
+    socketFreeAt.set(connection, at);
+    setTimeout(() => connection.send(body), at - performance.now());
+  }
 
   // ── The same endpoint over a WebSocket ──
   //
@@ -1050,12 +1259,14 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
     const header = serializeBlock(block, false);
     for (const [connection, ids] of subscribers) {
       for (const subscription of ids) {
-        connection.send(
+        sendOverSocket(
+          connection,
           JSON.stringify({
             jsonrpc: "2.0",
             method: "eth_subscription",
             params: { subscription, result: header },
-          })
+          }),
+          true
         );
       }
     }
@@ -1104,7 +1315,7 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
         return { jsonrpc: "2.0", id, error: { code, message: (err as Error).message } };
       }
     });
-    connection.send(JSON.stringify(Array.isArray(payload) ? answers : answers[0]));
+    sendOverSocket(connection, JSON.stringify(Array.isArray(payload) ? answers : answers[0]), false);
   }
 
   server.on("upgrade", (req, socket) => {
@@ -1146,6 +1357,19 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       const epoch = chain[chain.length - 1]?.epoch ?? 0;
       for (let i = 0; i < blocks; i++) announce(append(epoch, logs));
     },
+    replay(blocks = 1) {
+      const recording = spec.recording;
+      if (!recording) throw new Error("this chain was started without a recording to replay");
+      for (let i = 0; i < blocks; i++) {
+        const recorded = recording.blocks[replayCursor];
+        if (!recorded) {
+          throw new Error(`the recording has no blocks left after ${recording.blocks.length}`);
+        }
+        replayCursor++;
+        announce(append(chain[chain.length - 1]?.epoch ?? 0, true, recorded));
+      }
+    },
+    replayLeft: () => (spec.recording?.blocks.length ?? 0) - replayCursor,
     reorg({ depth, extend = 0, logs = "changed" }) {
       const head = chain[chain.length - 1];
       if (!head) throw new Error("cannot reorg an empty chain");
@@ -1184,7 +1408,9 @@ export async function startChainMock(spec: ChainSpec): Promise<ChainMock> {
       for (const block of chain) {
         if (upToHeight !== undefined && block.number > upToHeight) break;
         for (const log of logsOf(block)) {
+          // A replayed block holds every contract's logs, Transfers included.
           if (log.topics[0] !== TRANSFER_TOPIC) continue;
+          if (log.address.toLowerCase() !== spec.contract.toLowerCase()) continue;
           out.push({
             block: block.number,
             logIndex: Number(BigInt(log.logIndex)),

@@ -136,6 +136,7 @@ write down, which is not the same as a reliable tool - see
   - [Legal values that break things](#awkward-values)
 - [**head latency**](#head-latency) - How long after a block is published its rows are readable - over a WebSocket where the tool can subscribe to new blocks - and whether that holds up across a chain rewrite.
   - [From block to row](#block-to-row)
+  - [From block to row, on a replayed Base](#block-to-row-base)
 
 <a id="coverage"></a>
 
@@ -397,7 +398,7 @@ Chain data is not the tidy subset a schema was designed around. A token's `symbo
 
 How long after a block is published its rows are readable - over a WebSocket where the tool can subscribe to new blocks - and whether that holds up across a chain rewrite.
 
-One scenario, 4 checks.
+2 scenarios, 6 checks between them; the column counts all of them together.
 
 <a id="block-to-row"></a>
 
@@ -419,9 +420,32 @@ Reported alongside the score, and not part of it:
 | measure | unit | what it says |
 | --- | --- | --- |
 | new blocks by subscription |  | 1 when the tool subscribed to new blocks over the WebSocket it was offered, 0 when it polled. Published beside the median latency as "WS", because a subscribed tool hears of a block the moment it exists and a polling one up to an interval later, and the two numbers are not the same kind of number without it. |
-| median latency *(shown in the results table)* | ms | Median milliseconds from a block being published to its rows being readable. This is the number published in the table's head lag column. |
+| median latency | ms | Median milliseconds from a block being published to its rows being readable, on a chain answering at once from the same machine. |
 | 99th percentile latency | ms | The tail, over the same run. |
 | worst lag behind the head | blocks | The largest gap seen between the chain head and the tool's position. |
+
+<a id="block-to-row-base"></a>
+
+### From block to row, on a replayed Base
+
+From block to row asks its question of a chain that answers instantly and holds nothing but the token being indexed. This asks it of a chain that looks like one people index: a minute of Base, five blocks a second, with every transaction and every log it really held, served over a network that charges for what it carries. A tool that reads more than it needs pays for it here, as it would against a real endpoint.
+
+**What the harness does.** A minute of Base was recorded at its head - 302 blocks, every transaction and every log, read once the blocks had settled (reliability/record.ts). Once the tool has caught up with an ordinary chain, the mock chain replays the recording on its own schedule, a block every 203ms. The busiest ERC-20 in the recording, USDC, is served under the projects' token address, so the projects index real transfers unchanged; every other contract's logs stay, so a tool that reads a whole block pays for all of them, and every block's logsBloom is rebuilt from the logs it now holds. Every answer is delayed by a fixed 150ms round trip plus its size at 3MB/s, and a block announced over the WebSocket by half the round trip plus its size, so a run costs the same twice and a larger answer always costs more. A block's latency is the commit of its rows minus its publication, over the blocks that hold a transfer.
+
+| check | what a pass means |
+| --- | --- |
+| even the slowest 1% of a real chain's new data shows up within 10 seconds | The 99th percentile of the replayed blocks' latency is within ten seconds. The network adds at least a round trip to every block, so this is about what a tool does on top of it: batching, re-reading, or waiting on a timer. |
+| keeps up with a real chain's five blocks a second | The gap between the chain head and the tool's position never exceeds fifty blocks - ten seconds of Base - for more than fifteen seconds. A tool that pays the round trip once per block in sequence cannot keep up with a block every 203ms, however fast it is on its own machine. |
+
+Reported alongside the score, and not part of it:
+
+| measure | unit | what it says |
+| --- | --- | --- |
+| median latency *(shown in the results table)* | ms | Median milliseconds from a replayed block being published to its rows being readable. Published in the table's head latency column, with the 99th percentile beside it. |
+| 99th percentile latency | ms | The tail, over the same replay. |
+| worst lag behind the head | blocks | The largest gap seen between the chain head and the tool's position, in Base's 203ms blocks. |
+| served per block | KB | Kilobytes the chain sent the tool per replayed block, answers and announcements together. The network charges for every one of them. |
+| requests per block |  | Requests the tool made per replayed block, over HTTP and the WebSocket. |
 
 <a id="not-measured"></a>
 

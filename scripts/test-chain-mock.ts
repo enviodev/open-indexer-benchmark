@@ -22,6 +22,8 @@ import {
   type ChainMock,
 } from "../reliability/lib/chain-mock.ts";
 import { TRANSFER_TOPIC } from "../cases/lib/hypersync.ts";
+import { keccak256, logsBloom } from "../reliability/lib/keccak.ts";
+import { loadRecording } from "../reliability/lib/recording.ts";
 
 let failures = 0;
 
@@ -583,6 +585,155 @@ try {
     badAddress !== null && /not a 20-byte address/.test(badAddress.message),
     String(badAddress)
   );
+
+  // ── keccak, which the replayed blocks' blooms are built with ──
+  {
+    const digest = (text: string) => `0x${Buffer.from(keccak256(Buffer.from(text))).toString("hex")}`;
+    check(
+      "keccak-256 gives the known digests",
+      digest("") === "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" &&
+        digest("Transfer(address,address,uint256)") === TRANSFER_TOPIC,
+      `${digest("")} ${digest("Transfer(address,address,uint256)")}`
+    );
+  }
+
+  // ── A recorded chain, replayed under this chain's numbers ──
+  {
+    const recording = loadRecording();
+    check(
+      "a recorded block's bloom, rebuilt from its logs, is the one the chain served",
+      recording.blocks.every((block) => logsBloom(block.logs) === block.logsBloom)
+    );
+    const replay = await startChainMock({
+      chainId: 1,
+      startBlock: START,
+      blockTimeS: 2,
+      logsPerBlock: 2,
+      contract: CONTRACT,
+      port: 0,
+      recording,
+    });
+    try {
+      const call = async (method: string, params: unknown[]) => {
+        const res = await fetch(replay.url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        });
+        return ((await res.json()) as { result: any }).result;
+      };
+      replay.control.advance(2);
+      const before = replay.control.head();
+      replay.control.replay(3);
+      const first = recording.blocks[0];
+      const token = recording.token.toLowerCase();
+      const parent = await call("eth_getBlockByNumber", [`0x${before.toString(16)}`, false]);
+      const block = await call("eth_getBlockByNumber", [`0x${(before + 1).toString(16)}`, true]);
+      const allLogs = await call("eth_getLogs", [{ blockHash: block.hash }]);
+      const ours = await call("eth_getLogs", [{ blockHash: block.hash, address: CONTRACT }]);
+      const receipts = await call("eth_getBlockReceipts", [`0x${(before + 1).toString(16)}`]);
+      const recordedOurs = first.logs.filter((log) => log.address.toLowerCase() === token);
+
+      check(
+        "a replayed block follows on from the chain it was appended to",
+        replay.control.head() === before + 3 &&
+          block.parentHash === parent.hash &&
+          Number.parseInt(block.timestamp, 16) >= Number.parseInt(parent.timestamp, 16) &&
+          replay.control.replayLeft() === recording.blocks.length - 3,
+        JSON.stringify({ head: replay.control.head(), parent: block.parentHash, left: replay.control.replayLeft() })
+      );
+      check(
+        "a replayed block serves every recorded transaction and log, placed in this chain",
+        block.transactions.length === first.transactions.length &&
+          block.transactions.every((tx: { blockHash: string }) => tx.blockHash === block.hash) &&
+          allLogs.length === first.logs.length &&
+          allLogs.every((log: { blockHash: string }) => log.blockHash === block.hash),
+        `${block.transactions.length} transactions, ${allLogs.length} logs`
+      );
+      check(
+        "the recorded token's logs are served as the projects' contract, and only those",
+        recordedOurs.length > 0 &&
+          ours.length === recordedOurs.length &&
+          !allLogs.some((log: { address: string }) => log.address.toLowerCase() === token),
+        `${ours.length} of ${recordedOurs.length}`
+      );
+      check(
+        "a replayed block's bloom holds the logs it now serves",
+        block.logsBloom === logsBloom(allLogs) && block.logsBloom !== first.logsBloom
+      );
+      check(
+        "a replayed block's receipts hold every transaction and every log",
+        receipts.length === first.transactions.length &&
+          receipts.flatMap((receipt: { logs: unknown[] }) => receipt.logs).length === first.logs.length
+      );
+      check(
+        "the chain's rows are the replayed token's transfers, not every contract's",
+        replay.control.rows().filter((row) => row.block > before).length ===
+          recording.blocks
+            .slice(0, 3)
+            .flatMap((b) => b.logs)
+            .filter((log) => log.address.toLowerCase() === token && log.topics[0] === TRANSFER_TOPIC)
+            .length
+      );
+      const exhausted = (() => {
+        try {
+          replay.control.replay(recording.blocks.length);
+          return null;
+        } catch (err) {
+          return err as Error;
+        }
+      })();
+      check(
+        "replaying past the end of the recording is refused, not made up",
+        exhausted !== null && /no blocks left/.test(exhausted.message),
+        String(exhausted)
+      );
+    } finally {
+      await replay.close();
+    }
+  }
+
+  // ── A network that costs a round trip plus the answer's size ──
+  {
+    const slow = await startChainMock({
+      chainId: 1,
+      startBlock: START,
+      blockTimeS: 2,
+      logsPerBlock: 2,
+      contract: CONTRACT,
+      port: 0,
+      recording: loadRecording(),
+      network: { roundTripMs: 100, bytesPerSecond: 200_000 },
+    });
+    try {
+      slow.control.replay(1);
+      const timed = async (method: string, params: unknown[]) => {
+        const started = performance.now();
+        const res = await fetch(slow.url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        });
+        const body = await res.text();
+        return { ms: performance.now() - started, bytes: Buffer.byteLength(body) };
+      };
+      const small = await timed("eth_blockNumber", []);
+      const large = await timed("eth_getBlockByNumber", [`0x${slow.control.head().toString(16)}`, true]);
+      const expectedLarge = 100 + (large.bytes * 1_000) / 200_000;
+      check(
+        "a small answer costs the round trip",
+        small.ms >= 100 && small.ms < 180,
+        `${small.ms.toFixed(0)}ms`
+      );
+      check(
+        "a large answer costs the round trip plus its bytes over the bandwidth",
+        large.ms >= expectedLarge && large.ms < expectedLarge + 80,
+        `${large.ms.toFixed(0)}ms for ${large.bytes} bytes, expected ${expectedLarge.toFixed(0)}ms`
+      );
+    } finally {
+      await slow.close();
+    }
+  }
 } finally {
   await mock?.close();
 }

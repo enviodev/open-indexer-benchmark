@@ -372,6 +372,14 @@ const EXPECTATIONS: Expectation[] = [
     passes: ["median-under-block-time", "tail-bounded", "keeps-up", "recovers-after-reorg"],
     slow: true,
   },
+  // A real chain's traffic over a network: the double reads every header one
+  // at a time, a round trip each, and still keeps up with five blocks a
+  // second because each pass covers every block that arrived since the last.
+  {
+    scenario: "block-to-row-base",
+    passes: ["base-tail-bounded", "base-keeps-up"],
+    slow: true,
+  },
   // A reorg it never undoes is the reorgs column's finding. Asked again here,
   // it failed head latency too, for one defect, while the blocks after the
   // rewrite arrived as fast as the ones before it.

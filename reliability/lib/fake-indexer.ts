@@ -89,6 +89,7 @@ import { psql, sleep } from "../../cases/lib/process.ts";
 import { START_BLOCK, TOKEN } from "./case.ts";
 import { METADATA_TOPIC } from "./chain-mock.ts";
 import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
+import { bloomMayContain } from "./keccak.ts";
 
 /**
  * The two strings a MetadataUpdated event carries.
@@ -463,8 +464,10 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         // The logs and the header are two answers, and a load-balanced
         // endpoint can give them from two machines. The header is the one to
         // believe about which block this is, so logs that disagree with it -
-        // missing where its bloom says there are some, or from another branch
-        // - are a range to read again, not a block that holds nothing.
+        // missing where its bloom says the token may have some, or from
+        // another branch - are a range to read again, not a block that holds
+        // nothing. The bloom is asked about the token, not about any log: a
+        // real block holds other contracts' logs too.
         const own = logs.filter((log) => Number(BigInt(log.blockNumber)) === height);
         if (own.some((log) => log.blockHash !== block.hash)) {
           throw new Error(`logs for block ${height} are from a branch its header is not on`);
@@ -472,7 +475,7 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
         if (
           !defects.has("trusts-empty-logs") &&
           own.length === 0 &&
-          /[^0]/.test(block.logsBloom.slice(2))
+          bloomMayContain(block.logsBloom, TOKEN)
         ) {
           throw new Error(`no logs for block ${height}, whose header says it has some`);
         }

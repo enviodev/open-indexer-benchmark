@@ -494,9 +494,14 @@ const crashed: ToolReliability = {
       measures["resume-seconds"] = 41;
     }
     if (scenario.id === "block-to-row") {
-      measures["p50-ms"] = 640;
-      measures["p99-ms"] = 4_200;
+      measures["p50-ms"] = 120;
+      measures["p99-ms"] = 900;
       measures["max-lag-blocks"] = 3;
+    }
+    if (scenario.id === "block-to-row-base") {
+      measures["base-p50-ms"] = 640;
+      measures["base-p99-ms"] = 4_200;
+      measures["base-max-lag-blocks"] = 12;
     }
     return {
       scenario: scenario.id,
@@ -525,7 +530,11 @@ check(
   table.includes("(2 restarts)"),
   table
 );
-check("the headline head lag reaches the table", table.includes("(640ms)"), table);
+check(
+  "the replayed chain's median and tail reach the table, named",
+  table.includes("(p50 640ms, p99 4.2s)") && !table.includes("120ms"),
+  table
+);
 {
   // The same tool, heard of its blocks by subscription: the cell has to say
   // so, or 180ms reads as the same kind of number as a polled 640ms.
@@ -534,15 +543,17 @@ check("the headline head lag reaches the table", table.includes("(640ms)"), tabl
     name: "Subscribed Indexer",
     runs: crashed.runs.map((run) =>
       run.scenario === "block-to-row"
-        ? { ...run, measures: { ...run.measures, "p50-ms": 180, subscribed: 1 } }
-        : run
+        ? { ...run, measures: { ...run.measures, subscribed: 1 } }
+        : run.scenario === "block-to-row-base"
+          ? { ...run, measures: { ...run.measures, "base-p50-ms": 180 } }
+          : run
     ),
   };
   const score = scoreTool(subscribed);
   const tagged = buildReliabilityTable([toReliabilityRow(score, measuresOf(score))]);
   check(
     "a latency heard by subscription is tagged, and a polled one is not",
-    tagged.includes("(180ms, WS)") && !table.includes("WS)"),
+    tagged.includes("(p50 180ms, p99 4.2s, WS)") && !table.includes("WS)"),
     tagged
   );
 }

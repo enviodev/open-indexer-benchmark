@@ -132,6 +132,14 @@ export interface Measure {
   tag?: string;
   /** Word the headline number is printed with, e.g. "2 restarts". */
   abbr?: string;
+  /** Name the number is printed after in the cell, e.g. "p99 900ms". */
+  short?: string;
+  /**
+   * Another measure of the same scenario printed after the headline: a tail
+   * beside its median reads as one distribution, where either alone hides
+   * half of it.
+   */
+  alongside?: string;
 }
 
 export interface Scenario {
@@ -699,9 +707,8 @@ export const SCENARIOS: Scenario[] = [
         id: "p50-ms",
         label: "median latency",
         unit: "ms",
-        headline: true,
         detail:
-          "Median milliseconds from a block being published to its rows being readable. This is the number published in the table's head lag column.",
+          "Median milliseconds from a block being published to its rows being readable, on a chain answering at once from the same machine.",
       },
       {
         id: "p99-ms",
@@ -714,6 +721,70 @@ export const SCENARIOS: Scenario[] = [
         label: "worst lag behind the head",
         unit: "blocks",
         detail: "The largest gap seen between the chain head and the tool's position.",
+      },
+    ],
+  },
+  {
+    id: "block-to-row-base",
+    title: "From block to row, on a replayed Base",
+    group: "head-latency",
+    websocket: true,
+    summary:
+      "From block to row asks its question of a chain that answers instantly and holds nothing but the token being indexed. This asks it of a chain that looks like one people index: a minute of Base, five blocks a second, with every transaction and every log it really held, served over a network that charges for what it carries. A tool that reads more than it needs pays for it here, as it would against a real endpoint.",
+    method:
+      "A minute of Base was recorded at its head - 302 blocks, every transaction and every log, read once the blocks had settled (reliability/record.ts). Once the tool has caught up with an ordinary chain, the mock chain replays the recording on its own schedule, a block every 203ms. The busiest ERC-20 in the recording, USDC, is served under the projects' token address, so the projects index real transfers unchanged; every other contract's logs stay, so a tool that reads a whole block pays for all of them, and every block's logsBloom is rebuilt from the logs it now holds. Every answer is delayed by a fixed 150ms round trip plus its size at 3MB/s, and a block announced over the WebSocket by half the round trip plus its size, so a run costs the same twice and a larger answer always costs more. A block's latency is the commit of its rows minus its publication, over the blocks that hold a transfer.",
+    checks: [
+      {
+        id: "base-tail-bounded",
+        label: "even the slowest 1% of a real chain's new data shows up within 10 seconds",
+        failing: "Stale reads: on a real chain's traffic, new data sometimes takes over 10 seconds to show up",
+        detail:
+          "The 99th percentile of the replayed blocks' latency is within ten seconds. The network adds at least a round trip to every block, so this is about what a tool does on top of it: batching, re-reading, or waiting on a timer.",
+      },
+      {
+        id: "base-keeps-up",
+        label: "keeps up with a real chain's five blocks a second",
+        failing: "Falls behind: cannot keep up with a real chain's block rate over a network",
+        detail:
+          "The gap between the chain head and the tool's position never exceeds fifty blocks - ten seconds of Base - for more than fifteen seconds. A tool that pays the round trip once per block in sequence cannot keep up with a block every 203ms, however fast it is on its own machine.",
+      },
+    ],
+    measures: [
+      {
+        id: "base-p50-ms",
+        label: "median latency",
+        unit: "ms",
+        headline: true,
+        short: "p50",
+        alongside: "base-p99-ms",
+        detail:
+          "Median milliseconds from a replayed block being published to its rows being readable. Published in the table's head latency column, with the 99th percentile beside it.",
+      },
+      {
+        id: "base-p99-ms",
+        label: "99th percentile latency",
+        unit: "ms",
+        short: "p99",
+        detail: "The tail, over the same replay.",
+      },
+      {
+        id: "base-max-lag-blocks",
+        label: "worst lag behind the head",
+        unit: "blocks",
+        detail: "The largest gap seen between the chain head and the tool's position, in Base's 203ms blocks.",
+      },
+      {
+        id: "base-kb-per-block",
+        label: "served per block",
+        unit: "KB",
+        detail:
+          "Kilobytes the chain sent the tool per replayed block, answers and announcements together. The network charges for every one of them.",
+      },
+      {
+        id: "base-requests-per-block",
+        label: "requests per block",
+        unit: "",
+        detail: "Requests the tool made per replayed block, over HTTP and the WebSocket.",
       },
     ],
   },
