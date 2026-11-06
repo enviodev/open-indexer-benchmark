@@ -30,7 +30,8 @@ const client = createPublicClient({ transport: http(RPC_URL) });
  * legal in a Solidity string and not storable in a text column, so it is
  * stripped rather than written through.
  */
-let metadata: Promise<{ symbol: string | null; name: string | null }> | null = null;
+let metadata: Promise<{ symbol: string | undefined; name: string | undefined }> | null =
+  null;
 
 function readMetadata() {
   metadata ??= (async () => {
@@ -41,13 +42,13 @@ function readMetadata() {
           address: TOKEN,
           functionName,
         });
-        if (typeof value !== "string" || value.length === 0) return null;
+        if (typeof value !== "string" || value.length === 0) return undefined;
         const cleaned = value.split(NUL).join("");
-        return cleaned.length > 0 ? cleaned : null;
+        return cleaned.length > 0 ? cleaned : undefined;
       } catch {
         // A revert, or returndata that does not decode as a string, is the
         // token not answering - which is a null, not a failed block.
-        return null;
+        return undefined;
       }
     };
     return { symbol: await read("symbol"), name: await read("name") };
@@ -94,7 +95,7 @@ indexer.onEvent(
 indexer.onEvent(
   { contract: "ERC20", event: "MetadataUpdated" },
   async ({ event, context }) => {
-    const clean = (value: string) => value.split(NUL).join("") || null;
+    const clean = (value: string) => value.split(NUL).join("") || undefined;
     context.MetadataUpdate.set({
       id: `${event.block.number}-${event.logIndex}`,
       blockNumber: BigInt(event.block.number),

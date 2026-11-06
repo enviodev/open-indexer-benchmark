@@ -1,0 +1,20 @@
+type Swap @entity {
+  id: ID!
+  amount0: BigInt!
+  amount1: BigInt!
+  timestamp: Int!
+}
+
+type Pool @entity {
+  id: ID!
+  sqrtPriceX96: BigInt!
+  tick: BigInt!
+}
+
+type HourlySnapshot @entity {
+  id: ID!
+  timestamp: Int!
+  blockNumber: Int!
+  sqrtPriceX96: BigInt!
+  tick: BigInt!
+}

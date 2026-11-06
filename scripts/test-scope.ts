@@ -189,9 +189,9 @@ check("one indexer in one scenario", ["cases/erc20-transfer-events/ponder/src/in
   "erc20-transfer-events": ["ponder"],
 });
 
-check("envio project directory covers both envio variants", [
+check("envio project directory covers every envio variant", [
   "cases/erc20-transfer-events/envio/config.yaml",
-], { "erc20-transfer-events": ["envio", "envio-rpc"] });
+], { "erc20-transfer-events": ["envio", "envio-rpc", "envio-clickhouse"] });
 
 check("sqd project directory covers both sqd variants", [
   "cases/erc20-transfer-events/sqd/src/processor.ts",
@@ -218,7 +218,11 @@ check("expected output runs the whole scenario", [
 
 check("a driver runs its indexer in every scenario", ["cases/lib/drivers/ponder.ts"], inEvery(["ponder"]));
 
-check("the envio driver covers both envio variants", ["cases/lib/drivers/envio.ts"], inEvery(["envio", "envio-rpc"]));
+check(
+  "the envio driver covers every envio variant",
+  ["cases/lib/drivers/envio.ts"],
+  inEvery(["envio", "envio-rpc", "envio-clickhouse"])
+);
 
 check("the sqd driver covers both sqd variants", ["cases/lib/drivers/sqd.ts"], inEvery(["sqd", "sqd-rpc"]));
 
@@ -306,9 +310,9 @@ check("selections merge across files, in canonical order", [
 ], {
   // The driver change reaches every scenario; the two project-directory
   // changes add one indexer each to their own.
-  ...inEvery(["envio", "envio-rpc"]),
-  "erc20-account-balances": ["envio", "envio-rpc", "ponder"],
-  "erc20-transfer-events": ["envio", "envio-rpc", "subquery"],
+  ...inEvery(["envio", "envio-rpc", "envio-clickhouse"]),
+  "erc20-account-balances": ["envio", "envio-rpc", "envio-clickhouse", "ponder"],
+  "erc20-transfer-events": ["envio", "envio-rpc", "envio-clickhouse", "subquery"],
 });
 
 check("an unknown case directory is ignored", ["cases/erc20-approvals/run.ts"], {});

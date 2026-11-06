@@ -126,6 +126,11 @@ jobs:
             ponder)
               docker pull postgres:17-alpine
               ;;
+            envio-clickhouse)
+              # The image is pinned in the driver; read it from there so the
+              # two cannot drift.
+              docker pull "$(sed -n 's/^export const CLICKHOUSE_IMAGE = "\(.*\)";$/\1/p' cases/lib/drivers/envio.ts)"
+              ;;
             rindexer|rindexer-hypersync)
               docker compose -f "$CASE_DIR/rindexer/docker-compose.yml" pull
               # A rust project is a crate of its own and runs its own binary,
@@ -208,7 +213,10 @@ jobs:
           echo "## $CASE / $INDEXER" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/benchmark-output.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "No output captured" >> "$GITHUB_STEP_SUMMARY"
+          # A summary over 1024k is dropped whole, and a tool that logs every
+          # block writes several times that. The end holds the result; the
+          # full output is in the artifact.
+          tail -c 1000000 /tmp/benchmark-output.txt 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "No output captured" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results

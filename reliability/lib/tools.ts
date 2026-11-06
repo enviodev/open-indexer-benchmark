@@ -61,6 +61,9 @@ export const NOT_RUN: Record<string, string> = {
   envio:
     "reads HyperSync, which the benchmark cannot make reorg or fail on demand; " +
     "the Envio Indexer's RPC row is measured instead",
+  "envio-clickhouse":
+    "reads HyperSync, which the benchmark cannot make reorg or fail on demand; " +
+    "the Envio Indexer's RPC row is measured instead",
   "envio-subgraph":
     "reads HyperSync, which the benchmark cannot make reorg or fail on demand; " +
     "the Envio Subgraph's RPC row is measured instead",
