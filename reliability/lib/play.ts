@@ -25,7 +25,8 @@
 
 import type { Driver, Snapshot } from "../../cases/lib/drivers/index.ts";
 import { sleep } from "../../cases/lib/process.ts";
-import type { ChainControl, ChainRow, Fault } from "./chain-mock.ts";
+import type { ChainControl, ChainRow, Fault, NetworkProfile } from "./chain-mock.ts";
+import { loadRecording } from "./recording.ts";
 import { LOGS_PER_BLOCK, START_BLOCK } from "./case.ts";
 import {
   balancesOf,
@@ -1055,6 +1056,15 @@ export async function reorgCases(ctx: Ctx): Promise<ScenarioResult> {
     ctx.chain.reorg({ depth: 3, logs: "dropped" })
   );
 
+  // Blocks the tool has read as empty, replaced by blocks that hold events. A
+  // tool that keeps the hashes of only the blocks it got logs for has nothing
+  // stored at these heights to disagree with the new branch.
+  ctx.chain.advance(3, { logs: false });
+  await synced(ctx);
+  checks["fills-empty-block"] = await reconciles("reorg that puts events into empty blocks", () =>
+    ctx.chain.reorg({ depth: 3, logs: "changed" })
+  );
+
   // Six blocks replaced by three, so the chain is genuinely shorter than what
   // the tool has already stored and its head has to move backwards. Every
   // other reorg here can be handled by an indexer that only ever moves
@@ -1425,6 +1435,12 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
       : `did not get through a range whose logs were served twice: ${doubled.summary}`
   );
 
+  // A phase that starts from data an earlier one left wrong is judged on the
+  // blocks it produced and nothing else, the way the reorg cases are: a hole
+  // one fault left would otherwise fail every check that came after it.
+  const judgeFrom = async (from: number) =>
+    (await compare(ctx)).clean ? () => compare(ctx) : () => compare(ctx, undefined, from);
+
   // ── A block the endpoint says is not there ──
   //
   // The logs are still served; only the block lookups come back null, which
@@ -1432,14 +1448,15 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   // by one machine and asked of another a second behind it. A tool that takes
   // the null as "no such block" and moves on has a hole; one that takes it as
   // fatal is down for a condition that resolves itself.
+  const judgePhantom = await judgeFrom(ctx.chain.head() + 1);
   ctx.chain.advance(30);
   const beforePhantom = await ctx.observe.count().catch(() => 0);
   ctx.chain.fail({ kind: "missing", rate: 0.5, seed: 11 });
   await sleep(20_000);
   ctx.chain.fail(null);
   ctx.chain.advance(10);
-  const pastPhantom = await synced(ctx);
-  const phantom = await settled(ctx);
+  const pastPhantom = await synced(ctx, ctx.patience.syncMs, { judge: judgePhantom });
+  const phantom = await settled(ctx, ctx.patience.reactMs, judgePhantom);
   checks["missing-block"] = verdict(
     ctx.alive() && pastPhantom && phantom.clean,
     !ctx.alive()
@@ -1450,12 +1467,89 @@ export async function rpcInconsistency(ctx: Ctx): Promise<ScenarioResult> {
   );
   await reviveIfNeeded(ctx, "exited when a block came back null");
 
+  // ── Logs answered from a replica that has not seen the newest blocks ──
+  //
+  // Produced a block at a time, so the tool is asking about each one as it
+  // appears, which is when the replica serving the logs has not seen it yet.
+  // A batch of blocks handed over at once would be read from below the lag
+  // and never meet the fault.
+  const judgeLagging = await judgeFrom(ctx.chain.head() + 1);
+  const beforeLagging = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setLogsLag(3);
+  await produce(ctx, 10, 2_000);
+  ctx.chain.setLogsLag(0);
+  ctx.chain.advance(10);
+  const pastLagging = await synced(ctx, ctx.patience.syncMs, { judge: judgeLagging });
+  const lagging = await settled(ctx, ctx.patience.reactMs, judgeLagging);
+  checks["lagging-logs"] = verdict(
+    ctx.alive() && pastLagging && lagging.clean,
+    !ctx.alive()
+      ? "exited when the endpoint answered a block's logs from behind"
+      : (await ctx.observe.count().catch(() => 0)) === beforeLagging
+        ? "stopped indexing when the endpoint answered a block's logs from behind"
+        : `lost the events in blocks the endpoint answered as empty: ${lagging.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when a block's logs were answered from behind");
+
+  // ── Logs answered from the branch a reorg replaced ──
+  //
+  // The empty blocks and the reorg that replaces them happen with no await
+  // between, so the tool never reads the old branch's headers: only the logs
+  // replica knows it existed. Blocks keep coming while the replica is stuck on
+  // it, so the tool is asking about the rewritten heights for the whole window.
+  const judgeSplit = await judgeFrom(ctx.chain.head() + 1);
+  const beforeSplit = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setLogsFromReplacedBranch(true);
+  ctx.chain.advance(3, { logs: false });
+  ctx.chain.reorg({ depth: 3, logs: "changed" });
+  await produce(ctx, 10, 2_000);
+  ctx.chain.setLogsFromReplacedBranch(false);
+  ctx.chain.advance(10);
+  const pastSplit = await synced(ctx, ctx.patience.syncMs, { judge: judgeSplit });
+  const split = await settled(ctx, ctx.patience.reactMs, judgeSplit);
+  checks["split-branch-logs"] = verdict(
+    ctx.alive() && pastSplit && split.clean,
+    !ctx.alive()
+      ? "exited when the endpoint answered logs from a branch the chain had left"
+      : (await ctx.observe.count().catch(() => 0)) === beforeSplit
+        ? "stopped indexing when the endpoint answered logs from a branch the chain had left"
+        : `lost the events in blocks answered from the replaced branch: ${split.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when logs were answered from a replaced branch");
+
+  // ── A range answered without the blocks inside it ──
+  //
+  // Blocks arrive four at a time, so a tool at the head asks for ranges with
+  // blocks inside them, and those come back with no logs while the range's
+  // ends, every header and every one-block read are right.
+  const judgeHoles = await judgeFrom(ctx.chain.head() + 1);
+  const beforeHoles = await ctx.observe.count().catch(() => 0);
+  ctx.chain.setRangeHoles(true);
+  for (let step = 0; step < 5; step++) {
+    ctx.chain.advance(4);
+    await sleep(4_000);
+  }
+  ctx.chain.setRangeHoles(false);
+  ctx.chain.advance(10);
+  const pastHoles = await synced(ctx, ctx.patience.syncMs, { judge: judgeHoles });
+  const holes = await settled(ctx, ctx.patience.reactMs, judgeHoles);
+  checks["hole-in-range"] = verdict(
+    ctx.alive() && pastHoles && holes.clean,
+    !ctx.alive()
+      ? "exited when a range came back without the blocks inside it"
+      : (await ctx.observe.count().catch(() => 0)) === beforeHoles
+        ? "stopped indexing when a range came back without the blocks inside it"
+        : `lost the events in blocks a range answer left out: ${holes.summary}`
+  );
+  await reviveIfNeeded(ctx, "exited when a range came back without the blocks inside it");
+
   // ── A hash that stops existing under a request ──
+  const judgeStale = await judgeFrom(ctx.chain.head() + 1);
   ctx.chain.advance(20);
   ctx.chain.reorg({ depth: 6, logs: "changed" });
   ctx.chain.advance(10);
-  const afterStale = await synced(ctx);
-  const stale = await settled(ctx);
+  const afterStale = await synced(ctx, ctx.patience.syncMs, { judge: judgeStale });
+  const stale = await settled(ctx, ctx.patience.reactMs, judgeStale);
   checks["stale-hash"] = verdict(
     ctx.alive() && afterStale && stale.clean,
     !ctx.alive()
@@ -1753,6 +1847,118 @@ export async function awkwardValues(ctx: Ctx): Promise<ScenarioResult> {
 
 // ── Head latency ───────────────────────────────────────────────────────
 
+/** What a timed window saw: each block's latency, and how far behind the tool ran. */
+interface LatencyWindow {
+  latencies: number[];
+  worstLag: number;
+  longestLagMs: number;
+}
+
+/**
+ * Publish blocks and watch for their rows, sampling faster than the chain
+ * produces so the reading is the tool's latency rather than the poll's.
+ *
+ * Only blocks that hold a row are timed: a block with nothing to index has no
+ * moment its data became readable, and polling would give it the time of the
+ * next block that did.
+ */
+async function watchLatency(
+  ctx: Ctx,
+  {
+    blocks,
+    tail,
+    everyMs,
+    publish,
+    behindAfter,
+    exact,
+  }: {
+    /** Blocks whose latency is measured. */
+    blocks: number;
+    /** Blocks published after them, so the last measured ones have a chain moving past them. */
+    tail: number;
+    everyMs: number;
+    publish: () => void;
+    /** How many blocks behind the head counts as falling behind. */
+    behindAfter: number;
+    /** Whether the database's commit times are there to read. */
+    exact: boolean;
+  }
+): Promise<LatencyWindow> {
+  const from = ctx.chain.head();
+  const seen = { at: from, latencies: [] as number[], worstLag: 0, longestLagMs: 0 };
+  /** Each block's latency as polling saw it, to be replaced by the exact one. */
+  const sampled = new Map<number, number>();
+  let lagSince: number | null = null;
+  // The chain never pauses, the tail included: a tool on a subscription
+  // takes a quiet chain for a dead feed, and the Squid SDK, told to reset
+  // after ten seconds without a block, reset in the tail of this window and
+  // crashed - a real bug, and the one subscription-stall exists to find,
+  // but not this scenario's to report.
+  const producing = (async () => {
+    for (let i = 0; i < blocks + tail; i++) {
+      publish();
+      await sleep(everyMs);
+    }
+  })();
+  const until = performance.now() + (blocks + tail) * everyMs;
+  let previousLook = Date.now();
+  while (performance.now() < until) {
+    await sleep(250);
+    const look = Date.now();
+    const highest = await ctx.observe.highestBlock().catch(() => 0);
+    // A row seen now appeared at some point since the last look, and the
+    // midpoint is the best guess polling has - a poor one: Ponder's rows,
+    // which commit a steady 460ms after their block, read anywhere from
+    // 270ms to 560ms this way, and low on the whole, because the query runs
+    // a few tens of milliseconds after the moment it is timed from. Only
+    // the fallback when the database cannot say when a row committed.
+    const appearedAt = (previousLook + look) / 2;
+    previousLook = look;
+    while (seen.at < highest) {
+      seen.at++;
+      const block = ctx.chain.blockAt(seen.at);
+      // Only blocks published during this window have a publication time;
+      // the backfill's were all published before it started. A row cannot
+      // appear before its block, so the midpoint is floored there.
+      if (block?.publishedAtMs) {
+        sampled.set(seen.at, Math.max(0, appearedAt - block.publishedAtMs));
+      }
+    }
+    const lag = ctx.chain.head() - highest;
+    seen.worstLag = Math.max(seen.worstLag, lag);
+    if (lag > behindAfter) lagSince ??= performance.now();
+    else if (lagSince !== null) {
+      seen.longestLagMs = Math.max(seen.longestLagMs, performance.now() - lagSince);
+      lagSince = null;
+    }
+  }
+  await producing;
+  if (lagSince !== null) {
+    seen.longestLagMs = Math.max(seen.longestLagMs, performance.now() - lagSince);
+  }
+  const holding = new Set(ctx.chain.rows().map((row) => row.block));
+  // The poll above decides which blocks arrived in the window and how far
+  // behind the tool ran; when the database knows when each one committed,
+  // that is the latency. A block it has no time for keeps the polled one.
+  const committed = exact ? await ctx.observe.commitTimes(from) : null;
+  let timed = 0;
+  for (const [height, polled] of sampled) {
+    if (!holding.has(height)) continue;
+    const at = committed?.get(height);
+    const publishedAt = ctx.chain.blockAt(height)?.publishedAtMs ?? 0;
+    if (at !== undefined) timed++;
+    seen.latencies.push(at !== undefined ? Math.max(0, at - publishedAt) : polled);
+  }
+  const median = (values: number[]) =>
+    [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+  ctx.log(
+    `  ${timed} of ${seen.latencies.length} blocks timed from commit timestamps; median ` +
+      `${Math.round(median(seen.latencies))}ms, polling alone read ` +
+      `${Math.round(median([...sampled.values()]))}ms`
+  );
+  return seen;
+}
+
 export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
   const BLOCK_MS = 2_000;
   const BLOCKS = 90;
@@ -1778,79 +1984,14 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
     };
   }
 
-  /**
-   * Publish blocks and watch for their rows, sampling faster than the chain
-   * produces so the reading is the tool's latency rather than the poll's.
-   */
-  async function watch(blocks: number, from: number) {
-    const seen = { at: from, latencies: [] as number[], worstLag: 0, longestLagMs: 0 };
-    /** Each block's latency as polling saw it, to be replaced by the exact one. */
-    const sampled = new Map<number, number>();
-    let lagSince: number | null = null;
-    // The chain never pauses, the tail included: a tool on a subscription
-    // takes a quiet chain for a dead feed, and the Squid SDK, told to reset
-    // after ten seconds without a block, reset in the tail of this window and
-    // crashed - a real bug, and the one subscription-stall exists to find,
-    // but not this scenario's to report.
-    const producing = produce(ctx, blocks + 5, BLOCK_MS);
-    const until = performance.now() + (blocks + 5) * BLOCK_MS;
-    let previousLook = Date.now();
-    while (performance.now() < until) {
-      await sleep(250);
-      const look = Date.now();
-      const highest = await ctx.observe.highestBlock().catch(() => 0);
-      // A row seen now appeared at some point since the last look, and the
-      // midpoint is the best guess polling has - a poor one: Ponder's rows,
-      // which commit a steady 460ms after their block, read anywhere from
-      // 270ms to 560ms this way, and low on the whole, because the query runs
-      // a few tens of milliseconds after the moment it is timed from. Only
-      // the fallback when the database cannot say when a row committed.
-      const appearedAt = (previousLook + look) / 2;
-      previousLook = look;
-      while (seen.at < highest) {
-        seen.at++;
-        const block = ctx.chain.blockAt(seen.at);
-        // Only blocks published during this window have a publication time;
-        // the backfill's were all published before it started. A row cannot
-        // appear before its block, so the midpoint is floored there.
-        if (block?.publishedAtMs) {
-          sampled.set(seen.at, Math.max(0, appearedAt - block.publishedAtMs));
-        }
-      }
-      const lag = ctx.chain.head() - highest;
-      seen.worstLag = Math.max(seen.worstLag, lag);
-      if (lag > 5) lagSince ??= performance.now();
-      else if (lagSince !== null) {
-        seen.longestLagMs = Math.max(seen.longestLagMs, performance.now() - lagSince);
-        lagSince = null;
-      }
-    }
-    await producing;
-    if (lagSince !== null) {
-      seen.longestLagMs = Math.max(seen.longestLagMs, performance.now() - lagSince);
-    }
-    // The poll above decides which blocks arrived in the window and how far
-    // behind the tool ran; when the database knows when each one committed,
-    // that is the latency. A block it has no time for keeps the polled one.
-    const committed = exact ? await ctx.observe.commitTimes(from) : null;
-    let timed = 0;
-    for (const [height, polled] of sampled) {
-      const at = committed?.get(height);
-      const publishedAt = ctx.chain.blockAt(height)?.publishedAtMs ?? 0;
-      if (at !== undefined) timed++;
-      seen.latencies.push(at !== undefined ? Math.max(0, at - publishedAt) : polled);
-    }
-    const median = (values: number[]) =>
-      [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
-    ctx.log(
-      `  ${timed} of ${sampled.size} blocks timed from commit timestamps; median ` +
-        `${Math.round(median(seen.latencies))}ms, polling alone read ` +
-        `${Math.round(median([...sampled.values()]))}ms`
-    );
-    return seen;
-  }
-
-  const run = await watch(BLOCKS, ctx.chain.head());
+  const run = await watchLatency(ctx, {
+    blocks: BLOCKS,
+    tail: 5,
+    everyMs: BLOCK_MS,
+    publish: () => ctx.chain.advance(1),
+    behindAfter: 5,
+    exact,
+  });
   if (run.latencies.length === 0) {
     return {
       checks: {
@@ -1907,7 +2048,14 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
       60_000
     )
     .finally(() => live.stop());
-  const after = await watch(15, ctx.chain.head());
+  const after = await watchLatency(ctx, {
+    blocks: 15,
+    tail: 5,
+    everyMs: BLOCK_MS,
+    publish: () => ctx.chain.advance(1),
+    behindAfter: 5,
+    exact,
+  });
   const afterSorted = [...after.latencies].sort((a, b) => a - b);
   const p50After = afterSorted[Math.floor(afterSorted.length / 2)];
   checks["recovers-after-reorg"] = !reconciled
@@ -1927,6 +2075,87 @@ export async function blockToRow(ctx: Ctx): Promise<ScenarioResult> {
       "p99-ms": Math.round(p99),
       "max-lag-blocks": run.worstLag,
       subscribed: ctx.chain.stats().subscriptions > 0 ? 1 : 0,
+    },
+  };
+}
+
+// ── Head latency on a replayed Base ────────────────────────────────────
+
+/**
+ * What every answer costs on the replayed chain: a round trip and the
+ * answer's size over the bandwidth, fixed so two runs pay the same price.
+ * Roughly what a public endpoint costs from a cloud machine in another
+ * region, as measured against publicnode when the recording was made.
+ */
+export const BASE_REPLAY_NETWORK: NetworkProfile = { roundTripMs: 150, bytesPerSecond: 3_000_000 };
+
+/** Ten seconds of Base, which is what the two-second chain allows in five blocks. */
+const BASE_BEHIND_AFTER = 50;
+
+/** Recorded blocks published after the timed ones, so the last of those has a chain moving past it. */
+const BASE_TAIL = 15;
+
+export async function blockToRowBase(ctx: Ctx): Promise<ScenarioResult> {
+  const recording = loadRecording();
+  const exact = await ctx.trackCommitTimes();
+  ctx.log(`  timing ${exact ? "from commit timestamps" : "by polling every 250ms"}`);
+
+  // Caught up on an ordinary chain first, so the replay times the head and
+  // not the backfill.
+  ctx.chain.advance(100);
+  await ctx.launch();
+  if (!(await synced(ctx, ctx.patience.syncMs, { heartbeat: "live" }))) {
+    return {
+      checks: {
+        "base-tail-bounded": na("the tool never caught up, so it was never at the head"),
+        "base-keeps-up": na("the tool never caught up, so it was never at the head"),
+      },
+      measures: {},
+    };
+  }
+
+  const before = ctx.chain.stats();
+  const blocks = ctx.chain.replayLeft() - BASE_TAIL;
+  const run = await watchLatency(ctx, {
+    blocks,
+    tail: BASE_TAIL,
+    everyMs: recording.blockTimeMs,
+    publish: () => ctx.chain.replay(1),
+    behindAfter: BASE_BEHIND_AFTER,
+    exact,
+  });
+  const after = ctx.chain.stats();
+  if (run.latencies.length === 0) {
+    const why = "no replayed block reached the database";
+    return { checks: { "base-tail-bounded": na(why), "base-keeps-up": na(why) }, measures: {} };
+  }
+
+  const sorted = [...run.latencies].sort((a, b) => a - b);
+  const percentile = (share: number) =>
+    sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))];
+  const p50 = percentile(0.5);
+  const p99 = percentile(0.99);
+  const published = blocks + BASE_TAIL;
+
+  return {
+    checks: {
+      "base-tail-bounded": verdict(
+        p99 <= 10_000,
+        `the slowest one percent took ${(p99 / 1_000).toFixed(1)}s`
+      ),
+      "base-keeps-up": verdict(
+        run.longestLagMs <= 15_000,
+        `ran more than ${BASE_BEHIND_AFTER} blocks behind the head for ` +
+          `${(run.longestLagMs / 1_000).toFixed(0)}s`
+      ),
+    },
+    measures: {
+      "base-p50-ms": Math.round(p50),
+      "base-p99-ms": Math.round(p99),
+      "base-max-lag-blocks": run.worstLag,
+      "base-kb-per-block": Math.round((after.bytesServed - before.bytesServed) / published / 1_000),
+      "base-requests-per-block":
+        Math.round(((after.requests - before.requests) / published) * 10) / 10,
     },
   };
 }
@@ -1952,4 +2181,5 @@ export const PLAYS: Record<string, (ctx: Ctx) => Promise<ScenarioResult>> = {
   "subscription-stall": subscriptionStall,
   "awkward-values": awkwardValues,
   "block-to-row": blockToRow,
+  "block-to-row-base": blockToRowBase,
 };

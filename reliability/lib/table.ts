@@ -82,10 +82,17 @@ function headlineOf(group: string, measures: Record<string, number>): string | n
     (measure) => measure.headline && measures[measure.id] !== undefined
   );
   if (!headline) return null;
+  const shown = (measure: (typeof inGroup)[number]) =>
+    [measure.short, formatHeadline(measures[measure.id], measure.unit, measure.abbr)]
+      .filter(Boolean)
+      .join(" ");
+  const beside = inGroup.find(
+    (measure) => measure.id === headline.alongside && measures[measure.id] !== undefined
+  );
   const tags = inGroup
     .filter((measure) => measure.tag && measures[measure.id] === 1)
     .map((measure) => measure.tag);
-  return [formatHeadline(measures[headline.id], headline.unit, headline.abbr), ...tags].join(", ");
+  return [shown(headline), ...(beside ? [shown(beside)] : []), ...tags].join(", ");
 }
 
 /**

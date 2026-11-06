@@ -77,6 +77,9 @@
 //                       that cannot read contract state - the checks that read a
 //                       token row have to come back unmeasured rather than
 //                       failed, and rather than breaking every other read
+//   trusts-empty-logs   takes a block with no logs in the answer as a block
+//                       with no logs, without asking its header, so a replica
+//                       that has not seen the block yet leaves a hole
 //
 // Each defect is meant to fail a specific check. scripts/test-reliability-
 // harness.ts turns them on one at a time and asserts exactly that.
@@ -86,6 +89,7 @@ import { psql, sleep } from "../../cases/lib/process.ts";
 import { START_BLOCK, TOKEN } from "./case.ts";
 import { METADATA_TOPIC } from "./chain-mock.ts";
 import { TRANSFER_TOPIC } from "../../cases/lib/hypersync.ts";
+import { bloomMayContain } from "./keccak.ts";
 
 /**
  * The two strings a MetadataUpdated event carries.
@@ -131,7 +135,8 @@ export type Defect =
   | "rolls-back-on-lower-head"
   | "refuses-deep-reorg"
   | "no-backoff"
-  | "stuck-after-rpc-error";
+  | "stuck-after-rpc-error"
+  | "trusts-empty-logs";
 
 export interface FakeOptions {
   /** Where it writes. A real database: the harness's SQL has to be exercised. */
@@ -455,7 +460,26 @@ export function fakeIndexer(options: FakeOptions): DriverFactory {
       const hashRows: string[] = [];
       for (let height = from; height <= to; height++) {
         const block = await rpc("eth_getBlockByNumber", [hex(height), false]);
-        if (block) hashRows.push(`(${height}, '${block.hash}')`);
+        if (!block) continue;
+        // The logs and the header are two answers, and a load-balanced
+        // endpoint can give them from two machines. The header is the one to
+        // believe about which block this is, so logs that disagree with it -
+        // missing where its bloom says the token may have some, or from
+        // another branch - are a range to read again, not a block that holds
+        // nothing. The bloom is asked about the token, not about any log: a
+        // real block holds other contracts' logs too.
+        const own = logs.filter((log) => Number(BigInt(log.blockNumber)) === height);
+        if (own.some((log) => log.blockHash !== block.hash)) {
+          throw new Error(`logs for block ${height} are from a branch its header is not on`);
+        }
+        if (
+          !defects.has("trusts-empty-logs") &&
+          own.length === 0 &&
+          bloomMayContain(block.logsBloom, TOKEN)
+        ) {
+          throw new Error(`no logs for block ${height}, whose header says it has some`);
+        }
+        hashRows.push(`(${height}, '${block.hash}')`);
       }
 
       await writeBatch(logs, to, { hashRows, gen });
