@@ -136,6 +136,7 @@ write down, which is not the same as a reliable tool - see
   - [Legal values that break things](#awkward-values)
 - [**head latency**](#head-latency) - How long after a block is published its rows are readable - over a WebSocket where the tool can subscribe to new blocks - and whether that holds up across a chain rewrite.
   - [From block to row](#block-to-row)
+  - [From block to row, on a replayed Base](#block-to-row-base)
 
 <a id="coverage"></a>
 
@@ -240,7 +241,7 @@ The ordinary case, and the one most likely to be assumed rather than tested: SIG
 
 Whether the data still matches the chain after the chain rewrites itself, in the awkward ways it really does.
 
-One scenario, 7 checks.
+One scenario, 8 checks.
 
 <a id="reorg-cases"></a>
 
@@ -255,6 +256,7 @@ Every indexer claims to handle reorgs, and a one-block reorg where an event's va
 | handles the chain replacing its latest block | The head block is replaced with one carrying different transfer amounts. Afterwards the stored amounts are the new ones. The baseline case: a tool that fails here has no reorg handling at all. |
 | handles the chain switching to a shorter fork | Six blocks are replaced by three, so the canonical chain is shorter than the one the tool has already stored and its head has to move backwards. An indexer that only ever moves forward - overwriting each block as it reads it, never deleting - handles every other reorg on this page and silently keeps three blocks' worth of rows that are on no chain at all. |
 | removes an event the chain dropped | The replacement blocks carry no logs. The rows for the discarded events must be gone, and any aggregate they contributed to must be back to what it was. This is the case an upsert-shaped rollback fails silently: writing the new state over the old works when there is new state, and does nothing at all when the event simply stopped existing. |
+| picks up events a reorg puts into blocks it read as empty | Three blocks the tool has already read, holding none of its events, are replaced by three that hold some. A tool that keeps the hashes of only the blocks it got logs for has nothing stored at those heights to disagree with the new branch, so the reorg passes it by, and the events in the new blocks are never asked for. |
 | stops, rather than carrying on, after a rewrite deeper than it can undo | Eighty blocks are rewritten - past the unfinalised window of every tool here, Ponder's sixty-five being the deepest - and this case runs last, because a tool that answers it by refusing leaves a database holding rows the chain no longer has, from blocks it had already called final. That is correct behaviour and it is also not a state to measure anything else in: run before the backfill case, it failed that one too, on the same rows. Handling it correctly is one thing; the check is that the tool either handles it or stops and says so. Stopping means writing nothing more on top of rows it cannot undo: exiting counts, and so does staying up and refusing every new block, which is what Ponder and the Squid SDK do. Carrying on with data it can no longer reconcile is the failing outcome. The depth is not arbitrary: at sixty this check was inside Ponder's rollback window, so the question it exists to ask was never put to the tool most likely to fail it. |
 | catches a chain rewrite that happened while it was offline | The tool is stopped, the chain is rewritten beneath it, and it is started again. Nothing announced the reorg - the tool has to notice that the block it last recorded is no longer on the chain, by checking the hash rather than the height. A tool that resumes from its stored block number without verifying it continues from a fork that no longer exists. |
 | keeps up with several chain rewrites in a row | Three reorgs in twelve seconds, the second landing while the first is still being rolled back. The end state has to match the chain. This is where reorg handling that assumes it runs to completion - a rollback that is not itself atomic - leaves a mixture of two branches. |
@@ -272,7 +274,7 @@ Reported alongside the score, and not part of it:
 
 Whether a node that errors, stalls, rate limits, contradicts itself or stops announcing new blocks costs throughput or costs data.
 
-5 scenarios, 16 checks between them; the column counts all of them together.
+5 scenarios, 19 checks between them; the column counts all of them together.
 
 <a id="rpc-outage"></a>
 
@@ -335,13 +337,16 @@ Public endpoints cap what one request may ask for: a block range, a number of re
 
 The failure nobody plans for, because it should not happen and does: a load-balanced endpoint answering from two nodes at different heights, so the head goes backwards; a block hash that was valid a second ago and is not now; the same block served twice. A tool that trusts the endpoint's answers unconditionally will happily record any of it.
 
-**What the harness does.** The chain is made to answer from behind for a while - a head lower than one already reported - and to serve a block range twice in succession, and a hash the tool has already used is reorged out from under a request in flight.
+**What the harness does.** The chain is made to answer from behind for a while - a head lower than one already reported - to serve a block range twice in succession, to answer for the logs of the newest blocks from a replica that has not seen them yet or that is still on a branch a reorg replaced, to leave the blocks inside a range out of its answer, and a hash the tool has already used is reorged out from under a request in flight.
 
 | check | what a pass means |
 | --- | --- |
 | keeps its data when an RPC node briefly reports an older block | The tool neither crashes nor rewinds its own data on the strength of one lagging answer, and carries on once the head recovers. Treating a lagging replica as a reorg is a real and expensive false positive. |
 | counts nothing twice when the RPC node sends it twice | The same logs arriving a second time produce no second row and no doubled aggregate. Idempotent ingestion, tested by asking for it rather than hoping. |
 | handles a block the RPC node briefly fails to return | Half the block lookups answer null for blocks the chain holds, for twenty seconds, while the logs in them are still served. This is not a rare condition: an endpoint behind a load balancer announces a head from one machine and is asked for it from another that is a second behind, and the honest answer that machine has is null. A tool that reads null as "no such block" and moves its cursor past it has a hole in its data that nothing will come back for; a tool that treats it as fatal is down for something that fixes itself. |
+| keeps the events an RPC node briefly answers as empty | For twenty seconds at the head, eth_getLogs is answered by a replica three blocks behind, while the head and every block header come from one that is not. The replica has no error to give for a block it has not seen: it answers the range with the logs it has, which for the newest blocks is none. This is what a load-balanced provider does on a chain that makes blocks faster than its machines agree, and nothing in the response says so - the header the tool reads for the same block does, with a bloom filter that says the block holds logs. A tool that takes the empty answer at its word records those blocks as holding nothing and moves on, and since it believes it has them, it never asks again. |
+| keeps the events an RPC node answers from a branch the chain left | Three empty blocks at the head are replaced by three that carry transfers, and for twenty seconds eth_getLogs is answered by a replica still on the branch that was replaced, while the head and every header come from the branch the chain switched to. The tool never sees the old branch's headers, so there is no stored hash for a reorg check to trip on, and since the old blocks held nothing there is not even a log hash to disagree with the header. The header's bloom filter says those blocks hold logs; a tool that stores the header's hash next to an empty answer has a hole that every later hash comparison agrees with. |
+| keeps the events an RPC node leaves out of the middle of a range | Blocks arrive four at a time, and for twenty seconds a range answer leaves out the logs of the blocks inside it, while its first and last blocks, every header and every one-block read are right. A provider stitching a range together from backends at different heights answers this way. A tool that checks only the ends of a range, or only the blocks it got logs for, has a hole. |
 | handles a block being replaced while it asks for it | A request against a hash the chain has reorged away comes back an error, not an empty result. The tool has to treat that as a reorg signal; treating it as a failed request and retrying forever is the stall this check finds. |
 
 <a id="subscription-stall"></a>
@@ -394,7 +399,7 @@ Chain data is not the tidy subset a schema was designed around. A token's `symbo
 
 How long after a block is published its rows are readable - over a WebSocket where the tool can subscribe to new blocks - and whether that holds up across a chain rewrite.
 
-One scenario, 4 checks.
+2 scenarios, 6 checks between them; the column counts all of them together.
 
 <a id="block-to-row"></a>
 
@@ -416,9 +421,32 @@ Reported alongside the score, and not part of it:
 | measure | unit | what it says |
 | --- | --- | --- |
 | new blocks by subscription |  | 1 when the tool subscribed to new blocks over the WebSocket it was offered, 0 when it polled. Published beside the median latency as "WS", because a subscribed tool hears of a block the moment it exists and a polling one up to an interval later, and the two numbers are not the same kind of number without it. |
-| median latency *(shown in the results table)* | ms | Median milliseconds from a block being published to its rows being readable. This is the number published in the table's head lag column. |
+| median latency | ms | Median milliseconds from a block being published to its rows being readable, on a chain answering at once from the same machine. |
 | 99th percentile latency | ms | The tail, over the same run. |
 | worst lag behind the head | blocks | The largest gap seen between the chain head and the tool's position. |
+
+<a id="block-to-row-base"></a>
+
+### From block to row, on a replayed Base
+
+From block to row asks its question of a chain that answers instantly and holds nothing but the token being indexed. This asks it of a chain that looks like one people index: a minute of Base, five blocks a second, with every transaction and every log it really held, served over a network that charges for what it carries. A tool that reads more than it needs pays for it here, as it would against a real endpoint.
+
+**What the harness does.** A minute of Base was recorded at its head - 302 blocks, every transaction and every log, read once the blocks had settled (reliability/record.ts). Once the tool has caught up with an ordinary chain, the mock chain replays the recording on its own schedule, a block every 203ms. The busiest ERC-20 in the recording, USDC, is served under the projects' token address, so the projects index real transfers unchanged; every other contract's logs stay, so a tool that reads a whole block pays for all of them, and every block's logsBloom is rebuilt from the logs it now holds. Every answer is delayed by a fixed 150ms round trip plus its size at 3MB/s, and a block announced over the WebSocket by half the round trip plus its size, so a run costs the same twice and a larger answer always costs more. A block's latency is the commit of its rows minus its publication, over the blocks that hold a transfer.
+
+| check | what a pass means |
+| --- | --- |
+| even the slowest 1% of a real chain's new data shows up within 10 seconds | The 99th percentile of the replayed blocks' latency is within ten seconds. The network adds at least a round trip to every block, so this is about what a tool does on top of it: batching, re-reading, or waiting on a timer. |
+| keeps up with a real chain's five blocks a second | The gap between the chain head and the tool's position never exceeds fifty blocks - ten seconds of Base - for more than fifteen seconds. A tool that pays the round trip once per block in sequence cannot keep up with a block every 203ms, however fast it is on its own machine. |
+
+Reported alongside the score, and not part of it:
+
+| measure | unit | what it says |
+| --- | --- | --- |
+| median latency *(shown in the results table)* | ms | Median milliseconds from a replayed block being published to its rows being readable. Published in the table's head latency column, with the 99th percentile beside it. |
+| 99th percentile latency | ms | The tail, over the same replay. |
+| worst lag behind the head | blocks | The largest gap seen between the chain head and the tool's position, in Base's 203ms blocks. |
+| served per block | KB | Kilobytes the chain sent the tool per replayed block, answers and announcements together. The network charges for every one of them. |
+| requests per block |  | Requests the tool made per replayed block, over HTTP and the WebSocket. |
 
 <a id="not-measured"></a>
 

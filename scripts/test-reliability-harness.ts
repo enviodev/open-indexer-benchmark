@@ -171,6 +171,7 @@ const EXPECTATIONS: Expectation[] = [
       "shallow",
       "shortening",
       "removes-event",
+      "fills-empty-block",
       "while-down",
       "storm",
       "deep",
@@ -311,6 +312,17 @@ const EXPECTATIONS: Expectation[] = [
     fails: ["head-goes-backwards"],
     slow: true,
   },
+  // An empty answer for logs taken at its word, for blocks whose headers say
+  // they hold some: every block the lagging replica had not seen is a hole.
+  {
+    scenario: "rpc-inconsistency",
+    defects: ["trusts-empty-logs"],
+    fails: ["lagging-logs", "split-branch-logs", "hole-in-range"],
+    // Judged on its own blocks, so the holes the two before it left are not
+    // its failure.
+    passes: ["head-goes-backwards", "duplicate-delivery", "missing-block", "stale-hash"],
+    slow: true,
+  },
   // Retrying a failing node flat out: every request is still answered in the
   // end, so nothing is lost, and the node is flooded while it is down.
   {
@@ -360,6 +372,14 @@ const EXPECTATIONS: Expectation[] = [
     passes: ["median-under-block-time", "tail-bounded", "keeps-up", "recovers-after-reorg"],
     slow: true,
   },
+  // A real chain's traffic over a network: the double reads every header one
+  // at a time, a round trip each, and still keeps up with five blocks a
+  // second because each pass covers every block that arrived since the last.
+  {
+    scenario: "block-to-row-base",
+    passes: ["base-tail-bounded", "base-keeps-up"],
+    slow: true,
+  },
   // A reorg it never undoes is the reorgs column's finding. Asked again here,
   // it failed head latency too, for one defect, while the blocks after the
   // rewrite arrived as fast as the ones before it.
@@ -376,7 +396,15 @@ const EXPECTATIONS: Expectation[] = [
   },
   {
     scenario: "rpc-inconsistency",
-    passes: ["head-goes-backwards", "duplicate-delivery", "stale-hash", "missing-block"],
+    passes: [
+      "head-goes-backwards",
+      "duplicate-delivery",
+      "stale-hash",
+      "missing-block",
+      "lagging-logs",
+      "split-branch-logs",
+      "hole-in-range",
+    ],
     slow: true,
   },
   {
@@ -393,7 +421,16 @@ const EXPECTATIONS: Expectation[] = [
     // Every case, each on its own rewrite: the first leaves the data wrong,
     // and the rest are judged on the blocks they rewrote rather than failing
     // on the first one's rows.
-    fails: ["shallow", "shortening", "removes-event", "while-down", "storm", "during-backfill", "deep"],
+    fails: [
+      "shallow",
+      "shortening",
+      "removes-event",
+      "fills-empty-block",
+      "while-down",
+      "storm",
+      "during-backfill",
+      "deep",
+    ],
   },
   {
     scenario: "process-kill",

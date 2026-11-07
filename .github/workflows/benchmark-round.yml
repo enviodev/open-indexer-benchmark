@@ -25,7 +25,7 @@ on:
         required: true
         type: string
       slots:
-        description: 'JSON array of five {case, indexers} scenario slots, in run order; an unused slot has case ""'
+        description: 'JSON array of six {case, indexers} scenario slots, in run order; an unused slot has case ""'
         required: true
         type: string
 
@@ -97,6 +97,19 @@ jobs:
     with:
       case: ${{ fromJSON(inputs.slots)[4].case }}
       indexers: ${{ toJSON(fromJSON(inputs.slots)[4].indexers) }}
+      duration: ${{ inputs.duration }}
+      windows: ${{ inputs.windows }}
+      round: r${{ inputs.round }}
+    secrets: inherit
+
+  scenario-6:
+    name: ${{ fromJSON(inputs.slots)[5].case }}
+    needs: [scenario-1, scenario-2, scenario-3, scenario-4, scenario-5]
+    if: ${{ !cancelled() && fromJSON(inputs.slots)[5].case != '' }}
+    uses: ./.github/workflows/benchmark-case.yml
+    with:
+      case: ${{ fromJSON(inputs.slots)[5].case }}
+      indexers: ${{ toJSON(fromJSON(inputs.slots)[5].indexers) }}
       duration: ${{ inputs.duration }}
       windows: ${{ inputs.windows }}
       round: r${{ inputs.round }}

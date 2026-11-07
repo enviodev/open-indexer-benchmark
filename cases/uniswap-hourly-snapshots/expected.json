@@ -1,0 +1,17 @@
+{
+  "startBlock": 21000000,
+  "endBlock": 21199995,
+  "generatedAt": "2026-11-02T10:56:06.239Z",
+  "totalEvents": 11959,
+  "lastEventBlock": 21199995,
+  "entities": {
+    "swap": {
+      "rowCount": 11959,
+      "checksum": "6862756633540451294969"
+    },
+    "hourlySnapshot": {
+      "rowCount": 671,
+      "checksum": "390002538942729909421"
+    }
+  }
+}

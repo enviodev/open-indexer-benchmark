@@ -20,6 +20,7 @@ const ALL_CASES = [
   "safe-factory-registrations",
   "erc20-allowance-calls",
   "solana-spl-transfers",
+  "uniswap-hourly-snapshots",
 ];
 
 async function loadCase(name: string): Promise<CaseConfig> {

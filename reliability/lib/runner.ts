@@ -49,7 +49,9 @@ import {
 } from "./db-control.ts";
 import { ensureEnvioDb, needsEnvioDb } from "./envio-db.ts";
 import { observer } from "./observe.ts";
+import { loadRecording } from "./recording.ts";
 import {
+  BASE_REPLAY_NETWORK,
   DEFAULT_PATIENCE,
   EMPTY_RANGE,
   HUGE_INDEX_FROM,
@@ -126,8 +128,10 @@ export interface RunOptions {
 /**
  * The chain a scenario starts from.
  *
- * Every scenario gets the same ordinary chain except the one about values a
- * schema is likely to be wrong about, which gets a chain built out of them:
+ * Every scenario gets the same ordinary chain except two. The Base replay gets
+ * a recording to replay and a network that charges for what it carries. The
+ * one about values a schema is likely to be wrong about gets a chain built
+ * out of them:
  * log indices near the 32-bit ceiling, a transfer of 2^256-1, five hundred
  * blocks carrying nothing, and a token whose name holds a byte Postgres will
  * not store. The constants are the scenario's own, imported rather than
@@ -136,6 +140,9 @@ export interface RunOptions {
  */
 function chainSpecFor(scenario: string): ChainSpec {
   const spec = baseChainSpec();
+  if (scenario === "block-to-row-base") {
+    return { ...spec, recording: loadRecording(), network: BASE_REPLAY_NETWORK };
+  }
   if (scenario !== "awkward-values") return spec;
   return {
     ...spec,
