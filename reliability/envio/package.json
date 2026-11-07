@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "envio": "3.16.0",
-    "viem": "^2.49.2"
+    "viem": "2.56.8"
   },
   "devDependencies": {
-    "@types/node": "^20.19.41",
-    "typescript": "^5.9.3"
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3"
   }
 }

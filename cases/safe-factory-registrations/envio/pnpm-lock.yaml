@@ -13,7 +13,7 @@ importers:
         version: 3.16.0
     devDependencies:
       '@types/node':
-        specifier: ^25.8.0
+        specifier: 25.9.5
         version: 25.9.5
       typescript:
         specifier: 6.0.3

@@ -12,11 +12,11 @@ importers:
         specifier: 3.16.0
         version: 3.16.0
       viem:
-        specifier: ^2.55.13
+        specifier: 2.55.13
         version: 2.55.13(typescript@6.0.3)
     devDependencies:
       '@types/node':
-        specifier: ^25.8.0
+        specifier: 25.9.5
         version: 25.9.5
       typescript:
         specifier: 6.0.3
