@@ -27,15 +27,15 @@ What does an indexer do when something goes wrong? These scenarios restart its d
 | tool | [source](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | [crash recovery](./reliability/README.md#crash-recovery) | [reorgs](./reliability/README.md#reorgs) | [rpc faults](./reliability/README.md#rpc-faults) | [data fidelity](./reliability/README.md#data-fidelity) | [head latency](./reliability/README.md#head-latency) | overall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Envio Indexer](https://envio.dev) | RPC | 11/11 ✅ (2 restarts) | 8/8 ✅ | 19/19 ✅ | 6/6 ✅ | 6/6 ✅ (p50 231ms, p99 254ms, WS) | **50 / 50** |
-| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.10.0-subgraph) | RPC | 11/11 ✅ (2 restarts) | 8/8 ✅ | **16/19** 🔴 | 6/6 ✅ | 6/6 ✅ (p50 233ms, p99 264ms, WS) | **47 / 50** |
-| [Squid SDK](https://sqd.dev/sdk/) | RPC | 11/11 ✅ (2 restarts) | 8/8 ✅ | **15/19** 🔴 | 6/6 ✅ | 6/6 ✅ (p50 580ms, p99 819ms, WS) | **46 / 50** |
-| [Ponder](https://ponder.sh) | RPC | **8/9** 🔴 (no restarts) | 8/8 ✅ | **17/19** 🔴 | **5/6** 🔴 | 6/6 ✅ (p50 261ms, p99 459ms, WS) | **44 / 48** |
-| [Subgraph](https://thegraph.com) | RPC | **7/10** 🔴 (no restarts) | 8/8 ✅ | **16/17** 🔴 | 6/6 ✅ | **5/6** 🔴 (p50 8.5s, p99 11.2s) | **42 / 47** |
-| [SubQuery](https://subquery.network) | RPC | 11/11 ✅ (no restarts) | **0/8** 🔴 | 17/17 ✅ | 6/6 ✅ | **5/6** 🔴 (p50 4.6s, p99 7.2s) | **39 / 48** |
-| [Rindexer](https://rindexer.xyz) | RPC | 11/11 ✅ (no restarts) | **1/8** 🔴 | **10/17** 🔴 | 6/6 ✅ | **4/6** 🔴 (p50 15.5s, p99 33.3s) | **32 / 48** |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.10.0-subgraph) | RPC | 11/11 ✅ (2 restarts) | 8/8 ✅ | **16/19** 🔴 | 6/6 ✅ | 6/6 ✅ (p50 236ms, p99 259ms, WS) | **47 / 50** |
+| [Squid SDK](https://sqd.dev/sdk/) | RPC | 11/11 ✅ (2 restarts) | 8/8 ✅ | **15/19** 🔴 | 6/6 ✅ | 6/6 ✅ (p50 573ms, p99 834ms, WS) | **46 / 50** |
+| [Subgraph](https://thegraph.com) | RPC | **9/11** 🔴 (no restarts) | 8/8 ✅ | **16/17** 🔴 | 6/6 ✅ | **5/6** 🔴 (p50 8.2s, p99 10.8s) | **44 / 48** |
+| [Ponder](https://ponder.sh) | RPC | **8/9** 🔴 (no restarts) | 8/8 ✅ | **16/19** 🔴 | **5/6** 🔴 | 6/6 ✅ (p50 257ms, p99 426ms, WS) | **43 / 48** |
+| [SubQuery](https://subquery.network) | RPC | 11/11 ✅ (no restarts) | **0/8** 🔴 | 17/17 ✅ | 6/6 ✅ | **5/6** 🔴 (p50 4.5s, p99 7.4s) | **39 / 48** |
+| [Rindexer](https://rindexer.xyz) | RPC | 11/11 ✅ (no restarts) | **1/8** 🔴 | **12/17** 🔴 | 6/6 ✅ | **4/6** 🔴 (p50 34.6s, p99 39.2s) | **34 / 48** |
 
 <details>
-<summary>What failed, and what it means for you - 41 failing checks across 6 tools</summary>
+<summary>What failed, and what it means for you - 39 failing checks across 6 tools</summary>
 
 - **Envio Subgraph**
   - *rpc faults*
@@ -48,6 +48,16 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Stops indexing**: does not resume after the RPC node recovers
     - **Stops indexing**: crashes when the RPC provider fails some of its requests
     - **Stops indexing silently**: stops following the chain when its block subscription goes quiet
+- **Subgraph**
+  - *crash recovery*
+    - **Stops indexing**: never recovers after the database restarts mid-sync (only 2 of 3 runs)
+    - **Slow deploys**: ignores the shutdown signal for over 15 seconds and gets force-killed
+  - *rpc faults*
+    - **Stops indexing**: does not resume after the RPC node recovers
+    - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
+    - <i>not tested: fills in the blocks it was never told about</i>
+  - *head latency*
+    - **Stale reads**: on a real chain's traffic, new data sometimes takes over 10 seconds to show up
 - **Ponder**
   - *crash recovery*
     - **Stops indexing**: never recovers after the database restarts mid-sync
@@ -55,21 +65,10 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - <i>not tested: recovers by itself when an unresponsive database comes back</i>
   - *rpc faults*
     - **Missing data**: deletes rows when an RPC node briefly reports an older block
+    - **Wrong balances**: counts a transfer twice when the RPC node sends it twice (only 1 of 3 runs)
     - **Stops indexing silently**: stops following the chain when its block subscription goes quiet
   - *data fidelity*
     - **Missing data**: drops events with very large log indexes, which some providers emit
-- **Subgraph**
-  - *crash recovery*
-    - **Stops indexing**: never recovers after the database restarts mid-sync (only 2 of 3 runs)
-    - **Stops indexing**: stops picking up new blocks after the database restarts
-    - **Slow deploys**: ignores the shutdown signal for over 15 seconds and gets force-killed
-    - <i>not tested: recovers by itself when an unresponsive database comes back</i>
-  - *rpc faults*
-    - **Stops indexing**: does not resume after the RPC node recovers
-    - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
-    - <i>not tested: fills in the blocks it was never told about</i>
-  - *head latency*
-    - **Stale reads**: on a real chain's traffic, new data sometimes takes over 10 seconds to show up
 - **SubQuery**
   - *reorgs*
     - **Stale data**: keeps an event after the chain replaced its block (only 2 of 3 runs)
@@ -87,7 +86,7 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Stale reads**: new data usually takes longer than one block to show up
 - **Rindexer**
   - *reorgs*
-    - **Stale data**: keeps an event after the chain replaced its block
+    - **Stale data**: keeps an event after the chain replaced its block (only 2 of 3 runs)
     - **Stale data**: keeps blocks from a fork the chain abandoned for a shorter one
     - **Stale data**: keeps an event the chain removed
     - **Missing data**: skips events a reorg put into blocks it had read as empty
@@ -99,9 +98,7 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Stops indexing**: never catches up after a spell of flaky RPC
     - **Stops indexing**: cannot cope with a provider's response-size limit
     - **Wrong balances**: counts a transfer twice when the RPC node sends it twice
-    - **Missing data**: skips events in blocks an RPC node briefly answered as empty
     - **Missing data**: skips events in blocks an RPC node answered from the branch a reorg replaced
-    - **Missing data**: skips events in blocks an RPC node left out of the middle of a range
     - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
     - <i>not tested: fills in the blocks it was never told about</i>
   - *head latency*
