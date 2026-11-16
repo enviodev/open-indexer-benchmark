@@ -1,4 +1,4 @@
-import { Address, BigInt } from "@graphprotocol/graph-ts";
+import { Address, BigInt, DataSourceContext, dataSource } from "@graphprotocol/graph-ts";
 import { ProxyCreation } from "../generated/SafeProxyFactory/SafeProxyFactory";
 import { ProxyCreation as ProxyCreationIndexed } from "../generated/SafeProxyFactory141/SafeProxyFactoryModern";
 import {
@@ -55,8 +55,11 @@ function recordProxy(
 ): void {
   // Spin up a data source for the proxy so its own events are indexed from
   // here on. The contract set is not known at build time and grows throughout
-  // the run.
-  SafeTemplate.create(proxy);
+  // the run. A template instance has no endBlock of its own, so the case's end
+  // block travels with it in the context.
+  const context = new DataSourceContext();
+  context.setBigInt("endBlock", dataSource.context().getBigInt("endBlock"));
+  SafeTemplate.createWithContext(proxy, context);
 
   const entity = new Safe(blockNumber.toString() + "-" + logIndex.toString());
   entity.address = proxy.toHexString();
@@ -88,6 +91,14 @@ export function handleProxyCreationIndexed(event: ProxyCreationIndexed): void {
   );
 }
 
+// Graph Node keeps a template's instances indexing after the factory data
+// sources reach their endBlock, so a Safe's events past the case's range would
+// otherwise be stored too. Every other tool's child contracts stop with the
+// range.
+function pastRange(blockNumber: BigInt): boolean {
+  return blockNumber.gt(dataSource.context().getBigInt("endBlock"));
+}
+
 // The child handlers. A proxy emits SafeSetup one log index *below* the
 // ProxyCreation that announces it, so the data source created above did not
 // exist when that log was produced; whether it is recorded anyway is what this
@@ -95,6 +106,7 @@ export function handleProxyCreationIndexed(event: ProxyCreationIndexed): void {
 // argument moved into a topic without the signature changing — Graph Node runs
 // whichever of the two can decode the log in front of it.
 export function handleSafeSetup(event: SafeSetupEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new SafeSetupEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -106,6 +118,7 @@ export function handleSafeSetup(event: SafeSetupEvent): void {
 }
 
 export function handleSafeReceived(event: SafeReceivedEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new SafeReceivedEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -117,6 +130,7 @@ export function handleSafeReceived(event: SafeReceivedEvent): void {
 }
 
 export function handleSafeModuleTransaction(event: SafeModuleTransactionEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new SafeModuleTransactionEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -130,6 +144,7 @@ export function handleSafeModuleTransaction(event: SafeModuleTransactionEvent): 
 }
 
 export function handleSafeMultiSigTransaction(event: SafeMultiSigTransactionEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new SafeMultiSigTransactionEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -142,6 +157,7 @@ export function handleSafeMultiSigTransaction(event: SafeMultiSigTransactionEven
 }
 
 export function handleExecutionSuccess(event: ExecutionSuccessEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ExecutionSuccessEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -152,6 +168,7 @@ export function handleExecutionSuccess(event: ExecutionSuccessEvent): void {
 }
 
 export function handleExecutionSuccessV4(event: ExecutionSuccessV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ExecutionSuccessEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -162,6 +179,7 @@ export function handleExecutionSuccessV4(event: ExecutionSuccessV4Event): void {
 }
 
 export function handleExecutionFailure(event: ExecutionFailureEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ExecutionFailureEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -172,6 +190,7 @@ export function handleExecutionFailure(event: ExecutionFailureEvent): void {
 }
 
 export function handleExecutionFailureV4(event: ExecutionFailureV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ExecutionFailureEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -182,6 +201,7 @@ export function handleExecutionFailureV4(event: ExecutionFailureV4Event): void {
 }
 
 export function handleChangedThreshold(event: ChangedThresholdEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ChangedThresholdEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -192,6 +212,7 @@ export function handleChangedThreshold(event: ChangedThresholdEvent): void {
 }
 
 export function handleChangedMasterCopy(event: ChangedMasterCopyEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ChangedMasterCopyEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -202,6 +223,7 @@ export function handleChangedMasterCopy(event: ChangedMasterCopyEvent): void {
 }
 
 export function handleChangedFallbackHandler(event: ChangedFallbackHandlerEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ChangedFallbackHandlerEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -212,6 +234,7 @@ export function handleChangedFallbackHandler(event: ChangedFallbackHandlerEvent)
 }
 
 export function handleChangedFallbackHandlerV4(event: ChangedFallbackHandlerV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ChangedFallbackHandlerEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -222,6 +245,7 @@ export function handleChangedFallbackHandlerV4(event: ChangedFallbackHandlerV4Ev
 }
 
 export function handleChangedGuard(event: ChangedGuardEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ChangedGuardEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -232,6 +256,7 @@ export function handleChangedGuard(event: ChangedGuardEvent): void {
 }
 
 export function handleChangedGuardV4(event: ChangedGuardV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ChangedGuardEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -242,6 +267,7 @@ export function handleChangedGuardV4(event: ChangedGuardV4Event): void {
 }
 
 export function handleChangedModuleGuard(event: ChangedModuleGuardEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new ChangedModuleGuardEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -252,6 +278,7 @@ export function handleChangedModuleGuard(event: ChangedModuleGuardEvent): void {
 }
 
 export function handleEnabledModule(event: EnabledModuleEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new EnabledModuleEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -262,6 +289,7 @@ export function handleEnabledModule(event: EnabledModuleEvent): void {
 }
 
 export function handleEnabledModuleV4(event: EnabledModuleV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new EnabledModuleEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -272,6 +300,7 @@ export function handleEnabledModuleV4(event: EnabledModuleV4Event): void {
 }
 
 export function handleDisabledModule(event: DisabledModuleEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new DisabledModuleEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -282,6 +311,7 @@ export function handleDisabledModule(event: DisabledModuleEvent): void {
 }
 
 export function handleDisabledModuleV4(event: DisabledModuleV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new DisabledModuleEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -292,6 +322,7 @@ export function handleDisabledModuleV4(event: DisabledModuleV4Event): void {
 }
 
 export function handleAddedOwner(event: AddedOwnerEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new AddedOwnerEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -302,6 +333,7 @@ export function handleAddedOwner(event: AddedOwnerEvent): void {
 }
 
 export function handleAddedOwnerV4(event: AddedOwnerV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new AddedOwnerEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -312,6 +344,7 @@ export function handleAddedOwnerV4(event: AddedOwnerV4Event): void {
 }
 
 export function handleRemovedOwner(event: RemovedOwnerEvent): void {
+  if (pastRange(event.block.number)) return;
   const entity = new RemovedOwnerEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
@@ -322,6 +355,7 @@ export function handleRemovedOwner(event: RemovedOwnerEvent): void {
 }
 
 export function handleRemovedOwnerV4(event: RemovedOwnerV4Event): void {
+  if (pastRange(event.block.number)) return;
   const entity = new RemovedOwnerEntity(
     event.block.number.toString() + "-" + event.logIndex.toString()
   );
