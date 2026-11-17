@@ -61,7 +61,8 @@ than a heuristic every implementation would have to reproduce identically.
 
 A scenario runs the tools it has a project directory for. SubQuery also indexes
 Solana and has no implementation here yet; every other tool in the benchmark is
-EVM-only. The two RPC rows are listed as unsupported rather than missing:
+EVM-only. Two RPC sources are declared unavailable, and so are left out of
+the results table (a pull request's report still lists them, with the reason):
 HyperIndex indexes Solana slots over RPC but not instructions, and SQD serves
 Solana only through its Portal.
 

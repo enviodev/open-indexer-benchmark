@@ -273,11 +273,6 @@ Every USDC transfer on Solana, through the chain's busiest program. Solana makes
 | [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 3,856.5 | 126.9 | 8.2x slower | ✅ | Postgres 62.7 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 2,076.1 | 66.5 | 15.3x slower | ✅ | Postgres 37.9 MB |
 | [Carbon](https://github.com/sevenlabs-hq/carbon) | [RPC](https://solana.com/docs/rpc) | 563.2 | 18.9 | 56.5x slower | ✅ | Postgres 40.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (1) | — |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (2) | — |
-
-> **(1)** Envio Indexer — HyperIndex indexes Solana instructions through HyperSync only
-> **(2)** Squid SDK — SQD serves Solana through its Portal, not RPC
 <!-- BENCHMARK:solana-spl-transfers:END -->
 
 [How this case works, and how to run it →](./cases/solana-spl-transfers/README.md)

@@ -95,16 +95,23 @@ async function localOnlyRowKeys(name: string): Promise<Set<string>> {
 }
 
 /**
- * Tools a scenario declares unsupported, with the reason. They never get a
- * job, so their rows are built here from the declaration; without this the
- * table would only show them if someone ran them by hand.
+ * Tools a scenario declares unsupported or unavailable, with the reason. They
+ * never get a job, so their rows are built here from the declaration; without
+ * this the table would only show them if someone ran them by hand. The
+ * unavailable ones are kept apart so the README can leave them out.
  */
-async function unsupportedReasons(name: string): Promise<Record<string, string>> {
+async function notRunReasons(
+  name: string
+): Promise<{ reasons: Record<string, string>; unavailable: string[] }> {
   try {
     const mod = await import(resolve(ROOT, "cases", name, "case.config.ts"));
-    return mod.caseConfig?.unsupported ?? {};
+    const unavailable: Record<string, string> = mod.caseConfig?.unavailable ?? {};
+    return {
+      reasons: { ...mod.caseConfig?.unsupported, ...unavailable },
+      unavailable: Object.keys(unavailable),
+    };
   } catch {
-    return {};
+    return { reasons: {}, unavailable: [] };
   }
 }
 
@@ -232,7 +239,13 @@ for (const benchCase of cases) {
   }
   // A declared unsupported row replaces whatever was published for that tool,
   // so a reworded reason reaches the table on the next run.
-  for (const [indexer, reason] of Object.entries(await unsupportedReasons(benchCase))) {
+  const notRun = await notRunReasons(benchCase);
+  const unavailableRows = new Set(
+    notRun.unavailable
+      .filter((indexer) => TOOLS[indexer])
+      .map((indexer) => `${TOOLS[indexer].name}|${TOOLS[indexer].source}`)
+  );
+  for (const [indexer, reason] of Object.entries(notRun.reasons)) {
     if (!TOOLS[indexer]) continue;
     const row = toTableRow(unsupportedResult(TOOLS[indexer], reason));
     const at = rows.findIndex((r) => rowKey(r) === rowKey(row));
@@ -277,11 +290,17 @@ for (const benchCase of cases) {
   // its samples of a row disagreed, are about how the benchmark ran, not about
   // the tools — a reader of the README wants the numbers, and should see the
   // same table however the run that produced them went. The correctness and
-  // unsupported notes stay in both: those are about the data.
+  // unsupported notes stay in both: those are about the data. A tool whose
+  // source does not exist for the chain is left out of the README entirely —
+  // there is nothing the row could ever measure — but stays in the run's
+  // report, where its note explains why it was not run. Dropping it is safe:
+  // the row is rebuilt from the case config on every run, never read back.
   writeFileSync(
     join(OUT_DIR, `benchmark-readme-${benchCase}.md`),
     buildTable(
-      rows.map((row) => ({ ...row, carriedOver: false, localOnly: false, unstable: undefined }))
+      rows
+        .filter((row) => !unavailableRows.has(rowKey(row)))
+        .map((row) => ({ ...row, carriedOver: false, localOnly: false, unstable: undefined }))
     )
   );
   // The PR comment is assembled by a workflow step that cannot import this

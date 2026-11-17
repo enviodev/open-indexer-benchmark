@@ -4,7 +4,7 @@
 //     node scripts/case-indexers.ts
 //
 // A scenario runs a tool in CI if it has a project directory for it, the case
-// does not declare it unsupported, and the case does not keep it local-only. Every EVM scenario implements every tool,
+// does not declare it unsupported or unavailable, and the case does not keep it local-only. Every EVM scenario implements every tool,
 // so this changes nothing there — but Solana is indexed by a handful of them,
 // and a job for a tool with nothing to run is a red X that means "not written
 // yet", which is not a benchmark result.
@@ -21,14 +21,17 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
  * The given indexers, less those the scenario has no project for, those it
- * declares unsupported, and those it runs only locally.
+ * declares unsupported or unavailable, and those it runs only locally.
  */
 export async function caseIndexers(
   benchCase: string,
   indexers: string[]
 ): Promise<string[]> {
   const config = await import(resolve(ROOT, "cases", benchCase, "case.config.ts"));
-  const unsupported: Record<string, string> = config.caseConfig?.unsupported ?? {};
+  const unsupported: Record<string, string> = {
+    ...config.caseConfig?.unsupported,
+    ...config.caseConfig?.unavailable,
+  };
   const localOnly: string[] = config.caseConfig?.localOnly ?? [];
   return indexers.filter(
     (indexer) =>
