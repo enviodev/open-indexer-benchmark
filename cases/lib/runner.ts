@@ -805,7 +805,7 @@ async function run(config: CaseConfig) {
 
   const results: BenchmarkResult[] = [];
   for (const name of selected) {
-    const reason = config.unsupported?.[name];
+    const reason = config.unsupported?.[name] ?? config.unavailable?.[name];
     if (reason) {
       // Published rather than skipped silently. A tool that cannot express the
       // case is a finding about the tool, and dropping its row would make that

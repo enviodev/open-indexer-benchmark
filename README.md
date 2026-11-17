@@ -187,9 +187,11 @@ Not everything an indexer needs is in the logs. Every approval on the eight busi
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 73.9 | 4.6 | 231.1x slower | ✅ | Postgres 20.3 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 40.2 | 2.8 | 425.1x slower | ❓ (1) | Postgres ~11.6 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4.4 | 0.3 | 3904.7x slower | ❓ (2) | Postgres ~16.9 MB |
+| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | — | — | — | — (3) | — |
 
 > **(1)** Ponder — missing 37% of the data: the verification range was not finished within 300s
 > **(2)** SubQuery — missing 93% of the data: the verification range was not finished within 300s
+> **(3)** Substreams — its contract calls run against the Substreams server's own node, not a given endpoint
 <!-- BENCHMARK:erc20-allowance-calls:END -->
 
 [How this case works, and how to run it →](./cases/erc20-allowance-calls/README.md)
@@ -243,6 +245,8 @@ Some data is read at a fixed time rather than when something happens. The indexe
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 3.5 | 107.5 | 8853.8x slower | ❓ (4) | Postgres ~4.1 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1.0 | 45.0 | 31942.2x slower | ❓ (5) | Postgres ~96.0 MB |
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.5 | 27.9 | 65479.8x slower | ❓ (6) | Postgres ~298 MB |
+| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (7) | — |
+| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | — | — | — | — (8) | — |
 
 > **(1)** Envio Subgraph — missing 60% of the data: the verification range was not finished within 300s
 > **(2)** Envio Subgraph — missing 97% of the data: the verification range was not finished within 300s
@@ -250,6 +254,8 @@ Some data is read at a fixed time rather than when something happens. The indexe
 > **(4)** Ponder — missing 91% of the data: the verification range was not finished within 300s
 > **(5)** SubQuery — missing 98% of the data: the verification range was not finished within 300s
 > **(6)** Subgraph — missing 99% of the data: the verification range was not finished within 300s
+> **(7)** Rindexer — it has event handlers only, so it cannot act on a block without an event
+> **(8)** Rindexer — it has event handlers only, so it cannot act on a block without an event
 <!-- BENCHMARK:uniswap-hourly-snapshots:END -->
 
 [How this case works, and how to run it →](./cases/uniswap-hourly-snapshots/README.md)

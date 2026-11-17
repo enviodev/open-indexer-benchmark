@@ -233,10 +233,11 @@ console.log("\nbuild-tables.ts end to end:");
   }
 }
 
-console.log("\nbuild-tables.ts with unsupported tools:");
+console.log("\nbuild-tables.ts with unavailable sources:");
 {
-  // Solana declares two tools unsupported. The run's report keeps their rows
-  // and notes; the README leaves them out.
+  // Solana declares two sources unavailable. The run's report keeps their rows
+  // and notes; the README leaves them out. Unsupported rows elsewhere stay in
+  // both, which test-tables.ts covers.
   const benchCase = "solana-spl-transfers";
   const dir = mkdtempSync(join(tmpdir(), "test-aggregate-"));
   try {
@@ -257,7 +258,7 @@ console.log("\nbuild-tables.ts with unsupported tools:");
     });
     const report = readFileSync(join(dir, `benchmark-table-${benchCase}.md`), "utf8");
     check(
-      "the run's report lists the unsupported tools with their notes",
+      "the run's report lists the unavailable sources with their notes",
       report.includes("— (1)") && report.includes("through HyperSync only"),
       report
     );
@@ -265,6 +266,36 @@ console.log("\nbuild-tables.ts with unsupported tools:");
     check(
       "the README leaves them out",
       !readmeTable.includes("— (1)") && !readmeTable.includes("through HyperSync only"),
+      readmeTable
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+{
+  // A tool that runs but lacks a feature is a finding, and keeps its row.
+  const benchCase = "erc20-allowance-calls";
+  const dir = mkdtempSync(join(tmpdir(), "test-aggregate-"));
+  try {
+    const readme = join(dir, "README.md");
+    writeFileSync(readme, "");
+    execFileSync(process.execPath, [join(ROOT, "scripts", "build-tables.ts")], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CASES: JSON.stringify([benchCase]),
+        RESULTS_DIR: join(dir, "results"),
+        OUT_DIR: dir,
+        README_PATH: readme,
+        GATE: "off",
+        TOUCHED_INDEXERS: "{}",
+        GITHUB_STEP_SUMMARY: "",
+      },
+    });
+    const readmeTable = readFileSync(join(dir, `benchmark-readme-${benchCase}.md`), "utf8");
+    check(
+      "an unsupported tool keeps its row in the README",
+      readmeTable.includes("— (1)") && readmeTable.includes("Substreams"),
       readmeTable
     );
   } finally {

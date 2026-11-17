@@ -28,10 +28,10 @@ export const caseConfig: CustomCaseConfig = {
   throughputEndBlock: START_SLOT + 100_000,
 
   // Tools without a project directory here are simply not implemented yet and
-  // are left out of the run. This one is a fact about the tool: HyperIndex
+  // are left out of the run. These two are facts about the tools: HyperIndex
   // reads Solana instructions through HyperSync, and its RPC source has no
-  // instruction handlers at all.
-  unsupported: {
+  // instruction handlers at all; SQD has no Solana RPC source either.
+  unavailable: {
     "envio-rpc": "HyperIndex indexes Solana instructions through HyperSync only",
     "sqd-rpc": "SQD serves Solana through its Portal, not RPC",
   },
