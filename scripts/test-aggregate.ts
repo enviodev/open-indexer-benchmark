@@ -233,5 +233,44 @@ console.log("\nbuild-tables.ts end to end:");
   }
 }
 
+console.log("\nbuild-tables.ts with unsupported tools:");
+{
+  // Solana declares two tools unsupported. The run's report keeps their rows
+  // and notes; the README leaves them out.
+  const benchCase = "solana-spl-transfers";
+  const dir = mkdtempSync(join(tmpdir(), "test-aggregate-"));
+  try {
+    const readme = join(dir, "README.md");
+    writeFileSync(readme, "");
+    execFileSync(process.execPath, [join(ROOT, "scripts", "build-tables.ts")], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CASES: JSON.stringify([benchCase]),
+        RESULTS_DIR: join(dir, "results"),
+        OUT_DIR: dir,
+        README_PATH: readme,
+        GATE: "off",
+        TOUCHED_INDEXERS: "{}",
+        GITHUB_STEP_SUMMARY: "",
+      },
+    });
+    const report = readFileSync(join(dir, `benchmark-table-${benchCase}.md`), "utf8");
+    check(
+      "the run's report lists the unsupported tools with their notes",
+      report.includes("— (1)") && report.includes("through HyperSync only"),
+      report
+    );
+    const readmeTable = readFileSync(join(dir, `benchmark-readme-${benchCase}.md`), "utf8");
+    check(
+      "the README leaves them out",
+      !readmeTable.includes("— (1)") && !readmeTable.includes("through HyperSync only"),
+      readmeTable
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 console.log(failures === 0 ? "\nAll aggregate checks passed" : `\n${failures} check(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

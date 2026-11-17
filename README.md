@@ -187,11 +187,9 @@ Not everything an indexer needs is in the logs. Every approval on the eight busi
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 73.9 | 4.6 | 231.1x slower | ✅ | Postgres 20.3 MB |
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 40.2 | 2.8 | 425.1x slower | ❓ (1) | Postgres ~11.6 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 4.4 | 0.3 | 3904.7x slower | ❓ (2) | Postgres ~16.9 MB |
-| [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | — | — | — | — (3) | — |
 
 > **(1)** Ponder — missing 37% of the data: the verification range was not finished within 300s
 > **(2)** SubQuery — missing 93% of the data: the verification range was not finished within 300s
-> **(3)** Substreams — its contract calls run against the Substreams server's own node, not a given endpoint
 <!-- BENCHMARK:erc20-allowance-calls:END -->
 
 [How this case works, and how to run it →](./cases/erc20-allowance-calls/README.md)
@@ -245,8 +243,6 @@ Some data is read at a fixed time rather than when something happens. The indexe
 | [Ponder](https://ponder.sh) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 3.5 | 107.5 | 8853.8x slower | ❓ (4) | Postgres ~4.1 MB |
 | [SubQuery](https://subquery.network) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 1.0 | 45.0 | 31942.2x slower | ❓ (5) | Postgres ~96.0 MB |
 | [Subgraph](https://thegraph.com) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | 0.5 | 27.9 | 65479.8x slower | ❓ (6) | Postgres ~298 MB |
-| [Rindexer](https://rindexer.xyz) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (7) | — |
-| [Rindexer](https://rindexer.xyz) | [HyperSync](https://docs.envio.dev/docs/HyperSync/overview) | — | — | — | — (8) | — |
 
 > **(1)** Envio Subgraph — missing 60% of the data: the verification range was not finished within 300s
 > **(2)** Envio Subgraph — missing 97% of the data: the verification range was not finished within 300s
@@ -254,8 +250,6 @@ Some data is read at a fixed time rather than when something happens. The indexe
 > **(4)** Ponder — missing 91% of the data: the verification range was not finished within 300s
 > **(5)** SubQuery — missing 98% of the data: the verification range was not finished within 300s
 > **(6)** Subgraph — missing 99% of the data: the verification range was not finished within 300s
-> **(7)** Rindexer — it has event handlers only, so it cannot act on a block without an event
-> **(8)** Rindexer — it has event handlers only, so it cannot act on a block without an event
 <!-- BENCHMARK:uniswap-hourly-snapshots:END -->
 
 [How this case works, and how to run it →](./cases/uniswap-hourly-snapshots/README.md)
@@ -273,11 +267,6 @@ Every USDC transfer on Solana, through the chain's busiest program. Solana makes
 | [Substreams](https://substreams.dev) | [StreamingFast](https://docs.substreams.dev) | 3,856.5 | 126.9 | 8.2x slower | ✅ | Postgres 62.7 MB |
 | [Squid SDK](https://sqd.dev/sdk/) | [SQD Network](https://docs.sqd.dev/en/network/overview) | 2,076.1 | 66.5 | 15.3x slower | ✅ | Postgres 37.9 MB |
 | [Carbon](https://github.com/sevenlabs-hq/carbon) | [RPC](https://solana.com/docs/rpc) | 563.2 | 18.9 | 56.5x slower | ✅ | Postgres 40.4 MB |
-| [Envio Indexer](https://envio.dev) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (1) | — |
-| [Squid SDK](https://sqd.dev/sdk/) | [RPC](https://docs.envio.dev/docs/HyperRPC/overview-hyperrpc) | — | — | — | — (2) | — |
-
-> **(1)** Envio Indexer — HyperIndex indexes Solana instructions through HyperSync only
-> **(2)** Squid SDK — SQD serves Solana through its Portal, not RPC
 <!-- BENCHMARK:solana-spl-transfers:END -->
 
 [How this case works, and how to run it →](./cases/solana-spl-transfers/README.md)

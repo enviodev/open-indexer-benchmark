@@ -276,12 +276,18 @@ for (const benchCase of cases) {
   // report on a run. Which rows this particular run re-measured, and how far
   // its samples of a row disagreed, are about how the benchmark ran, not about
   // the tools — a reader of the README wants the numbers, and should see the
-  // same table however the run that produced them went. The correctness and
-  // unsupported notes stay in both: those are about the data.
+  // same table however the run that produced them went. The correctness notes
+  // stay in both: those are about the data. A tool the scenario declares
+  // unsupported is left out of the README entirely — a row of dashes says
+  // nothing a reader of the results needs — but stays in the run's report,
+  // where its note explains why it was not run. Dropping it is safe: the row
+  // is rebuilt from the case config on every run, never read back.
   writeFileSync(
     join(OUT_DIR, `benchmark-readme-${benchCase}.md`),
     buildTable(
-      rows.map((row) => ({ ...row, carriedOver: false, localOnly: false, unstable: undefined }))
+      rows
+        .filter((row) => !row.unsupported)
+        .map((row) => ({ ...row, carriedOver: false, localOnly: false, unstable: undefined }))
     )
   );
   // The PR comment is assembled by a workflow step that cannot import this
