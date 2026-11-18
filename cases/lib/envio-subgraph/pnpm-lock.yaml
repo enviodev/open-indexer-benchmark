@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       envio:
-        specifier: 3.16.0-subgraph
-        version: 3.16.0-subgraph
+        specifier: 3.17.1-subgraph
+        version: 3.17.1-subgraph
 
 packages:
 
@@ -89,33 +89,28 @@ packages:
     resolution: {integrity: sha512-Ev/hIyePLZtpL98x562lvPtenrUfGr0lfaf44HFZ+hDEwso7ccV9QAZrEVLg0hxNAzygaAFxy2dYaAKKM0G06A==}
     engines: {node: '>= 0.8'}
 
-  envio-darwin-arm64@3.16.0-subgraph:
-    resolution: {integrity: sha512-BLN8t3Sr9bz+6Nm1KDemSrsJUhZMFHwfthEiH6TI476RFbCcA3ZV+kri38VNPJpUTnfPTs2vSQIu9097ydFWhw==}
+  envio-darwin-arm64@3.17.1-subgraph:
+    resolution: {integrity: sha512-9cgkhvY5BbWjTK2Kycn0tFcnw8NGZOMutpmnk44diXQRYUja8lQxIhlICyQIBmzAEm3+aDnN71rkrj3QiwRATg==}
     cpu: [arm64]
     os: [darwin]
 
-  envio-darwin-x64@3.16.0-subgraph:
-    resolution: {integrity: sha512-LdCNr1ErQ8buZOWQXjjQNv6pfWiUMsYk+B1loMz+ZvSPFhJLxi7RdYpti9nNco3enzsMsyOvhXgOq0oBWdVxYA==}
+  envio-darwin-x64@3.17.1-subgraph:
+    resolution: {integrity: sha512-Nu50cLkfhGJANLfF/KAFbg5ZoWOsGLu+5NT9kFfXyKVCJilceIXUG64cVmZcjznuThHcOxaqviSJFe3RheZs1w==}
     cpu: [x64]
     os: [darwin]
 
-  envio-linux-arm64@3.16.0-subgraph:
-    resolution: {integrity: sha512-+GKv+pNCmOQdJ0OIyQXjl0VkamON/9DJBM8sJ1G+NT51eDo+6SL7OGKvJ/8mnZygsDoQgUIPS8YDFE6WBTaGCQ==}
+  envio-linux-arm64@3.17.1-subgraph:
+    resolution: {integrity: sha512-SY2UT7s9Iu3vPZy5UigdZdHuT5ZIfo2D3NJf085C1RTWIx/jHqTPOwNcE6v0I1G3YxdWl4mOCMgQ1zAEW3A/TQ==}
     cpu: [arm64]
     os: [linux]
 
-  envio-linux-x64-musl@3.16.0-subgraph:
-    resolution: {integrity: sha512-BzpxbwxTmeq8moDOc2a+ZM89gQXsMvdncttN+Uuf0v1KVN/J3518wBp5cFIbsCWd8p8dM1aF2V4iyVI1Ngljvw==}
+  envio-linux-x64-musl@3.17.1-subgraph:
+    resolution: {integrity: sha512-ruJIvmGV5J74KnHcNVihz+wRvFj5r9RMhjPWMNUuMn7SwJjdv0h57BFdy0T4w2WtApe+7e1/16QKkqGzt98Vow==}
     cpu: [x64]
     os: [linux]
 
-  envio-linux-x64@3.16.0-subgraph:
-    resolution: {integrity: sha512-dgg1FvwwvC1Q1+2Zohu3TH9cY8E6ggfvJlg46IZxxMlaqmn1aB/qnv34mnnnVOqOvuD5dSk+VwHCWhoKRIN7sg==}
-    cpu: [x64]
-    os: [linux]
-
-  envio@3.16.0-subgraph:
-    resolution: {integrity: sha512-YGftP014lYvNlUxSenplPZ15VpnZaJwVJCrrEiIj3zr1mmgp58O80OfEHXUaO0IEdp77joN+oOSd8jUbRbtJ9A==}
+  envio@3.17.1-subgraph:
+    resolution: {integrity: sha512-sgP1Fb6xkbYg+tNEG3JQeBuT/E9yAPV1p+969MZuubpicbRNT2cVGlF+eBrAl99tfrCoj2u7b2DZwkbIfAa4XQ==}
     engines: {node: '>=22.15.0'}
     hasBin: true
 
@@ -184,10 +179,6 @@ packages:
   hasown@2.0.4:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
-
-  http-errors@2.0.0:
-    resolution: {integrity: sha512-FtwrG/euBzaEjYeRqOgly7G0qviiXoJWnvEH2Z1plBdXgbyjv34pHTSb9zoeHMyDy33+DWy5Wt9Wo+TURtOYSQ==}
-    engines: {node: '>= 0.8'}
 
   http-errors@2.0.1:
     resolution: {integrity: sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==}
@@ -314,10 +305,6 @@ packages:
     resolution: {integrity: sha512-6x6dK6zJdpTzF4sQeNYxwtvBzf6Eg4GtlesS94HOvTudUeyK2WXAaIfmDgsyslYrRBeFIlsi54AYsFGUuhmvrQ==}
     engines: {node: '>= 0.4'}
 
-  statuses@2.0.1:
-    resolution: {integrity: sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==}
-    engines: {node: '>= 0.8'}
-
   statuses@2.0.2:
     resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
     engines: {node: '>= 0.8'}
@@ -419,22 +406,19 @@ snapshots:
 
   encodeurl@2.0.1: {}
 
-  envio-darwin-arm64@3.16.0-subgraph:
+  envio-darwin-arm64@3.17.1-subgraph:
     optional: true
 
-  envio-darwin-x64@3.16.0-subgraph:
+  envio-darwin-x64@3.17.1-subgraph:
     optional: true
 
-  envio-linux-arm64@3.16.0-subgraph:
+  envio-linux-arm64@3.17.1-subgraph:
     optional: true
 
-  envio-linux-x64-musl@3.16.0-subgraph:
+  envio-linux-x64-musl@3.17.1-subgraph:
     optional: true
 
-  envio-linux-x64@3.16.0-subgraph:
-    optional: true
-
-  envio@3.16.0-subgraph:
+  envio@3.17.1-subgraph:
     dependencies:
       '@rescript/runtime': 12.3.1
       bignumber.js: 9.3.1
@@ -444,11 +428,10 @@ snapshots:
       rescript-schema: 9.5.1
       yaml: 2.8.1
     optionalDependencies:
-      envio-darwin-arm64: 3.16.0-subgraph
-      envio-darwin-x64: 3.16.0-subgraph
-      envio-linux-arm64: 3.16.0-subgraph
-      envio-linux-x64: 3.16.0-subgraph
-      envio-linux-x64-musl: 3.16.0-subgraph
+      envio-darwin-arm64: 3.17.1-subgraph
+      envio-darwin-x64: 3.17.1-subgraph
+      envio-linux-arm64: 3.17.1-subgraph
+      envio-linux-x64-musl: 3.17.1-subgraph
     transitivePeerDependencies:
       - rescript
       - supports-color
@@ -487,7 +470,7 @@ snapshots:
       etag: 1.8.1
       finalhandler: 1.3.2
       fresh: 0.5.2
-      http-errors: 2.0.0
+      http-errors: 2.0.1
       merge-descriptors: 1.0.3
       methods: 1.1.2
       on-finished: 2.4.1
@@ -500,7 +483,7 @@ snapshots:
       send: 0.19.2
       serve-static: 1.16.3
       setprototypeof: 1.2.0
-      statuses: 2.0.1
+      statuses: 2.0.2
       type-is: 1.6.18
       utils-merge: 1.0.1
       vary: 1.1.2
@@ -550,14 +533,6 @@ snapshots:
   hasown@2.0.4:
     dependencies:
       function-bind: 1.1.2
-
-  http-errors@2.0.0:
-    dependencies:
-      depd: 2.0.0
-      inherits: 2.0.4
-      setprototypeof: 1.2.0
-      statuses: 2.0.1
-      toidentifier: 1.0.1
 
   http-errors@2.0.1:
     dependencies:
@@ -688,8 +663,6 @@ snapshots:
       side-channel-list: 1.0.1
       side-channel-map: 1.0.1
       side-channel-weakmap: 1.0.2
-
-  statuses@2.0.1: {}
 
   statuses@2.0.2: {}
 
