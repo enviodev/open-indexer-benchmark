@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@subsquid/typeorm-codegen": "^2.2.0",
-    "@types/node": "^24.13.3",
+    "@types/node": "^24.19.2",
     "typescript": "~5.9.3"
   }
 }

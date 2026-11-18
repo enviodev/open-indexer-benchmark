@@ -17,10 +17,10 @@
     "viem": "^2.49.2"
   },
   "devDependencies": {
-    "@types/node": "^20.19.41",
+    "@types/node": "^24.19.2",
     "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=22.12"
+    "node": ">=24"
   }
 }
