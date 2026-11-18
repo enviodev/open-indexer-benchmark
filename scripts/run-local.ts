@@ -46,12 +46,13 @@ const { caseConfig } = await import(resolve(caseDir, "case.config.ts"));
 
 /**
  * What this machine can run: everything the scenario has a project for, less
- * what it declares unsupported. Unlike the CI matrix this keeps the local-only
+ * what it declares unsupported or unavailable. Unlike the CI matrix this keeps the local-only
  * tools — running them is the whole point of being here.
  */
 const runnable = INDEXERS.filter(
   (indexer) =>
     !(indexer in (caseConfig.unsupported ?? {})) &&
+    !(indexer in (caseConfig.unavailable ?? {})) &&
     existsSync(resolve(caseDir, INDEXER_DIRS[indexer] ?? indexer))
 );
 
@@ -102,9 +103,17 @@ for (const prior of parsePublishedTable(readme, benchCase)) {
   rows.push({ ...prior, carriedOver: true, ...(isLocal ? { localOnly: true } : {}) });
 }
 // The README publishes results, so it carries no mark for which rows this run
-// re-measured — see scripts/build-tables.ts, which does the same for CI.
+// re-measured, nor rows for tools whose source does not exist for the chain —
+// see scripts/build-tables.ts, which does the same for CI.
+const unavailableRows = new Set(
+  Object.keys(caseConfig.unavailable ?? {})
+    .filter((indexer) => TOOLS[indexer])
+    .map((indexer) => `${TOOLS[indexer].name}|${TOOLS[indexer].source}`)
+);
 const table = buildTable(
-  rows.map((row) => ({ ...row, carriedOver: false, localOnly: false }))
+  rows
+    .filter((row) => !unavailableRows.has(rowKey(row)))
+    .map((row) => ({ ...row, carriedOver: false, localOnly: false }))
 );
 const start = `<!-- BENCHMARK:${benchCase}:START -->`;
 const end = `<!-- BENCHMARK:${benchCase}:END -->`;

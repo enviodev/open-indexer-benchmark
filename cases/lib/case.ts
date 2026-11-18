@@ -63,6 +63,14 @@ interface CommonCaseConfig {
    */
   unsupported?: Record<string, string>;
   /**
+   * Tools that do not offer this source for this chain at all — not a missing
+   * feature, but a combination that does not exist (SQD has no Solana RPC
+   * source, for one). Skipped like an unsupported tool, and listed with the
+   * reason in a run's report, but left out of the README: there is nothing
+   * the row could ever measure.
+   */
+  unavailable?: Record<string, string>;
+  /**
    * Tools this scenario runs only when it is run by hand. A row that needs an
    * endpoint the project pays for by the request has no business in a run that
    * fires on every push, so CI leaves these out and `scripts/run-local.ts`
