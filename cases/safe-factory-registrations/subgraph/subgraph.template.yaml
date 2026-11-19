@@ -8,6 +8,10 @@ dataSources:
   - kind: ethereum
     name: SafeProxyFactory
     network: mainnet
+    context:
+      endBlock:
+        type: BigInt
+        data: "__END_BLOCK__"
     source:
       address: "0xa6b71e26c5e0845f74c812102ca7114b6a896ab2" # v1.3.0 canonical
       abi: SafeProxyFactory
@@ -29,6 +33,10 @@ dataSources:
   - kind: ethereum
     name: SafeProxyFactoryEip155
     network: mainnet
+    context:
+      endBlock:
+        type: BigInt
+        data: "__END_BLOCK__"
     source:
       address: "0xc22834581ebc8527d974f8a1c97e1bea4ef910bc" # v1.3.0 eip155
       abi: SafeProxyFactory
@@ -50,6 +58,10 @@ dataSources:
   - kind: ethereum
     name: SafeProxyFactory141
     network: mainnet
+    context:
+      endBlock:
+        type: BigInt
+        data: "__END_BLOCK__"
     source:
       address: "0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67" # v1.4.1 canonical
       abi: SafeProxyFactoryModern
@@ -71,6 +83,10 @@ dataSources:
   - kind: ethereum
     name: SafeProxyFactory150
     network: mainnet
+    context:
+      endBlock:
+        type: BigInt
+        data: "__END_BLOCK__"
     source:
       address: "0x14f2982d601c9458f93bd70b218933a6f8165e7b" # v1.5.0 canonical
       abi: SafeProxyFactoryModern
