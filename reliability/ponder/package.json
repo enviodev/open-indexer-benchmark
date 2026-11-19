@@ -13,14 +13,14 @@
   "dependencies": {
     "drizzle-kit": "0.22.8",
     "hono": "^4.12.18",
-    "ponder": "^0.16.6",
+    "ponder": "0.18.9",
     "viem": "^2.49.2"
   },
   "devDependencies": {
-    "@types/node": "^20.19.41",
+    "@types/node": "^24.19.2",
     "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=18.14"
+    "node": ">=24"
   }
 }
