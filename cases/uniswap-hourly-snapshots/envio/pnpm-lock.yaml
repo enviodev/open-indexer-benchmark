@@ -9,18 +9,18 @@ importers:
   .:
     dependencies:
       envio:
-        specifier: 3.16.0
-        version: 3.16.0
+        specifier: 3.17.1
+        version: 3.17.1
     devDependencies:
       '@types/node':
-        specifier: 25.8.0
-        version: 25.8.0
+        specifier: 24.19.2
+        version: 24.19.2
       typescript:
         specifier: 6.0.3
         version: 6.0.3
       vitest:
         specifier: 4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.0)(@types/node@25.8.0)(vite@7.3.1(@types/node@25.8.0)(tsx@4.21.0))
+        version: 4.1.6(@opentelemetry/api@1.9.0)(@types/node@24.19.2)(vite@7.3.1(@types/node@24.19.2)(tsx@4.21.0))
 
 packages:
 
@@ -327,8 +327,8 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
-  '@types/node@25.8.0':
-    resolution: {integrity: sha512-TCFSk8IZh+iLX1xtksoBVtdmgL+1IX0fC9BeU4QqFSuNdN/K+HUlhqOzEmSYYpZUVsLYcPqc9KX+60iDuninSQ==}
+  '@types/node@24.19.2':
+    resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
 
   '@vitest/expect@4.1.6':
     resolution: {integrity: sha512-7EHDquPthALSV0jhhjgEW8FXaviMx7rSqu8W6oqCoAuOhKov814P99QDV1pxMA3QPv21YudvJngIhjrNI4opLg==}
@@ -442,33 +442,33 @@ packages:
     resolution: {integrity: sha512-Ev/hIyePLZtpL98x562lvPtenrUfGr0lfaf44HFZ+hDEwso7ccV9QAZrEVLg0hxNAzygaAFxy2dYaAKKM0G06A==}
     engines: {node: '>= 0.8'}
 
-  envio-darwin-arm64@3.16.0:
-    resolution: {integrity: sha512-iHIIA87AD4qoLCZJf2J6TH/Ehvfz0b82bpq4x7ssPIythvwz6ghibx97bBLxAJMsrAnclQH/voC7czt1WzWZsg==}
+  envio-darwin-arm64@3.17.1:
+    resolution: {integrity: sha512-vUSfF66HJFbz/Qx9OtiUjajMx2XHXFkcWpxVP/MsqFkSa2Qzobbd6dQ6uy7pTQrN2rkYDG5C1IvrdAtDiGdP/Q==}
     cpu: [arm64]
     os: [darwin]
 
-  envio-darwin-x64@3.16.0:
-    resolution: {integrity: sha512-j846ZxHbBr3UOLEk8cofuOUMezskq4fs17oFAG2VnTQkvWbQWPI0S/k3qFmO+/YRXKkSHUQ+gj6g0ZOLAXYXFQ==}
+  envio-darwin-x64@3.17.1:
+    resolution: {integrity: sha512-08sx4UHSLclFZzzS2wki+QoYtixR0gxgkmjghTQ0ZOY7HH1HT5JbqAHjVM2/hsOkJVYXPX9wt+U0CIWX3Li1eQ==}
     cpu: [x64]
     os: [darwin]
 
-  envio-linux-arm64@3.16.0:
-    resolution: {integrity: sha512-rYCHBB6fryS2xiQHTQHUov58Pgs5iMNqrjV3bVwfPwitHZo5gdUrU7utCWknhm4Yxp0NqM8N3lNro41xjOCCJA==}
+  envio-linux-arm64@3.17.1:
+    resolution: {integrity: sha512-j/vlWqFWNXTvOiAQ2GE5kb7FxfC0JebcHSMJQlp2APxdZTuVSq+K9WDawBXNCDa+reo1//9BhdJzQ+xeNtW//g==}
     cpu: [arm64]
     os: [linux]
 
-  envio-linux-x64-musl@3.16.0:
-    resolution: {integrity: sha512-6Z2cXHCSIgYFmuD94hcwWAgFUc1XxSYZFKIRLKG6h5l31Fu35cMpjEK1bKPr2myNCeKh5D1Dvvo9DIr6k8L8Aw==}
+  envio-linux-x64-musl@3.17.1:
+    resolution: {integrity: sha512-a2Popl4s7pasxf142ux0go6E1+SMksgH/lAZnz+FUE7AuS5WuLK/Bu9TboAMJFKQrS/RRIUkA26zM7H5hm43iQ==}
     cpu: [x64]
     os: [linux]
 
-  envio-linux-x64@3.16.0:
-    resolution: {integrity: sha512-BPeHwOoQb5To9WdRa3zaN2vdQGaz7JMPrcBJUQJ7MbhLQVE4otQkXzmGRFusUNlpY8oeIv053qP1xVx1GN1AJA==}
+  envio-linux-x64@3.17.1:
+    resolution: {integrity: sha512-cxaxXRxl2rL+0g4GfYIp2KVkI6k4aBZL7axPmabYy3a8jUkCFxdRDmkHM7hSzcylceDOjy49Gz28rfhy4r+iWg==}
     cpu: [x64]
     os: [linux]
 
-  envio@3.16.0:
-    resolution: {integrity: sha512-seypNAbTZiBgHn4yHbA5C3IonhtWVxVTNjNWMfGZlbSWcN4sKNwG9ZrFvPmpQgC0zO44YmJhjSevAtzHwW5DHg==}
+  envio@3.17.1:
+    resolution: {integrity: sha512-ewPFsB90cHdckeFci/G/GPd1vNIpWm6AEXsj/ebRXq1yXANO/evquP3zOD4Lt1hbR6r3r5g/aSpcIjqwqBftYg==}
     engines: {node: '>=22.15.0'}
     hasBin: true
 
@@ -569,10 +569,6 @@ packages:
   hasown@2.0.2:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
     engines: {node: '>= 0.4'}
-
-  http-errors@2.0.0:
-    resolution: {integrity: sha512-FtwrG/euBzaEjYeRqOgly7G0qviiXoJWnvEH2Z1plBdXgbyjv34pHTSb9zoeHMyDy33+DWy5Wt9Wo+TURtOYSQ==}
-    engines: {node: '>= 0.8'}
 
   http-errors@2.0.1:
     resolution: {integrity: sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==}
@@ -741,10 +737,6 @@ packages:
 
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
-
-  statuses@2.0.1:
-    resolution: {integrity: sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==}
-    engines: {node: '>= 0.8'}
 
   statuses@2.0.2:
     resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
@@ -1060,7 +1052,7 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
-  '@types/node@25.8.0':
+  '@types/node@24.19.2':
     dependencies:
       undici-types: 7.24.6
 
@@ -1073,13 +1065,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.6(vite@7.3.1(@types/node@25.8.0)(tsx@4.21.0))':
+  '@vitest/mocker@4.1.6(vite@7.3.1(@types/node@24.19.2)(tsx@4.21.0))':
     dependencies:
       '@vitest/spy': 4.1.6
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.1(@types/node@25.8.0)(tsx@4.21.0)
+      vite: 7.3.1(@types/node@24.19.2)(tsx@4.21.0)
 
   '@vitest/pretty-format@4.1.6':
     dependencies:
@@ -1179,22 +1171,22 @@ snapshots:
 
   encodeurl@2.0.1: {}
 
-  envio-darwin-arm64@3.16.0:
+  envio-darwin-arm64@3.17.1:
     optional: true
 
-  envio-darwin-x64@3.16.0:
+  envio-darwin-x64@3.17.1:
     optional: true
 
-  envio-linux-arm64@3.16.0:
+  envio-linux-arm64@3.17.1:
     optional: true
 
-  envio-linux-x64-musl@3.16.0:
+  envio-linux-x64-musl@3.17.1:
     optional: true
 
-  envio-linux-x64@3.16.0:
+  envio-linux-x64@3.17.1:
     optional: true
 
-  envio@3.16.0:
+  envio@3.17.1:
     dependencies:
       '@rescript/runtime': 12.3.1
       bignumber.js: 9.3.1
@@ -1203,11 +1195,11 @@ snapshots:
       express: 4.22.3
       rescript-schema: 9.5.1
     optionalDependencies:
-      envio-darwin-arm64: 3.16.0
-      envio-darwin-x64: 3.16.0
-      envio-linux-arm64: 3.16.0
-      envio-linux-x64: 3.16.0
-      envio-linux-x64-musl: 3.16.0
+      envio-darwin-arm64: 3.17.1
+      envio-darwin-x64: 3.17.1
+      envio-linux-arm64: 3.17.1
+      envio-linux-x64: 3.17.1
+      envio-linux-x64-musl: 3.17.1
     transitivePeerDependencies:
       - rescript
       - supports-color
@@ -1283,7 +1275,7 @@ snapshots:
       etag: 1.8.1
       finalhandler: 1.3.2
       fresh: 0.5.2
-      http-errors: 2.0.0
+      http-errors: 2.0.1
       merge-descriptors: 1.0.3
       methods: 1.1.2
       on-finished: 2.4.1
@@ -1296,7 +1288,7 @@ snapshots:
       send: 0.19.2
       serve-static: 1.16.3
       setprototypeof: 1.2.0
-      statuses: 2.0.1
+      statuses: 2.0.2
       type-is: 1.6.18
       utils-merge: 1.0.1
       vary: 1.1.2
@@ -1358,14 +1350,6 @@ snapshots:
   hasown@2.0.2:
     dependencies:
       function-bind: 1.1.2
-
-  http-errors@2.0.0:
-    dependencies:
-      depd: 2.0.0
-      inherits: 2.0.4
-      setprototypeof: 1.2.0
-      statuses: 2.0.1
-      toidentifier: 1.0.1
 
   http-errors@2.0.1:
     dependencies:
@@ -1557,8 +1541,6 @@ snapshots:
 
   stackback@0.0.2: {}
 
-  statuses@2.0.1: {}
-
   statuses@2.0.2: {}
 
   std-env@4.1.0: {}
@@ -1599,7 +1581,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vite@7.3.1(@types/node@25.8.0)(tsx@4.21.0):
+  vite@7.3.1(@types/node@24.19.2)(tsx@4.21.0):
     dependencies:
       esbuild: 0.27.3
       fdir: 6.5.0(picomatch@4.0.3)
@@ -1608,14 +1590,14 @@ snapshots:
       rollup: 4.57.1
       tinyglobby: 0.2.15
     optionalDependencies:
-      '@types/node': 25.8.0
+      '@types/node': 24.19.2
       fsevents: 2.3.3
       tsx: 4.21.0
 
-  vitest@4.1.6(@opentelemetry/api@1.9.0)(@types/node@25.8.0)(vite@7.3.1(@types/node@25.8.0)(tsx@4.21.0)):
+  vitest@4.1.6(@opentelemetry/api@1.9.0)(@types/node@24.19.2)(vite@7.3.1(@types/node@24.19.2)(tsx@4.21.0)):
     dependencies:
       '@vitest/expect': 4.1.6
-      '@vitest/mocker': 4.1.6(vite@7.3.1(@types/node@25.8.0)(tsx@4.21.0))
+      '@vitest/mocker': 4.1.6(vite@7.3.1(@types/node@24.19.2)(tsx@4.21.0))
       '@vitest/pretty-format': 4.1.6
       '@vitest/runner': 4.1.6
       '@vitest/snapshot': 4.1.6
@@ -1632,11 +1614,11 @@ snapshots:
       tinyexec: 1.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.1.0
-      vite: 7.3.1(@types/node@25.8.0)(tsx@4.21.0)
+      vite: 7.3.1(@types/node@24.19.2)(tsx@4.21.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
-      '@types/node': 25.8.0
+      '@types/node': 24.19.2
     transitivePeerDependencies:
       - msw
 

@@ -9,11 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "envio": "3.16.0",
+    "envio": "3.17.1",
     "viem": "2.56.8"
   },
   "devDependencies": {
-    "@types/node": "20.19.43",
+    "@types/node": "24.19.2",
     "typescript": "5.9.3"
   }
 }

@@ -8,14 +8,14 @@
     "start": "envio start"
   },
   "devDependencies": {
-    "@types/node": "25.9.5",
+    "@types/node": "24.19.2",
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "envio": "3.16.0",
+    "envio": "3.17.1",
     "viem": "2.55.13"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24"
   }
 }
