@@ -26,16 +26,16 @@ What does an indexer do when something goes wrong? These scenarios restart its d
 <!-- RELIABILITY:START -->
 | tool | [source](./reliability/README.md#why-a-generated-chain-and-not-a-real-node) | [crash recovery](./reliability/README.md#crash-recovery) | [reorgs](./reliability/README.md#reorgs) | [rpc faults](./reliability/README.md#rpc-faults) | [data fidelity](./reliability/README.md#data-fidelity) | [head latency](./reliability/README.md#head-latency) | overall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| [Envio Indexer](https://envio.dev) | RPC | 11/11 ✅ (no restarts) | 8/8 ✅ | 19/19 ✅ | 6/6 ✅ | 6/6 ✅ (p50 232ms, p99 253ms, WS) | **50 / 50** |
-| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.17.1-subgraph) | RPC | 11/11 ✅ (no restarts) | 8/8 ✅ | 19/19 ✅ | 6/6 ✅ | 6/6 ✅ (p50 233ms, p99 267ms, WS) | **50 / 50** |
-| [Ponder](https://ponder.sh) | RPC | 11/11 ✅ (no restarts) | 8/8 ✅ | **18/19** 🔴 | **5/6** 🔴 | 6/6 ✅ (p50 246ms, p99 285ms, WS) | **48 / 50** |
-| [Squid SDK](https://sqd.dev/sdk/) | RPC | 11/11 ✅ (2 restarts) | 8/8 ✅ | **15/19** 🔴 | 6/6 ✅ | 6/6 ✅ (p50 577ms, p99 876ms, WS) | **46 / 50** |
-| [Subgraph](https://thegraph.com) | RPC | **9/11** 🔴 (no restarts) | 8/8 ✅ | **16/17** 🔴 | 6/6 ✅ | **5/6** 🔴 (p50 8.3s, p99 11.2s) | **44 / 48** |
-| [SubQuery](https://subquery.network) | RPC | 11/11 ✅ (no restarts) | **0/8** 🔴 | 17/17 ✅ | 6/6 ✅ | **5/6** 🔴 (p50 4.5s, p99 7.2s) | **39 / 48** |
-| [Rindexer](https://rindexer.xyz) | RPC | 11/11 ✅ (no restarts) | **1/8** 🔴 | **12/17** 🔴 | 6/6 ✅ | **4/6** 🔴 (p50 39.7s, p99 42.3s) | **34 / 48** |
+| [Envio Indexer](https://envio.dev) | RPC | 11/11 ✅ (no restarts) | 8/8 ✅ | 19/19 ✅ | 6/6 ✅ | 6/6 ✅ (p50 232ms, p99 254ms, WS) | **50 / 50** |
+| [Envio Subgraph](https://github.com/enviodev/hyperindex/releases/tag/v3.17.1-subgraph) | RPC | 11/11 ✅ (no restarts) | 8/8 ✅ | 19/19 ✅ | 6/6 ✅ | 6/6 ✅ (p50 232ms, p99 258ms, WS) | **50 / 50** |
+| [Ponder](https://ponder.sh) | RPC | 11/11 ✅ (no restarts) | 8/8 ✅ | **18/19** 🔴 | **5/6** 🔴 | 6/6 ✅ (p50 251ms, p99 308ms, WS) | **48 / 50** |
+| [Squid SDK](https://sqd.dev/sdk/) | RPC | 11/11 ✅ (2 restarts) | 8/8 ✅ | **15/19** 🔴 | 6/6 ✅ | 6/6 ✅ (p50 572ms, p99 807ms, WS) | **46 / 50** |
+| [Subgraph](https://thegraph.com) | RPC | **9/11** 🔴 (no restarts) | 8/8 ✅ | **16/17** 🔴 | 6/6 ✅ | **5/6** 🔴 (p50 8.5s, p99 11.0s) | **44 / 48** |
+| [SubQuery](https://subquery.network) | RPC | 11/11 ✅ (no restarts) | **0/8** 🔴 | **16/17** 🔴 | 6/6 ✅ | **5/6** 🔴 (p50 4.3s, p99 6.8s) | **38 / 48** |
+| [Rindexer](https://rindexer.xyz) | RPC | 11/11 ✅ (no restarts) | **1/8** 🔴 | **12/17** 🔴 | 6/6 ✅ | 4/4 ✅ | **34 / 46** |
 
 <details>
-<summary>What failed, and what it means for you - 33 failing checks across 5 tools</summary>
+<summary>What failed, and what it means for you - 32 failing checks across 5 tools</summary>
 
 - **Ponder**
   - *rpc faults*
@@ -60,7 +60,7 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Stale reads**: on a real chain's traffic, new data sometimes takes over 10 seconds to show up
 - **SubQuery**
   - *reorgs*
-    - **Stale data**: keeps an event after the chain replaced its block
+    - **Stale data**: keeps an event after the chain replaced its block (only 2 of 3 runs)
     - **Stale data**: keeps blocks from a fork the chain abandoned for a shorter one
     - **Stale data**: keeps an event the chain removed
     - **Missing data**: skips events a reorg put into blocks it had read as empty
@@ -69,6 +69,7 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - **Wrong data**: loses track when the chain rewrites several times in a row
     - **Stale data**: misses a chain rewrite in blocks it was still syncing
   - *rpc faults*
+    - **Wrong balances**: counts a transfer twice when the RPC node sends it twice (only 2 of 3 runs)
     - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
     - <i>not tested: fills in the blocks it was never told about</i>
   - *head latency*
@@ -91,8 +92,8 @@ What does an indexer do when something goes wrong? These scenarios restart its d
     - <i>not tested: keeps following the chain when its block subscription goes quiet</i>
     - <i>not tested: fills in the blocks it was never told about</i>
   - *head latency*
-    - **Stale reads**: on a real chain's traffic, new data sometimes takes over 10 seconds to show up
-    - **Falls behind**: cannot keep up with a real chain's block rate over a network
+    - <i>not tested: even the slowest 1% of a real chain's new data shows up within 10 seconds</i>
+    - <i>not tested: keeps up with a real chain's five blocks a second</i>
 
 </details>
 <!-- RELIABILITY:END -->
